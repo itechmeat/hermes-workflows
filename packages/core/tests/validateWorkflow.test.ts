@@ -169,3 +169,66 @@ describe("validateWorkflow — rules", () => {
     expect(codes(w)).toContain("finish_has_outgoing");
   });
 });
+
+describe("validateWorkflow — script nodes", () => {
+  test("a script node with an empty command is an error", () => {
+    const w = wf(
+      base({
+        nodes: [
+          { id: "lint", type: "script", command: "" },
+          { id: "done", type: "finish" },
+        ],
+        edges: [{ from: "lint", to: "done" }],
+      }),
+    );
+    expect(codes(w)).toContain("empty_command");
+  });
+
+  test("a whitespace-only command is an error", () => {
+    const w = wf(
+      base({
+        nodes: [
+          { id: "lint", type: "script", command: "   " },
+          { id: "done", type: "finish" },
+        ],
+        edges: [{ from: "lint", to: "done" }],
+      }),
+    );
+    expect(codes(w)).toContain("empty_command");
+  });
+
+  test("a script node is a legal entry node and needs no profile", () => {
+    const w = wf(
+      base({
+        defaults: {},
+        nodes: [
+          { id: "build", type: "script", command: "make" },
+          { id: "done", type: "finish" },
+        ],
+        edges: [{ from: "build", to: "done" }],
+      }),
+    );
+    const result = validateWorkflow(w);
+    expect(result.valid).toBe(true);
+    expect(result.errors.map((e) => e.code)).not.toContain("missing_profile");
+  });
+
+  test("a script→condition graph branching on node_status validates", () => {
+    const w = wf(
+      base({
+        nodes: [
+          { id: "test", type: "script", command: "bun test" },
+          { id: "gate", type: "condition" },
+          { id: "ok", type: "finish", outcome: "success" },
+          { id: "done", type: "finish", outcome: "failure" },
+        ],
+        edges: [
+          { from: "test", to: "gate" },
+          { from: "gate", to: "ok", condition: { type: "node_status", node: "test", equals: "success" } },
+          { from: "gate", to: "done", condition: { type: "node_status", node: "test", equals: "failure" } },
+        ],
+      }),
+    );
+    expect(validateWorkflow(w).valid).toBe(true);
+  });
+});

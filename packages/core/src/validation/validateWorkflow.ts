@@ -60,6 +60,14 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
     }
   }
 
+  // script command presence (parse rejects a missing/non-string command; an
+  // empty or whitespace-only command is a semantic error caught here).
+  for (const node of workflow.nodes) {
+    if (node.type === "script" && node.command.trim() === "") {
+      err("empty_command", `script node '${node.id}' has an empty command`);
+    }
+  }
+
   // Trigger.
   if (workflow.trigger.type === "cron" && !isValidCron(workflow.trigger.schedule)) {
     err("invalid_cron", `invalid cron expression '${workflow.trigger.schedule}'`);
