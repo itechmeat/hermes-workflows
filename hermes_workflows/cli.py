@@ -29,7 +29,7 @@ def build_engine() -> Engine:
     from hermes_cli import kanban_db as kb
 
     from .bridge import boards
-    from .executor import DirectExecutor, KanbanExecutor
+    from .executor import DirectExecutor, KanbanExecutor, ScriptExecutor
 
     cache: dict[str, KanbanExecutor] = {}
 
@@ -46,8 +46,33 @@ def build_engine() -> Engine:
         direct=DirectExecutor(
             runner_dir=config.runner_dir(), store_dir=config.direct_store_dir()
         ),
+        # The script executor runs script nodes locally in any scope. The enable
+        # gate is enforced separately at the run entrypoint; the executor only
+        # ever exposes the settings env allowlist.
+        script=ScriptExecutor(
+            store_dir=config.script_store_dir(),
+            env_allowlist=config.script_env_allowlist(),
+        ),
         kanban_factory=kanban_factory,
     )
+
+
+def workflow_has_scripts(engine: Engine, spec_path: str) -> bool:
+    """Whether the compiled workflow contains any script node."""
+    return bool(engine._core(["compile-preview", spec_path]).get("script_steps"))
+
+
+class ScriptsDisabledError(Exception):
+    """A workflow with script nodes was started while scripts are disabled."""
+
+
+def guard_scripts_enabled(engine: Engine, spec_path: str) -> None:
+    """Refuse to run a workflow with script nodes unless scripts are enabled
+    in settings (TZ §25.2). Raises ScriptsDisabledError when blocked."""
+    if workflow_has_scripts(engine, spec_path) and not config.scripts_enabled():
+        raise ScriptsDisabledError(
+            "workflow contains script nodes but execution.scripts_enabled is false"
+        )
 
 
 def _spec_path_for_workflow(engine: Engine, workflow_id: str) -> str:
@@ -91,6 +116,10 @@ def _advance_all(engine: Engine) -> dict:
 def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
     if args.command == "run":
         spec = _spec_path_for_workflow(engine, args.workflow_id)
+        try:
+            guard_scripts_enabled(engine, spec)
+        except ScriptsDisabledError as exc:
+            raise SystemExit(str(exc)) from exc
         project_id = _default_project(engine, spec, args.project)
         run_id = f"{args.workflow_id}-{uuid.uuid4().hex[:8]}"
         return engine.run(spec, run_id, project_id=project_id)

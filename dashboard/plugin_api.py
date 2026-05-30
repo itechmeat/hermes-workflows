@@ -331,7 +331,13 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
     import uuid
 
     from hermes_workflows import config, tools
-    from hermes_workflows.cli import build_engine, _default_project, _spec_path_for_workflow
+    from hermes_workflows.cli import (
+        ScriptsDisabledError,
+        build_engine,
+        guard_scripts_enabled,
+        _default_project,
+        _spec_path_for_workflow,
+    )
 
     engine = build_engine()
     try:
@@ -340,6 +346,10 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not _workflow_enabled(workflow_id):
         raise HTTPException(status_code=409, detail="workflow is disabled")
+    try:
+        guard_scripts_enabled(engine, spec)
+    except ScriptsDisabledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     project_id = _default_project(engine, spec, payload.get("project_id"))
     run_id = f"{workflow_id}-{uuid.uuid4().hex[:8]}"
     return tools.run_workflow(

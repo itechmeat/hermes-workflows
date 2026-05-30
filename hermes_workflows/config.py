@@ -45,6 +45,19 @@ def runtime_board() -> str:
     return str(_setting_value("internal_board"))
 
 
+def scripts_enabled() -> bool:
+    """Whether workflows containing script nodes are permitted to run (TZ §25.2).
+    Enforced at the run entrypoint; default off."""
+    return bool(_setting_value("scripts_enabled"))
+
+
+def script_env_allowlist() -> list[str]:
+    """Env var names a script node may see, parsed from the comma-separated
+    setting. Empty when unset — a script then inherits no process env."""
+    raw = _setting_value("script_env_allowlist") or ""
+    return [name.strip() for name in str(raw).split(",") if name.strip()]
+
+
 def runner_dir() -> Path:
     """Where profile runners live (``<profile>`` executables). Used by the
     DirectExecutor to run global, unbound workflow nodes."""
@@ -54,6 +67,11 @@ def runner_dir() -> Path:
 def direct_store_dir() -> Path:
     """Completion store for global (no-board) node runs."""
     return workflows_dir() / "direct"
+
+
+def script_store_dir() -> Path:
+    """Completion store for local script-node runs (any scope)."""
+    return workflows_dir() / "scripts"
 
 
 def default_deliver() -> str | None:
@@ -122,6 +140,11 @@ SETTINGS_SCHEMA: dict = {
                 },
                 {"key": "max_parallel_runs", "type": "int", "default": 4, "enforced": False},
                 {"key": "default_timeout_seconds", "type": "int", "default": 120, "enforced": False},
+                # Security gate (TZ §25.2): a workflow with script nodes runs only
+                # when scripts are explicitly enabled, and a script sees only the
+                # comma-separated allowlist of env var names. Both are enforced.
+                {"key": "scripts_enabled", "type": "bool", "default": False, "enforced": True},
+                {"key": "script_env_allowlist", "type": "string", "default": "", "enforced": True},
             ],
         },
         {

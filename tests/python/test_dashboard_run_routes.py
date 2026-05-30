@@ -4,6 +4,7 @@ a temp Hermes home with a real runtime board. Skipped without fastapi/kanban."""
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
 from pathlib import Path
 
@@ -26,11 +27,27 @@ def _load_router():
     return module
 
 
+_SCRIPT_SPEC = {
+    "id": "scripts-only",
+    "name": "Scripts Only",
+    "version": 1,
+    "scope": {"type": "global"},
+    "trigger": {"type": "manual"},
+    "nodes": [
+        {"id": "build", "type": "script", "command": "echo built"},
+        {"id": "done", "type": "finish"},
+    ],
+    "edges": [{"from": "build", "to": "done"}],
+}
+
+
 @pytest.fixture()
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     home = tmp_path / "home"
-    (home / "workflows" / "global").mkdir(parents=True)
-    shutil.copy(SPEC, home / "workflows" / "global" / "feature-development.workflow.yaml")
+    global_dir = home / "workflows" / "global"
+    global_dir.mkdir(parents=True)
+    shutil.copy(SPEC, global_dir / "feature-development.workflow.yaml")
+    (global_dir / "scripts-only.workflow.json").write_text(json.dumps(_SCRIPT_SPEC))
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "kanban.db"))
 
@@ -158,3 +175,25 @@ def test_retry_non_failed_node_is_400(client: TestClient) -> None:
     # 'plan' is scheduled (the entry node), not failed -> RetryError -> 400.
     resp = client.post(f"/runs/{run_id}/retry", json={"node_id": "plan"})
     assert resp.status_code == 400
+
+
+def test_script_workflow_is_409_when_scripts_disabled(client: TestClient) -> None:
+    # scripts_enabled defaults to false -> a script workflow is refused.
+    resp = client.post("/workflows/scripts-only/run")
+    assert resp.status_code == 409, resp.text
+    assert "scripts_enabled" in resp.json()["detail"]
+
+
+def test_non_script_workflow_runs_when_scripts_disabled(client: TestClient) -> None:
+    # The gate only affects workflows that contain script nodes.
+    resp = client.post("/workflows/feature-development/run")
+    assert resp.status_code == 200, resp.text
+
+
+def test_script_workflow_runs_once_scripts_enabled(client: TestClient) -> None:
+    from hermes_workflows import config
+
+    config.save_settings({"scripts_enabled": True, "script_env_allowlist": "PATH"})
+    resp = client.post("/workflows/scripts-only/run")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["run_id"].startswith("scripts-only-")

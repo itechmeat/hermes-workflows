@@ -103,6 +103,26 @@ def test_enforced_flags_are_honest(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     by_key = {f["key"]: f for g in config.settings_schema()["groups"] for f in g["fields"]}
     # internal_board is wired through runtime_board()
     assert by_key["internal_board"]["enforced"] is True
+    # the script gate knobs gate real behaviour from day one
+    assert by_key["scripts_enabled"]["enforced"] is True
+    assert by_key["script_env_allowlist"]["enforced"] is True
     # the rest are persisted/displayed but not yet honoured by the engine
     for key in ("default_mode", "mode", "write_node_events", "global_workflows_path"):
         assert by_key[key]["enforced"] is False
+
+
+def test_script_gate_defaults_off_with_empty_allowlist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
+    assert config.scripts_enabled() is False
+    assert config.script_env_allowlist() == []
+
+
+def test_script_gate_reads_stored_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    config.save_settings({"scripts_enabled": True, "script_env_allowlist": "PATH, HOME ,CI"})
+    assert config.scripts_enabled() is True
+    # comma-separated, trimmed, empties dropped
+    assert config.script_env_allowlist() == ["PATH", "HOME", "CI"]
