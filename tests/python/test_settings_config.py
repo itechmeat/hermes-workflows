@@ -81,3 +81,28 @@ def test_validate_rejects_unknown_and_bad_values(tmp_path: Path, monkeypatch: py
         "fail_open": True,
         "max_parallel_runs": 7,
     }
+
+
+def test_internal_board_setting_drives_runtime_board(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.delenv("HERMES_WORKFLOWS_BOARD", raising=False)
+    assert config.runtime_board() == "hermes-workflows"  # default
+    config.save_settings({"internal_board": "team-board"})
+    assert config.runtime_board() == "team-board"  # stored setting takes effect
+
+
+def test_runtime_board_env_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("HERMES_WORKFLOWS_BOARD", "env-board")
+    assert config.runtime_board() == "env-board"
+
+
+def test_enforced_flags_are_honest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
+    by_key = {f["key"]: f for g in config.settings_schema()["groups"] for f in g["fields"]}
+    # internal_board is wired through runtime_board()
+    assert by_key["internal_board"]["enforced"] is True
+    # the rest are persisted/displayed but not yet honoured by the engine
+    for key in ("default_mode", "mode", "write_node_events", "global_workflows_path"):
+        assert by_key[key]["enforced"] is False

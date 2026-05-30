@@ -39,8 +39,10 @@ def runs_artifacts_dir() -> Path:
 
 
 def runtime_board() -> str:
-    """Kanban board agent_task cards are created on."""
-    return os.environ.get("HERMES_WORKFLOWS_BOARD", "hermes-workflows")
+    """Kanban board agent_task cards are created on. Honours the
+    ``kanban.internal_board`` setting (config ▸ env ▸ default), so editing it on
+    the Settings page takes effect without an env change."""
+    return str(_setting_value("internal_board"))
 
 
 def runner_dir() -> Path:
@@ -103,8 +105,8 @@ SETTINGS_SCHEMA: dict = {
             "key": "storage",
             "label": "Storage",
             "fields": [
-                {"key": "global_workflows_path", "type": "string", "enforced": True},
-                {"key": "runs_db_path", "type": "string", "enforced": True},
+                {"key": "global_workflows_path", "type": "string", "enforced": False},
+                {"key": "runs_db_path", "type": "string", "enforced": False},
             ],
         },
         {
@@ -116,7 +118,7 @@ SETTINGS_SCHEMA: dict = {
                     "type": "enum",
                     "options": ["durable", "direct"],
                     "default": "durable",
-                    "enforced": True,
+                    "enforced": False,
                 },
                 {"key": "max_parallel_runs", "type": "int", "default": 4, "enforced": False},
                 {"key": "default_timeout_seconds", "type": "int", "default": 120, "enforced": False},
@@ -151,12 +153,12 @@ SETTINGS_SCHEMA: dict = {
                     "type": "enum",
                     "options": ["auto", "open_second_brain", "none"],
                     "default": "auto",
-                    "enforced": True,
+                    "enforced": False,
                 },
-                {"key": "fail_open", "type": "bool", "default": True, "enforced": True},
-                {"key": "write_run_summaries", "type": "bool", "default": True, "enforced": True},
-                {"key": "write_node_failures", "type": "bool", "default": True, "enforced": True},
-                {"key": "write_node_events", "type": "bool", "default": False, "enforced": True},
+                {"key": "fail_open", "type": "bool", "default": True, "enforced": False},
+                {"key": "write_run_summaries", "type": "bool", "default": True, "enforced": False},
+                {"key": "write_node_failures", "type": "bool", "default": True, "enforced": False},
+                {"key": "write_node_events", "type": "bool", "default": False, "enforced": False},
             ],
         },
     ],
@@ -211,23 +213,35 @@ def _stored_settings() -> dict:
     return workflows if isinstance(workflows, dict) else {}
 
 
+def _field_by_key(key: str) -> dict:
+    for field in _iter_fields():
+        if field["key"] == key:
+            return field
+    raise KeyError(key)
+
+
+def _resolve(field: dict, stored: dict) -> Any:
+    """Resolve one field: stored config value ▸ env override ▸ default."""
+    key = field["key"]
+    if key in stored:
+        return _coerce(field, stored[key])
+    env_name = field.get("env")
+    env_val = os.environ.get(env_name) if env_name else None
+    if env_val is not None:
+        return _coerce(field, env_val)
+    return _default_for(field)
+
+
+def _setting_value(key: str) -> Any:
+    """Effective value of a single setting (config ▸ env ▸ default)."""
+    return _resolve(_field_by_key(key), _stored_settings())
+
+
 def settings() -> dict:
     """Effective plugin settings: for each field, the stored config value wins,
     then an env override, then the default. Unset everywhere → today's behaviour."""
     stored = _stored_settings()
-    values: dict = {}
-    for field in _iter_fields():
-        key = field["key"]
-        if key in stored:
-            values[key] = _coerce(field, stored[key])
-            continue
-        env_name = field.get("env")
-        env_val = os.environ.get(env_name) if env_name else None
-        if env_val is not None:
-            values[key] = _coerce(field, env_val)
-            continue
-        values[key] = _default_for(field)
-    return values
+    return {field["key"]: _resolve(field, stored) for field in _iter_fields()}
 
 
 def settings_schema() -> dict:
