@@ -173,6 +173,26 @@ describe("useFlowEditor", () => {
     expect(result.current.dirty).toBe(true);
   });
 
+  it("auto-layouts nodes into ranks, marks dirty, and round-trips the positions on save", async () => {
+    const client = stubClient();
+    const { result } = renderHook(() => useFlowEditor(detail, client));
+
+    act(() => result.current.applyLayout());
+
+    const build = result.current.nodes.find((n) => n.id === "build")!;
+    const done = result.current.nodes.find((n) => n.id === "done")!;
+    // build -> done is linear, so done lands one rank to the right of build
+    expect(done.position.x).toBeGreaterThan(build.position.x);
+    expect(result.current.dirty).toBe(true);
+
+    await act(async () => {
+      await result.current.save();
+    });
+    const [, body] = (client.saveWorkflow as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const doneUi = body.ui!.xyflow!.nodes!.find((n: { id: string }) => n.id === "done")!;
+    expect(doneUi.x).toBe(done.position.x);
+  });
+
   it("returns null when duplicating an unknown node", () => {
     const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
     let out: string | null = "x";

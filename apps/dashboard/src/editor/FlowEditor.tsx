@@ -67,6 +67,9 @@ export function FlowEditor({ detail, client, onSaved }: FlowEditorProps): React.
         <button type="button" disabled={ctrl.selectedNode === null} onClick={handleDuplicate}>
           Duplicate node
         </button>
+        <button type="button" onClick={ctrl.applyLayout}>
+          Auto-layout
+        </button>
         <span role="status">{statusLabel(ctrl.status, ctrl.dirty)}</span>
       </div>
       <div style={{ display: "flex", flex: 1, minHeight: 400 }}>

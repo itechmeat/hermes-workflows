@@ -18,6 +18,7 @@ import {
   type FlowEdge,
   type FlowNode,
 } from "./graphMapping";
+import { layout } from "./layout";
 import type { WorkflowsApi } from "../api/client";
 import type { NodeType, SpecDetail, WorkflowNode } from "../api/types";
 
@@ -48,6 +49,7 @@ export interface FlowEditorController {
   updateNode: (id: string, patch: Partial<WorkflowNode>) => void;
   addNode: (type: NodeType) => string;
   duplicateNode: (id: string) => string | null;
+  applyLayout: () => void;
   save: () => Promise<SpecDetail | null>;
 }
 
@@ -158,6 +160,18 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     [nodes, setNodes],
   );
 
+  const applyLayout = useCallback(() => {
+    // Compute outside the updater so it stays pure (React may re-run updaters).
+    const placed = layout(nodes, edges);
+    setNodes((current) =>
+      current.map((node) => {
+        const point = placed[node.id];
+        return point === undefined ? node : { ...node, position: point };
+      }),
+    );
+    setDirty(true);
+  }, [nodes, edges, setNodes]);
+
   const save = useCallback(async (): Promise<SpecDetail | null> => {
     setStatus({ kind: "saving" });
     const { workflow, ui } = flowToWorkflow(detail.workflow, nodes, edges, viewport);
@@ -189,6 +203,7 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     updateNode,
     addNode,
     duplicateNode,
+    applyLayout,
     save,
   };
 }

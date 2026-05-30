@@ -84,6 +84,14 @@ describe("FlowEditor", () => {
     expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
   });
 
+  it("re-lays-out the graph when Auto-layout is clicked", async () => {
+    render(<FlowEditor detail={detail} client={stubClient()} />);
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: /auto-layout/i }));
+    // applying a layout is an edit -> the graph is dirty and Save is enabled
+    expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
+  });
+
   it("disables Duplicate until a node is selected", () => {
     render(<FlowEditor detail={detail} client={stubClient()} />);
     expect(screen.getByRole("button", { name: /duplicate node/i })).toBeDisabled();
