@@ -14,6 +14,7 @@ import type {
   RunStartResult,
   RunState,
   RunSummary,
+  ScheduleListItem,
   SaveWorkflowBody,
   SpecDetail,
   ValidationResult,
@@ -40,6 +41,12 @@ export interface WorkflowsApi {
   getRun(id: string): Promise<RunState>;
   cancelRun(id: string): Promise<RunState>;
   retryRun(id: string, node?: string): Promise<RunState>;
+  listSchedules(): Promise<ScheduleListItem[]>;
+  pauseSchedule(id: string): Promise<unknown>;
+  resumeSchedule(id: string): Promise<unknown>;
+  runScheduleNow(id: string): Promise<unknown>;
+  editSchedule(id: string, cron: string): Promise<unknown>;
+  deleteSchedule(id: string): Promise<DeleteResult>;
   o2bStatus(): Promise<O2BStatus>;
 }
 
@@ -48,6 +55,7 @@ const BASE = "/api/plugins/workflows";
 export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
   const workflow = (id: string): string => `${BASE}/workflows/${encodeURIComponent(id)}`;
   const run = (id: string): string => `${BASE}/runs/${encodeURIComponent(id)}`;
+  const schedule = (id: string): string => `${BASE}/schedules/${encodeURIComponent(id)}`;
 
   const postJson = <T>(path: string, body: unknown): Promise<T> =>
     fetchJSON<T>(path, {
@@ -118,6 +126,35 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
 
     retryRun(id, node) {
       return postJson<RunState>(`${run(id)}/retry`, node === undefined ? {} : { node_id: node });
+    },
+
+    async listSchedules() {
+      const { schedules } = await fetchJSON<{ schedules?: ScheduleListItem[] }>(`${BASE}/schedules`);
+      return schedules ?? [];
+    },
+
+    pauseSchedule(id) {
+      return postJson<unknown>(`${schedule(id)}/pause`, {});
+    },
+
+    resumeSchedule(id) {
+      return postJson<unknown>(`${schedule(id)}/resume`, {});
+    },
+
+    runScheduleNow(id) {
+      return postJson<unknown>(`${schedule(id)}/run`, {});
+    },
+
+    editSchedule(id, cron) {
+      return fetchJSON<unknown>(schedule(id), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cron }),
+      });
+    },
+
+    deleteSchedule(id) {
+      return fetchJSON<DeleteResult>(schedule(id), { method: "DELETE" });
     },
 
     o2bStatus() {

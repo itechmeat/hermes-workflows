@@ -187,6 +187,57 @@ describe("workflows API client", () => {
     expect(JSON.parse(String(h.last().init?.body))).toEqual({ node_id: "node-a" });
   });
 
+  it("lists schedules and unwraps the envelope", async () => {
+    const h = harness();
+    const sched = { workflow_id: "blog", cron_expression: "0 9 * * *", hermes_cron_id: "c1" };
+    h.reply({ schedules: [sched] });
+
+    const result = await h.client.listSchedules();
+
+    expect(result).toEqual([sched]);
+    expect(h.last().path).toBe(`${BASE}/schedules`);
+  });
+
+  it("pauses, resumes, and runs a schedule via POST", async () => {
+    const h = harness();
+    h.reply({ ok: true });
+
+    await h.client.pauseSchedule("c1");
+    expect(h.last().path).toBe(`${BASE}/schedules/c1/pause`);
+    expect(h.last().init?.method).toBe("POST");
+
+    await h.client.resumeSchedule("c1");
+    expect(h.last().path).toBe(`${BASE}/schedules/c1/resume`);
+
+    await h.client.runScheduleNow("c1");
+    expect(h.last().path).toBe(`${BASE}/schedules/c1/run`);
+    expect(h.last().init?.method).toBe("POST");
+  });
+
+  it("edits a schedule's cron via PUT, forwarding the expression", async () => {
+    const h = harness();
+    h.reply({ ok: true, cron_expression: "30 7 * * *" });
+
+    await h.client.editSchedule("c1", "30 7 * * *");
+
+    const call = h.last();
+    expect(call.path).toBe(`${BASE}/schedules/c1`);
+    expect(call.init?.method).toBe("PUT");
+    expect(new Headers(call.init?.headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(String(call.init?.body))).toEqual({ cron: "30 7 * * *" });
+  });
+
+  it("deletes a schedule via DELETE", async () => {
+    const h = harness();
+    h.reply({ deleted: true });
+
+    const result = await h.client.deleteSchedule("c1");
+
+    expect(result).toEqual({ deleted: true });
+    expect(h.last().path).toBe(`${BASE}/schedules/c1`);
+    expect(h.last().init?.method).toBe("DELETE");
+  });
+
   it("reads the O2B status badge", async () => {
     const h = harness();
     h.reply({ connected: true });

@@ -78,6 +78,19 @@ export interface ExportedRun {
   json: RunState;
 }
 
+/** One row of `GET /schedules` — a workflow's native Hermes cron schedule.
+ *  Hermes cron interprets schedules in UTC. `last_run`/`next_run` are ISO
+ *  timestamps (null until known). */
+export interface ScheduleListItem {
+  workflow_id: string;
+  cron_expression: string | null;
+  timezone: string;
+  enabled: boolean;
+  last_run: string | null;
+  next_run: string | null;
+  hermes_cron_id: string;
+}
+
 /** Returned by `POST /workflows/{id}/run`. */
 export interface RunStartResult {
   run_id: string;
