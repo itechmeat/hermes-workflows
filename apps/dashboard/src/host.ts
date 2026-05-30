@@ -1,6 +1,7 @@
 // Typed access to the Hermes dashboard host globals. The host SPA injects these
 // on `window` before loading the plugin bundle.
 import type { ComponentType } from "react";
+import { createApiClient, type WorkflowsApi } from "./api/client";
 
 export interface HermesPluginSdk {
   React: typeof import("react");
@@ -36,4 +37,9 @@ export function getRegistry(): HermesPluginRegistry {
     throw new Error("Hermes Workflows: __HERMES_PLUGINS__ is not available.");
   }
   return registry;
+}
+
+/** Workflows API client bound to the host's `fetchJSON`. */
+export function getApiClient(): WorkflowsApi {
+  return createApiClient(getSdk().fetchJSON);
 }
