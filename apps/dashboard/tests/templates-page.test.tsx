@@ -96,6 +96,19 @@ describe("TemplatesPage", () => {
     expect(await screen.findByText(/deploy-12345678/)).toBeInTheDocument();
   });
 
+  it("surfaces the server detail when a run is refused (scripts disabled)", async () => {
+    const runWorkflow = vi.fn(async () => {
+      throw new Error("workflow contains script nodes but execution.scripts_enabled is false");
+    });
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), runWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await userEvent.click(screen.getAllByRole("button", { name: /^run$/i })[0]!);
+
+    expect(await screen.findByText(/scripts_enabled is false/)).toBeInTheDocument();
+  });
+
   it("shows the run/schedule columns and the enabled state", async () => {
     const client = stubClient({ listWorkflows: vi.fn(async () => items) });
     render(<TemplatesPage client={client} onOpen={() => {}} />);

@@ -43,7 +43,8 @@ export function CompilePreview({ workflowId, client }: CompilePreviewProps): Rea
             First node: <code>{plan.first_node ?? "—"}</code>
           </p>
           <p>
-            {plan.kanban_tasks.length} Kanban task(s), {plan.cron_jobs.length} cron job(s)
+            {plan.kanban_tasks.length} Kanban task(s), {plan.script_steps.length} script step(s),{" "}
+            {plan.cron_jobs.length} cron job(s)
           </p>
           {plan.profiles.length > 0 && <p>Profiles: {plan.profiles.join(", ")}</p>}
           {plan.skills.length > 0 && <p>Skills: {plan.skills.join(", ")}</p>}
@@ -54,6 +55,17 @@ export function CompilePreview({ workflowId, client }: CompilePreviewProps): Rea
               </li>
             ))}
           </ul>
+          {plan.script_steps.length > 0 && (
+            <ul>
+              {plan.script_steps.map((step) => (
+                <li key={step.node}>
+                  {/* Command preview before run (TZ §25.2). */}
+                  <code>{step.node}</code>: <code>{step.command}</code>
+                  {step.workdir !== undefined && <> in {step.workdir}</>}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>

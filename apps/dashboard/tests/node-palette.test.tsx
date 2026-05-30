@@ -6,7 +6,7 @@ import { NodePalette } from "../src/editor/NodePalette";
 describe("NodePalette", () => {
   it("renders an add button for every node type", () => {
     render(<NodePalette onAdd={() => {}} />);
-    for (const label of ["Agent task", "Condition", "Human review", "Finish"]) {
+    for (const label of ["Agent task", "Script", "Condition", "Human review", "Finish"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
   });
@@ -16,5 +16,12 @@ describe("NodePalette", () => {
     render(<NodePalette onAdd={onAdd} />);
     await userEvent.click(screen.getByRole("button", { name: "Condition" }));
     expect(onAdd).toHaveBeenCalledWith("condition");
+  });
+
+  it("emits the script node type", async () => {
+    const onAdd = vi.fn();
+    render(<NodePalette onAdd={onAdd} />);
+    await userEvent.click(screen.getByRole("button", { name: "Script" }));
+    expect(onAdd).toHaveBeenCalledWith("script");
   });
 });

@@ -77,7 +77,11 @@ export function TemplatesPage({
           setRunMessage(`Started run ${result.run_id}`);
           onOpenRun?.(result.run_id);
         })
-        .catch(() => setRunMessage(`Failed to start ${id}`));
+        // Surface the server detail (e.g. the scripts-disabled 409) rather than a
+        // generic failure, so the author knows why the run was refused.
+        .catch((err: unknown) =>
+          setRunMessage(err instanceof Error ? err.message : `Failed to start ${id}`),
+        );
     },
     [api, onOpenRun],
   );

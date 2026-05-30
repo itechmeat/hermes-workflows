@@ -151,6 +151,49 @@ export function NodeInspector({ node, onChange }: NodeInspectorProps): React.Rea
         </>
       )}
 
+      {wf.type === "script" && (
+        <>
+          <label style={field}>
+            <span style={{ fontSize: 11, opacity: 0.6 }}>Command</span>
+            <textarea
+              aria-label="Command"
+              rows={3}
+              value={wf.command}
+              onChange={(e) => onChange({ command: e.target.value })}
+            />
+          </label>
+          <label style={field}>
+            <span style={{ fontSize: 11, opacity: 0.6 }}>Workdir</span>
+            <input
+              aria-label="Workdir"
+              value={wf.workdir ?? ""}
+              onChange={(e) => onChange({ workdir: e.target.value || undefined })}
+            />
+          </label>
+          <label style={field}>
+            <span style={{ fontSize: 11, opacity: 0.6 }}>Timeout (seconds)</span>
+            <input
+              aria-label="Timeout (seconds)"
+              type="number"
+              min={0}
+              value={wf.timeout_seconds ?? ""}
+              onChange={(e) => onChange({ timeout_seconds: numberOrUndefined(e.target.value) })}
+            />
+          </label>
+          <label style={field}>
+            <span style={{ fontSize: 11, opacity: 0.6 }}>Env allowlist (comma-separated)</span>
+            <input
+              aria-label="Env allowlist"
+              value={(wf.env ?? []).join(", ")}
+              onChange={(e) => {
+                const list = splitList(e.target.value);
+                onChange({ env: list.length > 0 ? list : undefined });
+              }}
+            />
+          </label>
+        </>
+      )}
+
       {wf.type === "human_review" && (
         <fieldset style={field}>
           <legend style={{ fontSize: 11, opacity: 0.6 }}>Review options</legend>
@@ -195,6 +238,11 @@ export function NodeInspector({ node, onChange }: NodeInspectorProps): React.Rea
 }
 
 function splitSkills(value: string): string[] {
+  return splitList(value);
+}
+
+/** Split a comma-separated list into trimmed, non-empty items. */
+function splitList(value: string): string[] {
   return value
     .split(",")
     .map((s) => s.trim())

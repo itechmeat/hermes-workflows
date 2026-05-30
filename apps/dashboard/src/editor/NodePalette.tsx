@@ -2,6 +2,7 @@ import type { NodeType } from "../api/types";
 
 const NODE_TYPES: { type: NodeType; label: string }[] = [
   { type: "agent_task", label: "Agent task" },
+  { type: "script", label: "Script" },
   { type: "condition", label: "Condition" },
   { type: "human_review", label: "Human review" },
   { type: "finish", label: "Finish" },

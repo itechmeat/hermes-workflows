@@ -57,6 +57,34 @@ describe("NodeInspector", () => {
     expect(onChange).toHaveBeenCalledWith({ outcome: "failure" });
   });
 
+  it("edits script node command, workdir, timeout, and env allowlist", () => {
+    const onChange = vi.fn();
+    const node = flowNode({ id: "lint", type: "script", command: "old" });
+    render(<NodeInspector node={node} onChange={onChange} />);
+
+    expect(screen.getByLabelText("Command")).toHaveValue("old");
+    fireEvent.change(screen.getByLabelText("Command"), { target: { value: "bun run lint" } });
+    expect(onChange).toHaveBeenCalledWith({ command: "bun run lint" });
+
+    fireEvent.change(screen.getByLabelText("Workdir"), { target: { value: "/srv/app" } });
+    expect(onChange).toHaveBeenCalledWith({ workdir: "/srv/app" });
+
+    fireEvent.change(screen.getByLabelText("Timeout (seconds)"), { target: { value: "90" } });
+    expect(onChange).toHaveBeenCalledWith({ timeout_seconds: 90 });
+
+    fireEvent.change(screen.getByLabelText("Env allowlist"), { target: { value: "PATH, HOME ," } });
+    expect(onChange).toHaveBeenCalledWith({ env: ["PATH", "HOME"] });
+  });
+
+  it("clears the script env allowlist to undefined when emptied", () => {
+    const onChange = vi.fn();
+    const node = flowNode({ id: "lint", type: "script", command: "x", env: ["PATH"] });
+    render(<NodeInspector node={node} onChange={onChange} />);
+
+    fireEvent.change(screen.getByLabelText("Env allowlist"), { target: { value: "" } });
+    expect(onChange).toHaveBeenCalledWith({ env: undefined });
+  });
+
   it("edits the title for any node type", () => {
     const onChange = vi.fn();
     const node = flowNode({ id: "gate", type: "condition" });

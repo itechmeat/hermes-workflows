@@ -61,12 +61,14 @@ describe("CompilePreview", () => {
       kanban_tasks: [
         {
           node: "build",
+          kind: "agent",
           assignee: "devops-engineer",
           workflow_template_id: "deploy",
           current_step_key: "build",
           prompt: "build it",
         },
       ],
+      script_steps: [],
       cron_jobs: [],
       profiles: ["devops-engineer"],
       skills: [],
@@ -83,6 +85,27 @@ describe("CompilePreview", () => {
     // the compiled task row: node -> assignee
     expect(screen.getByText(/→ devops-engineer/)).toBeInTheDocument();
     expect(screen.getByText(/First node:/)).toBeInTheDocument();
+  });
+
+  it("renders the compiled script command (the command preview)", async () => {
+    const plan: HermesPlan = {
+      workflow_id: "ci",
+      scope: { type: "global" },
+      trigger: { type: "manual" },
+      first_node: "lint",
+      kanban_tasks: [],
+      script_steps: [{ node: "lint", kind: "script", command: "bun run lint", workdir: "/srv/app" }],
+      cron_jobs: [],
+      profiles: [],
+      skills: [],
+      memory: { provider: "auto", fail_open: true },
+    };
+    render(<CompilePreview workflowId="ci" client={client({ compilePreview: vi.fn(async () => plan) })} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /preview plan/i }));
+
+    expect(await screen.findByText(/1 script step/i)).toBeInTheDocument();
+    expect(screen.getByText(/bun run lint/)).toBeInTheDocument();
   });
 
   it("surfaces a request failure instead of swallowing it", async () => {

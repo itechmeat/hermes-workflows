@@ -3,6 +3,7 @@ import type { FlowNode } from "../graphMapping";
 
 const TYPE_LABEL: Record<string, string> = {
   agent_task: "Agent task",
+  script: "Script",
   condition: "Condition",
   human_review: "Human review",
   finish: "Finish",
