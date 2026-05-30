@@ -15,13 +15,16 @@ export interface CompilePreviewProps {
 export function CompilePreview({ workflowId, client }: CompilePreviewProps): React.ReactElement {
   const api = client ?? getApiClient();
   const [plan, setPlan] = useState<HermesPlan | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const preview = useCallback(() => {
     setBusy(true);
+    setError(null);
     api
       .compilePreview(workflowId)
       .then(setPlan)
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Compile preview failed"))
       .finally(() => setBusy(false));
   }, [api, workflowId]);
 
@@ -33,6 +36,7 @@ export function CompilePreview({ workflowId, client }: CompilePreviewProps): Rea
           Preview plan
         </button>
       </div>
+      {error !== null && <p role="alert">{error}</p>}
       {plan !== null && (
         <div>
           <p>

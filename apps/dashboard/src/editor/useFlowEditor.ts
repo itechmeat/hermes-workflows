@@ -120,22 +120,21 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
 
   const addNode = useCallback(
     (type: NodeType): string => {
-      let id = "";
-      setNodes((current) => {
-        id = freshId(type, current);
-        const placed: FlowNode = {
-          id,
-          type: WORKFLOW_NODE_TYPE,
-          position: { x: 80 + current.length * 40, y: 80 + current.length * 20 },
-          data: { node: blankNode(type, id) },
-        };
-        return [...current, placed];
-      });
+      // Derive the id/placement from the current nodes outside the state updater
+      // so the updater stays pure (React may invoke it more than once).
+      const id = freshId(type, nodes);
+      const placed: FlowNode = {
+        id,
+        type: WORKFLOW_NODE_TYPE,
+        position: { x: 80 + nodes.length * 40, y: 80 + nodes.length * 20 },
+        data: { node: blankNode(type, id) },
+      };
+      setNodes((current) => [...current, placed]);
       setSelectedNodeId(id);
       setDirty(true);
       return id;
     },
-    [setNodes],
+    [nodes, setNodes],
   );
 
   const save = useCallback(async (): Promise<SpecDetail | null> => {

@@ -40,6 +40,15 @@ describe("ValidationPanel", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(/valid/i);
     expect(screen.getByText("unreachable_node")).toBeInTheDocument();
   });
+
+  it("surfaces a request failure instead of swallowing it", async () => {
+    const validateWorkflow = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    render(<ValidationPanel workflowId="deploy" client={client({ validateWorkflow })} />);
+    await userEvent.click(screen.getByRole("button", { name: /validate/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/network down/i);
+  });
 });
 
 describe("CompilePreview", () => {
@@ -74,5 +83,14 @@ describe("CompilePreview", () => {
     // the compiled task row: node -> assignee
     expect(screen.getByText(/→ devops-engineer/)).toBeInTheDocument();
     expect(screen.getByText(/First node:/)).toBeInTheDocument();
+  });
+
+  it("surfaces a request failure instead of swallowing it", async () => {
+    const compilePreview = vi.fn(async () => {
+      throw new Error("compile boom");
+    });
+    render(<CompilePreview workflowId="deploy" client={client({ compilePreview })} />);
+    await userEvent.click(screen.getByRole("button", { name: /preview plan/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/compile boom/i);
   });
 });

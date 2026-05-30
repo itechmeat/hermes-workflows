@@ -16,16 +16,19 @@ export interface ValidationPanelProps {
 export function ValidationPanel({ workflowId, client, onResult }: ValidationPanelProps): React.ReactElement {
   const api = client ?? getApiClient();
   const [result, setResult] = useState<ValidationResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const validate = useCallback(() => {
     setBusy(true);
+    setError(null);
     api
       .validateWorkflow(workflowId)
       .then((res) => {
         setResult(res);
         onResult?.(res);
       })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Validation request failed"))
       .finally(() => setBusy(false));
   }, [api, workflowId, onResult]);
 
@@ -37,6 +40,7 @@ export function ValidationPanel({ workflowId, client, onResult }: ValidationPane
           Validate
         </button>
       </div>
+      {error !== null && <p role="alert">{error}</p>}
       {result !== null && (
         <div>
           {result.valid ? (
