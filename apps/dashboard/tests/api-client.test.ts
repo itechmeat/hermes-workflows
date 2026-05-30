@@ -122,7 +122,7 @@ describe("workflows API client", () => {
     expect(JSON.parse(String(h.last().init?.body))).toEqual({});
   });
 
-  it("lists runs and unwraps the envelope", async () => {
+  it("lists runs and unwraps the envelope (active by default)", async () => {
     const h = harness();
     const run = { run_id: "r1", workflow_id: "wf-1", status: "running" };
     h.reply({ runs: [run] });
@@ -131,6 +131,25 @@ describe("workflows API client", () => {
 
     expect(result).toEqual([run]);
     expect(h.last().path).toBe(`${BASE}/runs`);
+  });
+
+  it("lists all runs with the scope query when asked", async () => {
+    const h = harness();
+    h.reply({ runs: [] });
+    await h.client.listRuns("all");
+    expect(h.last().path).toBe(`${BASE}/runs?scope=all`);
+  });
+
+  it("exports a run's log bundle, returning the JSON envelope", async () => {
+    const h = harness();
+    const envelope = { run_id: "r1", filename: "r1.run.json", json: { run_id: "r1", nodes: {} } };
+    h.reply(envelope);
+
+    const result = await h.client.exportRunLogs("r1");
+
+    expect(result).toBe(envelope);
+    expect(h.last().path).toBe(`${BASE}/runs/r1/export`);
+    expect(h.last().init?.method ?? "GET").toBe("GET");
   });
 
   it("gets a run by id", async () => {

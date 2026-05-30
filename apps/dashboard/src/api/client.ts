@@ -6,6 +6,7 @@
 import type {
   CreateWorkflowBody,
   DeleteResult,
+  ExportedRun,
   ExportedWorkflow,
   HermesPlan,
   O2BStatus,
@@ -21,6 +22,9 @@ import type {
 
 export type FetchJSON = <T = unknown>(path: string, init?: RequestInit) => Promise<T>;
 
+/** Which runs the Runs page asks for: in-flight only (default) or every run. */
+export type RunScope = "active" | "all";
+
 export interface WorkflowsApi {
   listWorkflows(): Promise<WorkflowListItem[]>;
   getWorkflow(id: string): Promise<SpecDetail>;
@@ -31,7 +35,8 @@ export interface WorkflowsApi {
   validateWorkflow(id: string): Promise<ValidationResult>;
   compilePreview(id: string): Promise<HermesPlan>;
   runWorkflow(id: string, options?: RunOptions): Promise<RunStartResult>;
-  listRuns(): Promise<RunSummary[]>;
+  listRuns(scope?: RunScope): Promise<RunSummary[]>;
+  exportRunLogs(id: string): Promise<ExportedRun>;
   getRun(id: string): Promise<RunState>;
   cancelRun(id: string): Promise<RunState>;
   retryRun(id: string, node?: string): Promise<RunState>;
@@ -93,9 +98,14 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
       return postJson<RunStartResult>(`${workflow(id)}/run`, options ?? {});
     },
 
-    async listRuns() {
-      const { runs } = await fetchJSON<{ runs?: RunSummary[] }>(`${BASE}/runs`);
+    async listRuns(scope) {
+      const query = scope === "all" ? "?scope=all" : "";
+      const { runs } = await fetchJSON<{ runs?: RunSummary[] }>(`${BASE}/runs${query}`);
       return runs ?? [];
+    },
+
+    exportRunLogs(id) {
+      return fetchJSON<ExportedRun>(`${run(id)}/export`);
     },
 
     getRun(id) {

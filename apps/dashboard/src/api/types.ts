@@ -56,11 +56,26 @@ export interface WorkflowListItem {
   trigger: Trigger;
 }
 
-/** One row of `GET /runs` (active runs only). */
+/** One row of `GET /runs` — the Runs-page columns. `scope=active` (default)
+ *  lists in-flight runs; `scope=all` adds finished ones. Timing fields are null
+ *  until set; `duration` is `finished_at - started_at` (ms) when both are known. */
 export interface RunSummary {
   run_id: string;
   workflow_id: string;
+  project_id: string | null;
   status: RunStatus;
+  current_node: string | null;
+  started_at: number | null;
+  finished_at: number | null;
+  duration: number | null;
+}
+
+/** Returned by `GET /runs/{id}/export` — the full run-load bundle wrapped in a
+ *  JSON envelope so it travels over the host's JSON-only `fetchJSON`. */
+export interface ExportedRun {
+  run_id: string;
+  filename: string;
+  json: RunState;
 }
 
 /** Returned by `POST /workflows/{id}/run`. */
