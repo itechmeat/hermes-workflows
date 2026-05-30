@@ -20,6 +20,10 @@ from .. import config
 TICK_NAME = "hermes-workflows-tick"
 DEFAULT_TICK_SCHEDULE = "every 2m"
 
+# Workflow cron triggers are registered with this job-name prefix (see
+# ``register_trigger``); the dashboard Schedules page lists exactly these jobs.
+WORKFLOW_JOB_PREFIX = "workflow:"
+
 
 def write_shim(name: str, *command_args: str, command: Optional[Path] = None) -> Path:
     """Write an executable shim under ``HERMES_HOME/scripts`` that execs the
@@ -125,6 +129,44 @@ def sync_tick(*, active: bool, script: str) -> Optional[str]:
         return ensure_tick(script=script)
     teardown_tick()
     return None
+
+
+def _is_workflow_job(job: dict) -> bool:
+    return str(job.get("name") or "").startswith(WORKFLOW_JOB_PREFIX)
+
+
+def _schedule_row(job: dict) -> dict:
+    """Map a native Cron job into the Schedules-page row. Cron schedules are
+    interpreted in UTC by Hermes cron, so the timezone column is fixed to UTC."""
+    schedule = job.get("schedule") or {}
+    name = str(job.get("name") or "")
+    next_run = job.get("next_run_at") or cj.compute_next_run(schedule, job.get("last_run_at"))
+    return {
+        "workflow_id": name[len(WORKFLOW_JOB_PREFIX) :],
+        "cron_expression": schedule.get("expr") or job.get("schedule_display"),
+        "timezone": "UTC",
+        "enabled": bool(job.get("enabled", True)),
+        "last_run": job.get("last_run_at"),
+        "next_run": next_run,
+        "hermes_cron_id": job.get("id"),
+    }
+
+
+def list_workflow_schedules() -> list[dict]:
+    """List every workflow cron schedule (the ``workflow:<id>`` jobs), disabled
+    ones included, shaped into the Schedules-page rows."""
+    return [_schedule_row(job) for job in cj.list_jobs(include_disabled=True) if _is_workflow_job(job)]
+
+
+def run_now(job_id: str) -> bool:
+    """Trigger a schedule's workflow on the next scheduler tick."""
+    return cj.trigger_job(job_id) is not None
+
+
+def edit_schedule(job_id: str, cron_expression: str) -> Optional[dict]:
+    """Change a schedule's cron expression. Raises ``ValueError`` on an invalid
+    expression (via ``parse_schedule``); returns ``None`` for an unknown job."""
+    return cj.update_job(job_id, {"schedule": cron_expression})
 
 
 def pause(job_id: str) -> bool:

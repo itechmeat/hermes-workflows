@@ -80,6 +80,40 @@ def test_workflow_tick_uses_advance_all_command(cron_env: Path) -> None:
     assert cron_bridge.find_by_name(cron_bridge.TICK_NAME) is None
 
 
+def test_list_workflow_schedules(cron_env: Path) -> None:
+    cron_bridge.register_workflow_trigger(workflow_id="blog", schedule="0 9 * * *")
+    cron_bridge.register_workflow_trigger(workflow_id="nightly", schedule="every 30m")
+    # a non-workflow job (the tick) must be excluded from the list
+    cron_bridge.sync_workflow_tick(active=True)
+
+    rows = cron_bridge.list_workflow_schedules()
+    assert {r["workflow_id"] for r in rows} == {"blog", "nightly"}
+
+    blog = next(r for r in rows if r["workflow_id"] == "blog")
+    assert blog["cron_expression"] == "0 9 * * *"
+    assert blog["timezone"] == "UTC"
+    assert blog["enabled"] is True
+    assert blog["next_run"] is not None
+    assert blog["hermes_cron_id"]
+
+
+def test_run_now_triggers_or_reports_missing(cron_env: Path) -> None:
+    job_id = cron_bridge.register_workflow_trigger(workflow_id="wf", schedule="every 2m")
+    assert cron_bridge.run_now(job_id) is True
+    assert cron_bridge.run_now("does-not-exist") is False
+
+
+def test_edit_schedule_changes_cron_and_rejects_bad(cron_env: Path) -> None:
+    job_id = cron_bridge.register_workflow_trigger(workflow_id="wf", schedule="every 2m")
+    cron_bridge.edit_schedule(job_id, "0 6 * * *")
+    assert cj.get_job(job_id)["schedule"]["expr"] == "0 6 * * *"
+
+    with pytest.raises(ValueError):
+        cron_bridge.edit_schedule(job_id, "totally not a schedule")
+
+    assert cron_bridge.edit_schedule("does-not-exist", "0 6 * * *") is None
+
+
 def test_pause_resume_remove(cron_env: Path) -> None:
     job_id = cron_bridge.register_trigger(
         workflow_id="wf", schedule="every 1h", script=str(cron_env)
