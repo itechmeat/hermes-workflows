@@ -5,7 +5,7 @@
  * uses it) so loading is parse + validate with no field remapping layer.
  */
 
-export type NodeType = "agent_task" | "condition" | "human_review" | "finish";
+export type NodeType = "agent_task" | "script" | "condition" | "human_review" | "finish";
 
 export type ReviewOption = "approved" | "rejected" | "needs_changes";
 
@@ -34,6 +34,28 @@ export interface AgentTaskNode {
   timeout_seconds?: number;
 }
 
+/**
+ * A deterministic shell command run with no LLM (lint, tests, a build step).
+ * It settles to `success`/`failure` by exit code, so it plugs into the same
+ * `node_status` branching as any work node. It runs locally in the plugin in
+ * any scope — Hermes has no no-agent Kanban task mode.
+ */
+export interface ScriptNode {
+  id: string;
+  type: "script";
+  title?: string;
+  description?: string;
+  /** The shell command to run. Required. */
+  command: string;
+  /** Working directory the command runs in. */
+  workdir?: string;
+  /** Hard timeout; on expiry the node settles `failure`. */
+  timeout_seconds?: number;
+  /** Allowlist of environment variable names exposed to the command (not the
+   *  full process env). Absent means no inherited env beyond the executor's. */
+  env?: string[];
+}
+
 /** A routing-only node. It performs no work; its outgoing edges carry conditions. */
 export interface ConditionNode {
   id: string;
@@ -59,4 +81,9 @@ export interface FinishNode {
   outcome?: "success" | "failure";
 }
 
-export type WorkflowNode = AgentTaskNode | ConditionNode | HumanReviewNode | FinishNode;
+export type WorkflowNode =
+  | AgentTaskNode
+  | ScriptNode
+  | ConditionNode
+  | HumanReviewNode
+  | FinishNode;

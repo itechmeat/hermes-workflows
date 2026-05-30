@@ -14,6 +14,7 @@ export type {
   ReviewOption,
   WorkspaceKind,
   AgentTaskNode,
+  ScriptNode,
   ConditionNode,
   HumanReviewNode,
   FinishNode,

@@ -18,6 +18,7 @@ import type {
 import type {
   WorkflowNode,
   AgentTaskNode,
+  ScriptNode,
   HumanReviewNode,
   FinishNode,
   ReviewOption,
@@ -34,7 +35,7 @@ export interface LoadResult {
   ui?: UiLayout;
 }
 
-const NODE_TYPES = new Set(["agent_task", "condition", "human_review", "finish"]);
+const NODE_TYPES = new Set(["agent_task", "script", "condition", "human_review", "finish"]);
 const SCOPE_TYPES = new Set(["global", "project", "projects"]);
 const REVIEW_OPTIONS = new Set(["approved", "rejected", "needs_changes"]);
 const MEMORY_PROVIDERS = new Set(["auto", "open_second_brain", "none"]);
@@ -168,6 +169,8 @@ function parseNode(value: unknown, index: number): WorkflowNode {
   switch (type) {
     case "agent_task":
       return parseAgentTask(value, base, id);
+    case "script":
+      return parseScript(value, base, id);
     case "condition":
       return { ...base, type: "condition" };
     case "human_review":
@@ -222,6 +225,24 @@ function parseAgentTask(value: Rec, base: { id: string }, id: string): AgentTask
   if (value["timeout_seconds"] !== undefined) {
     if (typeof value["timeout_seconds"] !== "number") fail(`node '${id}'.timeout_seconds must be a number`);
     node.timeout_seconds = value["timeout_seconds"];
+  }
+  return node;
+}
+
+function parseScript(value: Rec, base: { id: string }, id: string): ScriptNode {
+  const node: ScriptNode = {
+    ...base,
+    type: "script",
+    command: str(value["command"], `node '${id}'.command`),
+  };
+  if (value["workdir"] !== undefined) node.workdir = str(value["workdir"], `node '${id}'.workdir`);
+  if (value["timeout_seconds"] !== undefined) {
+    if (typeof value["timeout_seconds"] !== "number") fail(`node '${id}'.timeout_seconds must be a number`);
+    node.timeout_seconds = value["timeout_seconds"];
+  }
+  if (value["env"] !== undefined) {
+    if (!Array.isArray(value["env"])) fail(`node '${id}'.env must be a list`);
+    node.env = value["env"].map((e, i) => str(e, `node '${id}'.env[${i}]`));
   }
   return node;
 }

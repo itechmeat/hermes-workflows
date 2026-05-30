@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseWorkflow, fromObject, WorkflowParseError, isWorkflowEnabled } from "../src/index.ts";
+import {
+  parseWorkflow,
+  fromObject,
+  serializeWorkflow,
+  WorkflowParseError,
+  isWorkflowEnabled,
+} from "../src/index.ts";
+import type { ScriptNode } from "../src/index.ts";
 import { loadExample } from "./_fixtures.ts";
 
 const MINIMAL = {
@@ -140,5 +147,57 @@ describe("parseWorkflow", () => {
       });
       expect(workflow.defaults?.memory?.provider).toBe(provider);
     }
+  });
+});
+
+describe("script node", () => {
+  const withScript = (script: Record<string, unknown>) => ({
+    ...MINIMAL,
+    nodes: [{ id: "lint", type: "script", ...script }, { id: "done", type: "finish" }],
+    edges: [{ from: "lint", to: "done" }],
+  });
+
+  test("round-trips command, workdir, timeout, and env allowlist", () => {
+    const { workflow } = fromObject(
+      withScript({
+        command: "bun run lint",
+        workdir: "/srv/projects/foo",
+        timeout_seconds: 120,
+        env: ["PATH", "HOME"],
+      }),
+    );
+    const reparsed = parseWorkflow(serializeWorkflow(workflow)).workflow;
+    const node = reparsed.nodes.find((n) => n.id === "lint") as ScriptNode;
+    expect(node.type).toBe("script");
+    expect(node.command).toBe("bun run lint");
+    expect(node.workdir).toBe("/srv/projects/foo");
+    expect(node.timeout_seconds).toBe(120);
+    expect(node.env).toEqual(["PATH", "HOME"]);
+  });
+
+  test("a command is the only required field", () => {
+    const { workflow } = fromObject(withScript({ command: "make test" }));
+    const node = workflow.nodes.find((n) => n.id === "lint") as ScriptNode;
+    expect(node.command).toBe("make test");
+    expect(node.workdir).toBeUndefined();
+    expect(node.env).toBeUndefined();
+  });
+
+  test("rejects a script node without a command", () => {
+    expect(() => fromObject(withScript({ workdir: "/tmp" }))).toThrow(WorkflowParseError);
+  });
+
+  test("rejects a non-string command", () => {
+    expect(() => fromObject(withScript({ command: 42 }))).toThrow(WorkflowParseError);
+  });
+
+  test("rejects a non-list env", () => {
+    expect(() => fromObject(withScript({ command: "ls", env: "PATH" }))).toThrow(WorkflowParseError);
+  });
+
+  test("rejects a non-string env entry", () => {
+    expect(() => fromObject(withScript({ command: "ls", env: ["PATH", 7] }))).toThrow(
+      WorkflowParseError,
+    );
   });
 });

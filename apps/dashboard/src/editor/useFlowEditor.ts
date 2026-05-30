@@ -61,7 +61,9 @@ function freshId(type: NodeType, nodes: readonly FlowNode[]): string {
 }
 
 function blankNode(type: NodeType, id: string): WorkflowNode {
-  return type === "agent_task" ? { id, type, prompt: "" } : { id, type };
+  if (type === "agent_task") return { id, type, prompt: "" };
+  if (type === "script") return { id, type, command: "" };
+  return { id, type };
 }
 
 export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEditorController {
