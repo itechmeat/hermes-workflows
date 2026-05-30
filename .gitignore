@@ -3,9 +3,10 @@ dist/
 coverage/
 *.log
 
-# The dashboard bundle is hand-authored (build-free), not a build artifact.
+# The dashboard bundle is a committed build artifact (built from apps/dashboard).
 !dashboard/dist/
 !dashboard/dist/index.js
+!dashboard/dist/index.css
 
 # Python
 __pycache__/

@@ -10,5 +10,6 @@
   },
   "slots": [],
   "entry": "dist/index.js",
+  "css": "dist/index.css",
   "api": "plugin_api.py"
 }

@@ -1,11 +1,10 @@
 # Dashboard
 
-The dashboard ships a **Workflows** tab. The current frontend bundle is read-only
-(it lists workflows and active runs and shows the OpenSecondBrain connection
-state), but the backend now exposes the full authoring and run-control API the
-visual `@xyflow/react` editor will consume — the editor frontend is the next
-phase. The backend never starts its own web server: it exports an `APIRouter`
-that the Hermes dashboard's running FastAPI app mounts.
+The dashboard ships a **Workflows** tab with a visual `@xyflow/react` workflow
+editor and a live run inspector. The frontend is built from the `apps/dashboard`
+workspace into a single bundle the Hermes dashboard loads; the backend exports an
+`APIRouter` that the dashboard's running FastAPI app mounts (it never starts its
+own web server).
 
 ## Contract
 
@@ -20,9 +19,14 @@ that the Hermes dashboard's running FastAPI app mounts.
   "tab": { "path": "/workflows", "position": "after:skills" },
   "slots": [],
   "entry": "dist/index.js",
+  "css": "dist/index.css",
   "api": "plugin_api.py"
 }
 ```
+
+The dashboard host loads `entry` as a script and, when `css` is present, injects
+it as a stylesheet `<link>` — that is how the bundled `@xyflow/react` styles are
+applied.
 
 ## Backend
 
@@ -63,8 +67,42 @@ FastAPI is not installed.
 
 ## Frontend
 
-`dashboard/dist/index.js` is a small, build-free bundle. It uses the React and
-`fetchJSON` helpers the dashboard exposes on `window.__HERMES_PLUGIN_SDK__` and
-registers its tab via `window.__HERMES_PLUGINS__.register("workflows", ...)`, so
-it needs no bundler. It renders two tables (workflows, active runs) and the O2B
-badge. A full `apps/dashboard` build lands with the visual editor.
+The frontend lives in the `apps/dashboard` workspace (Vite + React 19 +
+`@xyflow/react`, TypeScript) and builds to a single self-executing bundle at
+`dashboard/dist/index.js` (+ `index.css`), which is committed.
+
+### Host integration
+
+The Hermes dashboard is a React 19 SPA that exposes its own React on
+`window.__HERMES_PLUGIN_SDK__` but not `react-dom`. The build reuses that single
+React instance: `react` is aliased to a shim that re-exports the host React (so
+no second React ships), `react/jsx-runtime` stays the real production runtime,
+and `react-dom` is bundled (pinned to the host's 19.2.x) for `@xyflow/react`'s
+`createPortal`, binding to the host React through the same alias. The entry
+registers the root component via
+`window.__HERMES_PLUGINS__.register("workflows", App)`.
+
+### Views
+
+- **Templates** — lists workflows (name, id, scope, trigger) with Open (editor)
+  and Run (starts a run, opens the inspector) actions.
+- **Editor** — the `@xyflow/react` canvas with a node palette, a per-type node
+  inspector, and bottom panels for server-side validation and compile preview.
+  Layout round-trips losslessly through the spec's `ui.xyflow` block; Save sends
+  `{ workflow, ui }` via `PUT` (the server rejects an invalid graph).
+- **Run inspector** — renders the run graph with per-node status colours, polls
+  `GET /runs/{id}` while the run is active (stopping once terminal), and offers
+  whole-run cancel/retry plus per-node retry.
+
+### Build
+
+```bash
+bun run dashboard:build      # build the committed bundle (apps/dashboard -> dashboard/dist)
+bun run dashboard:test       # typecheck-free Vitest run (jsdom + RTL)
+bun run dashboard:typecheck  # tsc --noEmit for the frontend
+```
+
+`bun run validate` runs the core checks plus the frontend typecheck, tests, a
+fresh build, and a `git diff` guard that the committed `dashboard/dist` matches
+that build. Tests use Vitest with jsdom and React Testing Library; the spec/run
+types are shared from `@hermes-workflows/core` via type-only imports.

@@ -15,9 +15,9 @@ OpenSecondBrain is an optional long-term memory layer.
 
 The engine is headless-first and runs autonomously. A workflow advances on a self-terminating
 Cron tick with no human in the loop except an explicit `human_review` node. The dashboard tab
-lists workflows and runs and resolves reviews. The backend API the visual `@xyflow/react` editor
-needs — read, validate, compile-preview, save (with layout), create, delete, run, inspect, cancel,
-retry — is in place; the editor frontend is the next phase. See [docs/dashboard.md](docs/dashboard.md).
+provides a visual `@xyflow/react` editor — author the graph, edit node fields, validate, preview
+the compiled Hermes plan, and save (layout included) — plus a live run inspector with per-node
+status, cancel, and retry. See [docs/dashboard.md](docs/dashboard.md).
 
 ## Node types
 
@@ -44,15 +44,19 @@ hermes-workflows review <run_id> <node_id> <approved|rejected|needs_changes>
 ## Layout
 
 - `packages/core` — TypeScript engine (schema, validation, compiler, runtime, memory) on Bun
+- `apps/dashboard` — frontend source for the dashboard plugin (Vite + React 19 + `@xyflow/react`), built to `dashboard/dist`
 - `hermes_workflows/` — Python orchestrator: execution backends + Hermes bridges (kanban, cron, profiles, boards, notify, o2b)
-- `dashboard/` — Hermes dashboard plugin (read, review, and the editor authoring + run-control API)
-- `docs/` — [architecture](docs/architecture.md), [execution](docs/execution.md), [workflow schema](docs/workflow-schema.md); specs and plans under `docs/specs`, `docs/plans`
+- `dashboard/` — Hermes dashboard plugin: the built bundle, manifest, and the authoring + run-control API
+- `docs/` — [architecture](docs/architecture.md), [execution](docs/execution.md), [workflow schema](docs/workflow-schema.md), [dashboard](docs/dashboard.md); specs and plans under `docs/specs`, `docs/plans`
 
 ## Development
 
 ```bash
 bun install
-bun run validate   # typecheck + lint + test
+bun run validate          # core typecheck + lint + tests (Bun + pytest), then the
+                          # frontend typecheck + tests + a fresh build, and a guard
+                          # that the committed dashboard/dist matches that build
+bun run dashboard:build   # rebuild just the dashboard bundle into dashboard/dist
 ```
 
 ## License
