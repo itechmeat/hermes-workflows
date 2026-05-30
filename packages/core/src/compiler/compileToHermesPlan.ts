@@ -9,6 +9,8 @@ import { entryNodes } from "../schema/graph.ts";
 
 export interface CompiledKanbanTask {
   node: string;
+  /** Discriminator so the engine routes scheduling by node kind. */
+  kind: "agent";
   assignee: string;
   workflow_template_id: string;
   current_step_key: string;
@@ -23,6 +25,17 @@ export interface CompiledKanbanTask {
   max_retries?: number;
 }
 
+/** A script node compiled for local execution by the plugin's ScriptExecutor.
+ *  Peer of `CompiledKanbanTask`; the `kind` discriminator routes scheduling. */
+export interface CompiledScript {
+  node: string;
+  kind: "script";
+  command: string;
+  workdir?: string;
+  timeout_seconds?: number;
+  env?: string[];
+}
+
 export interface CompiledCronJob {
   schedule: string;
   timezone?: string;
@@ -35,6 +48,7 @@ export interface HermesPlan {
   trigger: Trigger;
   first_node: string | null;
   kanban_tasks: CompiledKanbanTask[];
+  script_steps: CompiledScript[];
   cron_jobs: CompiledCronJob[];
   profiles: string[];
   skills: string[];
@@ -45,16 +59,26 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
   const defaultProfile = workflow.defaults?.profile;
 
   const kanban_tasks: CompiledKanbanTask[] = [];
+  const script_steps: CompiledScript[] = [];
   const profiles = new Set<string>();
   const skills = new Set<string>();
 
   const defaultRetries = workflow.defaults?.max_retries;
 
   for (const node of workflow.nodes) {
+    if (node.type === "script") {
+      const step: CompiledScript = { node: node.id, kind: "script", command: node.command };
+      if (node.workdir !== undefined) step.workdir = node.workdir;
+      if (node.timeout_seconds !== undefined) step.timeout_seconds = node.timeout_seconds;
+      if (node.env !== undefined) step.env = node.env;
+      script_steps.push(step);
+      continue;
+    }
     if (node.type !== "agent_task") continue;
     const assignee = node.profile ?? defaultProfile ?? "";
     const task: CompiledKanbanTask = {
       node: node.id,
+      kind: "agent",
       assignee,
       workflow_template_id: workflow.id,
       current_step_key: node.id,
@@ -91,6 +115,7 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     trigger: workflow.trigger,
     first_node: entry ? entry.id : null,
     kanban_tasks,
+    script_steps,
     cron_jobs,
     profiles: [...profiles],
     skills: [...skills],

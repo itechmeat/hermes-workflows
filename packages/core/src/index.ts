@@ -76,7 +76,12 @@ export { cancelRun, retryRun, RetryError } from "./runtime/runMutations.ts";
 
 // Compiler
 export { compileToHermesPlan } from "./compiler/compileToHermesPlan.ts";
-export type { HermesPlan, CompiledKanbanTask, CompiledCronJob } from "./compiler/compileToHermesPlan.ts";
+export type {
+  HermesPlan,
+  CompiledKanbanTask,
+  CompiledScript,
+  CompiledCronJob,
+} from "./compiler/compileToHermesPlan.ts";
 
 // Persistence
 export { openRunsDatabase } from "./runtime/db/connection.ts";

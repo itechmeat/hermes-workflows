@@ -1,7 +1,21 @@
 import { describe, expect, test } from "bun:test";
 
-import { compileToHermesPlan } from "../src/index.ts";
+import { compileToHermesPlan, fromObject } from "../src/index.ts";
+import type { Workflow } from "../src/index.ts";
 import { loadExample } from "./_fixtures.ts";
+
+function wf(nodes: unknown[], edges: unknown[]): Workflow {
+  return fromObject({
+    id: "t",
+    name: "T",
+    version: 1,
+    scope: { type: "global" },
+    trigger: { type: "manual" },
+    defaults: { profile: "p" },
+    nodes,
+    edges,
+  }).workflow;
+}
 
 describe("compileToHermesPlan", () => {
   test("feature-development compiles to Kanban tasks with no cron", async () => {
@@ -50,5 +64,58 @@ describe("compileToHermesPlan", () => {
       },
     ]);
     expect(plan.first_node).toBe("fetch");
+  });
+});
+
+describe("compileToHermesPlan — script steps", () => {
+  test("a mixed workflow splits agent_task and script into typed, kind-tagged lists", () => {
+    const plan = compileToHermesPlan(
+      wf(
+        [
+          { id: "work", type: "agent_task", prompt: "do" },
+          {
+            id: "lint",
+            type: "script",
+            command: "bun run lint",
+            workdir: "/srv/projects/foo",
+            timeout_seconds: 90,
+            env: ["PATH"],
+          },
+          { id: "done", type: "finish" },
+        ],
+        [
+          { from: "work", to: "lint" },
+          { from: "lint", to: "done" },
+        ],
+      ),
+    );
+
+    expect(plan.kanban_tasks).toHaveLength(1);
+    expect(plan.kanban_tasks[0]).toMatchObject({ node: "work", kind: "agent" });
+
+    expect(plan.script_steps).toHaveLength(1);
+    expect(plan.script_steps[0]).toEqual({
+      node: "lint",
+      kind: "script",
+      command: "bun run lint",
+      workdir: "/srv/projects/foo",
+      timeout_seconds: 90,
+      env: ["PATH"],
+    });
+  });
+
+  test("a script-only workflow yields no kanban tasks", () => {
+    const plan = compileToHermesPlan(
+      wf(
+        [
+          { id: "build", type: "script", command: "make" },
+          { id: "done", type: "finish" },
+        ],
+        [{ from: "build", to: "done" }],
+      ),
+    );
+    expect(plan.kanban_tasks).toHaveLength(0);
+    expect(plan.script_steps.map((s) => s.node)).toEqual(["build"]);
+    expect(plan.script_steps[0]).toEqual({ node: "build", kind: "script", command: "make" });
   });
 });
