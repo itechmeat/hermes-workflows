@@ -19,7 +19,9 @@ manages the full authoring lifecycle: create a workflow from a modal (seeded wit
 graph and opened in the editor), duplicate, export YAML, or delete it, then author the graph in a
 visual `@xyflow/react` editor — edit node fields, validate, preview the compiled Hermes plan, and
 save (layout included) — alongside a live run inspector with per-node status, cancel, and retry.
-See [docs/dashboard.md](docs/dashboard.md).
+It also has a **Runs** view (every run, with open / cancel / retry / export-logs), a **Schedules**
+view over Hermes cron (pause / resume / run-now / edit / delete), and a **Settings** view backed by
+the Hermes config. See [docs/dashboard.md](docs/dashboard.md).
 
 ## Node types
 

@@ -1,10 +1,10 @@
 # Dashboard
 
 The dashboard ships a **Workflows** tab with a visual `@xyflow/react` workflow
-editor and a live run inspector. The frontend is built from the `apps/dashboard`
-workspace into a single bundle the Hermes dashboard loads; the backend exports an
-`APIRouter` that the dashboard's running FastAPI app mounts (it never starts its
-own web server).
+editor, a live run inspector, and **Runs**, **Schedules**, and **Settings**
+views. The frontend is built from the `apps/dashboard` workspace into a single
+bundle the Hermes dashboard loads; the backend exports an `APIRouter` that the
+dashboard's running FastAPI app mounts (it never starts its own web server).
 
 ## Contract
 
@@ -37,7 +37,10 @@ TypeScript core CLI (the core owns all spec logic) or the orchestrator.
 Listing and status:
 
 - `GET /workflows` — workflows discovered under the spec roots.
-- `GET /runs` — active runs from `runs.db`.
+- `GET /runs?scope=active|all` — runs from `runs.db`, each shaped to the Runs-page
+  row (run id, workflow, project, status, current node, started/finished,
+  duration). `scope=active` (the default) keeps the historical active-only
+  behaviour; `scope=all` adds finished runs.
 - `GET /o2b-status` — `{ "connected": bool }`, best-effort and never raising.
 
 Authoring (for the editor):
@@ -63,6 +66,26 @@ Execution control:
 - `GET /runs/{id}` — full run state with per-node detail, for the run inspector; `404` if absent.
 - `POST /runs/{id}/cancel` — cancel a run; `404` if absent.
 - `POST /runs/{id}/retry` — retry a run, or one failed node via `{ "node_id": "..." }`.
+- `GET /runs/{id}/export` — the full run-load bundle in a JSON envelope
+  `{ run_id, filename, json }` for download; `404` if absent.
+
+Schedules (thin shells over the Hermes cron bridge — Hermes cron owns the
+schedules; these edit the live cron job, not the on-disk spec):
+
+- `GET /schedules` — each workflow cron schedule (workflow, cron expression,
+  timezone, enabled, last/next run, Hermes Cron ID).
+- `POST /schedules/{id}/pause` · `.../resume` · `.../run` — pause, resume, or
+  trigger now; `404` if the job is unknown.
+- `PUT /schedules/{id}` — change the cron expression (body `{ "cron": "..." }`);
+  a bad expression is `400`, an unknown job `404`.
+- `DELETE /schedules/{id}` — remove the schedule; `404` if absent.
+
+Settings (over the host config `plugins.workflows` namespace):
+
+- `GET /settings` — `{ values, schema }`: effective values (config ▸ env ▸
+  default) plus the field schema for rendering.
+- `PUT /settings` — persist a patch (merged, not clobbering other config) and
+  return the new effective values; an unknown key or invalid value is `400`.
 
 ### Testing note
 
@@ -105,6 +128,19 @@ registers the root component via
 - **Run inspector** — renders the run graph with per-node status colours, polls
   `GET /runs/{id}` while the run is active (stopping once terminal), and offers
   whole-run cancel/retry plus per-node retry.
+- **Runs** — a table of every run (Active-only filter) with the run id, workflow,
+  project, status, current node, started/finished, and duration. Per row: Open
+  (inspector), Cancel, Retry node, Retry run, and Export logs (downloads the
+  run-load bundle as JSON).
+- **Schedules** — a table of each workflow cron schedule (workflow, cron
+  expression, timezone, enabled, last/next run, Hermes Cron ID). Per row: Pause,
+  Resume, Run now, Edit (prompts for a new cron expression), and Delete; the list
+  refreshes after each action.
+- **Settings** — a schema-driven form over storage / execution / kanban /
+  open_second_brain. It reads effective values (config ▸ env ▸ default) and saves
+  to the Hermes config `plugins.workflows` namespace. `kanban.internal_board` is
+  honoured at runtime; knobs the engine does not consume yet are labelled
+  *not yet enforced*.
 
 ### Build
 

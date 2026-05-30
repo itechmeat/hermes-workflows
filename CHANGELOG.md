@@ -52,6 +52,32 @@ run inspector it drives.
   `@hermes-workflows/core` via type-only imports.
 - Root `dashboard:*` scripts and a `bun run validate` that builds the frontend
   and guards that the committed `dashboard/dist` matches a fresh build.
+- Runs page: lists every run (not just active) with run id, workflow, project,
+  status, current node, started/finished, and duration, plus row actions Open
+  (inspector), Cancel, Retry node, Retry run, and Export logs. Backed by
+  `GET /runs?scope=active|all` (active stays the default for back-compat) and
+  `GET /runs/{id}/export` (the full run-load bundle in a JSON envelope). A core
+  `run-list-summary` command returns a flat `RunSummary` with timing meta and a
+  derived current node; the existing `run-list` is unchanged.
+- Schedules page: lists each workflow cron schedule (workflow, cron expression,
+  timezone, enabled, last/next run, Hermes Cron ID) with row actions Pause,
+  Resume, Run now, Edit (cron expression), and Delete. Backed by `GET /schedules`,
+  `POST /schedules/{id}/pause|resume|run`, `PUT /schedules/{id}` (`400` on a bad
+  cron), and `DELETE /schedules/{id}` (`404` if absent), all thin shells over the
+  Hermes cron bridge — Hermes cron owns the schedules; the page edits the live
+  job, not the on-disk spec.
+- Settings page: a schema-driven form over storage / execution / kanban /
+  open_second_brain, reading effective values (config ▸ env ▸ default) and
+  persisting edits to the Hermes config `plugins.workflows` namespace via
+  `GET`/`PUT /settings`. The `kanban.internal_board` setting is honoured by the
+  runtime; other knobs are persisted and displayed but labelled not-yet-enforced
+  pending engine wiring.
+
+### Removed
+
+- Dead `workflow_schedules` store in the core `RunRepository` (table, types, and
+  the five schedule methods). It was referenced only by tests; Hermes cron is the
+  single source of truth for workflow schedules.
 
 ### Fixed
 
