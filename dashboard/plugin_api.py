@@ -379,6 +379,29 @@ async def delete_schedule(job_id: str) -> dict:
     return {"deleted": True}
 
 
+@router.get("/settings")
+async def get_settings() -> dict:
+    """Effective plugin settings plus the field schema for rendering. Values
+    resolve config ▸ env ▸ default over the Hermes config `plugins.workflows`."""
+    from hermes_workflows import config
+
+    return {"values": config.settings(), "schema": config.settings_schema()}
+
+
+@router.put("/settings")
+async def put_settings(payload: dict = Body(...)) -> dict:
+    """Persist a settings patch to the Hermes config `plugins.workflows`
+    namespace (merging, not clobbering other config) and return the new
+    effective values. An unknown key or invalid value is ``400``."""
+    from hermes_workflows import config
+
+    try:
+        values = config.save_settings(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"values": values, "schema": config.settings_schema()}
+
+
 @router.get("/o2b-status")
 async def o2b_status() -> dict:
     """Best-effort OpenSecondBrain availability for the connection badge.
