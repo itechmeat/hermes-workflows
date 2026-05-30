@@ -83,4 +83,20 @@ describe("FlowEditor", () => {
     // and the graph is now dirty, enabling Save
     expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
   });
+
+  it("disables Duplicate until a node is selected", () => {
+    render(<FlowEditor detail={detail} client={stubClient()} />);
+    expect(screen.getByRole("button", { name: /duplicate node/i })).toBeDisabled();
+  });
+
+  it("duplicates the selected node onto the canvas", async () => {
+    const { container } = render(<FlowEditor detail={detail} client={stubClient()} />);
+
+    // adding a node auto-selects it; duplicate then clones the selection
+    await userEvent.click(screen.getByRole("button", { name: "Agent task" }));
+    await userEvent.click(screen.getByRole("button", { name: /duplicate node/i }));
+
+    expect(container.querySelector('[data-id="agent_task-1"]')).not.toBeNull();
+    expect(container.querySelector('[data-id="agent_task-2"]')).not.toBeNull();
+  });
 });

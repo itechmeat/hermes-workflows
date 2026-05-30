@@ -49,6 +49,10 @@ export function FlowEditor({ detail, client, onSaved }: FlowEditorProps): React.
     [ctrl],
   );
 
+  const handleDuplicate = useCallback(() => {
+    if (ctrl.selectedNode) ctrl.duplicateNode(ctrl.selectedNode.id);
+  }, [ctrl]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 480 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 8 }}>
@@ -59,6 +63,9 @@ export function FlowEditor({ detail, client, onSaved }: FlowEditorProps): React.
           onClick={handleSave}
         >
           Save
+        </button>
+        <button type="button" disabled={ctrl.selectedNode === null} onClick={handleDuplicate}>
+          Duplicate node
         </button>
         <span role="status">{statusLabel(ctrl.status, ctrl.dirty)}</span>
       </div>
