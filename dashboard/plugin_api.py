@@ -269,6 +269,23 @@ async def get_run(run_id: str) -> dict:
     return run
 
 
+@router.get("/runs/{run_id}/export")
+async def export_run(run_id: str) -> dict:
+    """Return a run's full state bundle (per-node detail, incl. Hermes task ids)
+    for download, wrapped in a JSON envelope (``{run_id, filename, json}``) so it
+    travels over the host's JSON-only ``fetchJSON`` channel. Reuses the same
+    ``run-load`` shape the inspector reads — no second serializer. ``404`` if
+    the run is absent."""
+    from hermes_workflows import cli_bridge, config
+
+    run = cli_bridge.invoke(
+        [*config.core_cli(), "run-load", "--db", str(config.runs_db_path()), "--id", run_id]
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    return {"run_id": run_id, "filename": f"{run_id}.run.json", "json": run}
+
+
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run(run_id: str) -> dict:
     from hermes_workflows import cli_bridge, config

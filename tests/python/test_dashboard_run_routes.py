@@ -102,6 +102,22 @@ def test_list_runs_duration_from_meta(client: TestClient) -> None:
         assert row["duration"] is None
 
 
+def test_export_run_returns_bundle(client: TestClient) -> None:
+    run_id = _start_run(client)
+    resp = client.get(f"/runs/{run_id}/export")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["run_id"] == run_id
+    assert body["filename"] == f"{run_id}.run.json"
+    # The downloadable payload is the full run-load bundle (per-node detail).
+    assert body["json"]["run_id"] == run_id
+    assert "nodes" in body["json"]
+
+
+def test_export_unknown_run_is_404(client: TestClient) -> None:
+    assert client.get("/runs/ghost/export").status_code == 404
+
+
 def test_cancel_run(client: TestClient) -> None:
     run_id = _start_run(client)
     resp = client.post(f"/runs/{run_id}/cancel")
