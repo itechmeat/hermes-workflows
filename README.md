@@ -29,6 +29,7 @@ a **Settings** view backed by the Hermes config. See [docs/dashboard.md](docs/da
 
 - `trigger` — `manual` or `cron`
 - `agent_task` — run a text prompt as work assigned to a profile
+- `script` — run a deterministic shell command with no LLM (lint, tests, build), gated by an enable flag and an env allowlist
 - `condition` — branch on a structured condition (node status or review decision)
 - `human_review` — pause for a human decision (channel-agnostic resolution)
 - `finish` — terminate the run

@@ -12,6 +12,14 @@ selects one of two execution backends behind a single `schedule` / `poll` seam
 | `project` / `projects` | `KanbanExecutor` | a Kanban card on the project's board, dispatched by the gateway to the assigned profile | the board DB |
 | `global` | `DirectExecutor` | the profile runner (`~/.hermes/bin/agents/<profile>`) invoked directly with the node prompt | a file-backed completion store |
 
+A `script` node is orthogonal to scope: it always runs locally on the
+`ScriptExecutor` (a subprocess in its `workdir`), regardless of the workflow's
+backend. The engine wraps the scope executor in a `CompositeExecutor` that
+routes a node by its compiled `kind` on `schedule` and by handle prefix
+(`script:`) on `poll`, so agent_task nodes keep using the scope backend while
+script nodes run in the plugin. Hermes has no no-agent Kanban task mode, so a
+script step never becomes a card.
+
 Both implement the same contract:
 
 - `schedule(...) -> handle` starts the node's work and returns an opaque handle
@@ -50,6 +58,25 @@ off by default.
 every active run in one pass and keeps the singleton tick cron alive only while
 runs remain active, tearing it down once everything drains — so tick jobs never
 accumulate.
+
+## Script nodes (security gate)
+
+A `script` node runs an operator-authored shell command, so its mitigations
+(TZ §25.2) are enforced, not advisory:
+
+- **Explicit enable.** A workflow containing script nodes runs only when
+  `execution.scripts_enabled` is on (default off). Otherwise the run is refused
+  — the dashboard run route returns `409`, the CLI exits non-zero — before
+  anything is scheduled. Agent-only workflows are unaffected.
+- **Env allowlist.** A script sees only the env vars named in
+  `execution.script_env_allowlist` (comma-separated), intersected with the
+  node's own `env` list — never the full process env.
+- **Workdir-only cwd and a timeout.** The command runs in its `workdir` and is
+  killed on `timeout_seconds` (settling `failure`).
+- **Redacted, capped output.** Captured stdout/stderr is secret-redacted and
+  clipped to 100,000 characters before it is persisted.
+
+The compiled command is shown in the dashboard compile preview before a run.
 
 ## human_review
 

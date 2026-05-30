@@ -63,6 +63,19 @@ layout. Validation ignores `ui` entirely.
     max_retries: 1
     timeout_seconds: 3600
   ```
+- **script** — a deterministic shell command run with no LLM (lint, tests, a
+  build step). It settles `success`/`failure` by exit code, so it branches on
+  `node_status` like any work node. It runs locally in the plugin in any scope.
+  ```yaml
+  - id: lint
+    type: script
+    command: bun run lint        # required
+    workdir: /srv/projects/foo   # where the command runs
+    timeout_seconds: 120         # failure on expiry
+    env: [PATH, CI]              # env var names the command may see (allowlist)
+  ```
+  Running a workflow with script nodes requires `execution.scripts_enabled` and
+  exposes only `execution.script_env_allowlist` vars — see `execution.md`.
 - **condition** — a routing-only node; its outgoing edges carry the conditions.
 - **human_review** — pauses the run; `options: [approved, rejected, needs_changes]`.
 - **finish** — terminal; `outcome: success | failure`.

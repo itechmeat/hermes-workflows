@@ -93,6 +93,18 @@ run inspector it drives.
   that ranks nodes by longest forward distance, stacks branch siblings, trails
   disconnected nodes, and treats router loop-edges as back-edges). Both write
   through the existing save path and round-trip through `ui.xyflow`.
+- `script` node type: a deterministic shell command run with no LLM (lint,
+  tests, a build step) as a step in any workflow. `command` is required;
+  `workdir`, `timeout_seconds`, and an `env` allowlist are optional. It settles
+  `success`/`failure` by exit code, so existing `node_status` branching, the run
+  inspector, retry, and cancel all apply unchanged. Scripts run locally in the
+  plugin (a `ScriptExecutor` reusing the durable file-backed completion store)
+  in any scope — the engine wraps the scope executor in a `CompositeExecutor`
+  that routes by node kind. Security (TZ §25.2) is enforced: a workflow with
+  script nodes runs only when `execution.scripts_enabled` is on, a script sees
+  only the `execution.script_env_allowlist` env vars, runs in its `workdir`
+  under a timeout, and its captured output is redacted. The editor offers the
+  node in the palette/inspector and previews the compiled command before a run.
 
 ### Removed
 

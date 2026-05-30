@@ -136,7 +136,9 @@ registers the root component via
   inspector, and bottom panels for server-side validation and compile preview.
   The inspector edits `description` on every node type and, for `agent_task`,
   profile, model, skills, prompt, workdir, workspace type, max retries, timeout,
-  and `input_mapping` (key/value rows; a duplicate key is flagged and withheld).
+  and `input_mapping` (key/value rows; a duplicate key is flagged and withheld);
+  for a `script` node it edits command, workdir, timeout, and the env allowlist,
+  and the compile preview shows the compiled command before a run.
   Toolbar actions **Duplicate node** (clone the selected node at an offset) and
   **Auto-layout** (arrange the graph by a dependency-free layered layout) write
   through the same save path. Layout round-trips losslessly through the spec's
