@@ -85,12 +85,16 @@ async def list_workflows() -> dict:
 
 def _latest_runs() -> dict:
     """Map each workflow id to its most recent run (core ``run-latest``). A
-    best-effort overlay: any non-mapping result yields no enrichment."""
+    best-effort overlay: a non-mapping result or any failure (e.g. a locked or
+    missing run store) yields no enrichment rather than failing the list."""
     from hermes_workflows import cli_bridge, config
 
-    result = cli_bridge.invoke(
-        [*config.core_cli(), "run-latest", "--db", str(config.runs_db_path())]
-    )
+    try:
+        result = cli_bridge.invoke(
+            [*config.core_cli(), "run-latest", "--db", str(config.runs_db_path())]
+        )
+    except Exception:
+        return {}
     return result if isinstance(result, dict) else {}
 
 

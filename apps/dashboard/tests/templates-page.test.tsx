@@ -103,8 +103,9 @@ describe("TemplatesPage", () => {
     await screen.findByText("Deploy");
     // last status of the most recent run shows for the enabled row
     expect(screen.getByText("completed")).toBeInTheDocument();
-    // the cron workflow's next-run timestamp surfaces
-    expect(screen.getByText(/2026-06-01/)).toBeInTheDocument();
+    // the cron workflow's next-run timestamp surfaces, formatted (not raw ISO)
+    expect(screen.getByText(/2026/)).toBeInTheDocument();
+    expect(screen.queryByText("2026-06-01T05:00:00Z")).not.toBeInTheDocument();
     // the disabled row carries a Disabled marker
     expect(screen.getByText(/disabled/i)).toBeInTheDocument();
   });

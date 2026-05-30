@@ -12,3 +12,11 @@ export function formatEpochSeconds(value: number | null | undefined): string {
 export function orDash(value: string | null | undefined): string {
   return value === null || value === undefined || value === "" ? DASH : value;
 }
+
+/** ISO timestamp → readable local string; a dash when unset, the raw value if
+ *  it does not parse. Used for cron last/next-run columns. */
+export function formatIso(value: string | null | undefined): string {
+  if (!value) return DASH;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? value : new Date(ms).toLocaleString();
+}

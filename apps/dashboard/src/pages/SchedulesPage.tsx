@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
+import { formatIso } from "../ui/format";
 import type { WorkflowsApi } from "../api/client";
 import type { ScheduleListItem } from "../api/types";
 
@@ -12,13 +13,6 @@ type LoadState =
   | { kind: "loading" }
   | { kind: "error" }
   | { kind: "ready"; items: ScheduleListItem[] };
-
-/** ISO timestamp → readable local string, or a dash when unset. */
-function formatIso(value: string | null): string {
-  if (!value) return "—";
-  const ms = Date.parse(value);
-  return Number.isNaN(ms) ? value : new Date(ms).toLocaleString();
-}
 
 export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElement {
   const api = client ?? getApiClient();

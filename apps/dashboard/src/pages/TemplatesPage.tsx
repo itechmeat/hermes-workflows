@@ -3,7 +3,7 @@ import { getApiClient } from "../host";
 import { downloadTextFile } from "../templates/download";
 import { NewWorkflowModal } from "../templates/NewWorkflowModal";
 import { isValidSlug } from "../templates/slug";
-import { formatEpochSeconds, orDash } from "../ui/format";
+import { formatEpochSeconds, formatIso, orDash } from "../ui/format";
 import type { WorkflowsApi } from "../api/client";
 import type { Trigger, WorkflowListItem } from "../api/types";
 
@@ -214,7 +214,7 @@ export function TemplatesPage({
                 </td>
                 <td style={cell}>{formatEpochSeconds(item.last_run_at)}</td>
                 <td style={cell}>{orDash(item.last_status)}</td>
-                <td style={cell}>{orDash(item.next_run_at)}</td>
+                <td style={cell}>{formatIso(item.next_run_at)}</td>
                 <td style={cell}>
                   <span className="hw-actions">
                     <button type="button" className="hw-btn hw-btn--sm" onClick={() => onOpen(item.id)}>

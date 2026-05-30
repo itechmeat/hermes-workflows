@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { FlowNode } from "./graphMapping";
 import type { ReviewOption, WorkflowNode } from "../api/types";
 
@@ -208,6 +208,8 @@ function toggleOption(current: ReviewOption[], option: ReviewOption, on: boolean
 }
 
 interface MappingRow {
+  /** Stable identity for the React list key, independent of key/value edits. */
+  rid: number;
   key: string;
   value: string;
 }
@@ -225,8 +227,10 @@ interface InputMappingEditorProps {
  */
 function InputMappingEditor({ value, onChange }: InputMappingEditorProps): React.ReactElement {
   const [rows, setRows] = useState<MappingRow[]>(() =>
-    Object.entries(value).map(([key, val]) => ({ key, value: val })),
+    Object.entries(value).map(([key, val], i) => ({ rid: i, key, value: val })),
   );
+  // Monotonic source of stable row ids for rows added after mount.
+  const nextRid = useRef(rows.length);
 
   const nonEmptyKeys = rows.map((r) => r.key.trim()).filter((k) => k.length > 0);
   const hasDuplicate = nonEmptyKeys.length !== new Set(nonEmptyKeys).size;
@@ -247,7 +251,7 @@ function InputMappingEditor({ value, onChange }: InputMappingEditorProps): React
     <fieldset style={field}>
       <legend style={{ fontSize: 11, opacity: 0.6 }}>Input mapping</legend>
       {rows.map((row, i) => (
-        <div key={i} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+        <div key={row.rid} style={{ display: "flex", gap: 4, marginBottom: 4 }}>
           <input
             aria-label={`Mapping key ${i + 1}`}
             placeholder="key"
@@ -278,7 +282,7 @@ function InputMappingEditor({ value, onChange }: InputMappingEditorProps): React
       <button
         type="button"
         className="hw-btn hw-btn--sm"
-        onClick={() => update([...rows, { key: "", value: "" }])}
+        onClick={() => update([...rows, { rid: nextRid.current++, key: "", value: "" }])}
       >
         Add mapping
       </button>
