@@ -8,6 +8,8 @@ export interface TemplatesPageProps {
   client?: WorkflowsApi;
   /** Open a workflow in the editor (wired by the app shell). */
   onOpen: (workflowId: string) => void;
+  /** Open the run inspector after starting a run (wired by the app shell). */
+  onOpenRun?: (runId: string) => void;
 }
 
 function describeTrigger(trigger: Trigger): string {
@@ -19,7 +21,7 @@ type LoadState =
   | { kind: "error" }
   | { kind: "ready"; items: WorkflowListItem[] };
 
-export function TemplatesPage({ client, onOpen }: TemplatesPageProps): React.ReactElement {
+export function TemplatesPage({ client, onOpen, onOpenRun }: TemplatesPageProps): React.ReactElement {
   const api = client ?? getApiClient();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [runMessage, setRunMessage] = useState<string | null>(null);
@@ -44,10 +46,13 @@ export function TemplatesPage({ client, onOpen }: TemplatesPageProps): React.Rea
       setRunMessage(`Starting ${id}…`);
       api
         .runWorkflow(id)
-        .then((result) => setRunMessage(`Started run ${result.run_id}`))
+        .then((result) => {
+          setRunMessage(`Started run ${result.run_id}`);
+          onOpenRun?.(result.run_id);
+        })
         .catch(() => setRunMessage(`Failed to start ${id}`));
     },
-    [api],
+    [api, onOpenRun],
   );
 
   if (state.kind === "loading") {

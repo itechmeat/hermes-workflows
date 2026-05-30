@@ -34,7 +34,7 @@ describe("T0 bundling spike — built plugin bundle", () => {
     expect(existsSync(resolve(distDir, "index.css"))).toBe(true);
   });
 
-  it("registers \"workflows\" and mounts an xyflow canvas using the host React", () => {
+  it("registers \"workflows\" and mounts the app shell using the host React", () => {
     let reactAccessed = false;
     const registered: Record<string, unknown> = {};
 
@@ -75,6 +75,8 @@ describe("T0 bundling spike — built plugin bundle", () => {
     const { container } = render(
       hostReact.createElement(App as React.ComponentType),
     );
-    expect(container.querySelector(".react-flow")).not.toBeNull();
+    // The shell mounts using the host React (the SDK React getter fired above)
+    // and renders its chrome — here the OpenSecondBrain connection badge.
+    expect(container.textContent).toContain("OpenSecondBrain");
   });
 });
