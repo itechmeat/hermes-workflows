@@ -8,6 +8,8 @@ import { useFlowEditor, type SaveStatus } from "./useFlowEditor";
 import { WorkflowNodeView } from "./nodes/WorkflowNodeView";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
+import { ValidationPanel } from "./ValidationPanel";
+import { CompilePreview } from "./CompilePreview";
 import { WORKFLOW_NODE_TYPE, type FlowNode } from "./graphMapping";
 
 export interface FlowEditorProps {
@@ -82,6 +84,10 @@ export function FlowEditor({ detail, client, onSaved }: FlowEditorProps): React.
           </ReactFlow>
         </div>
         <NodeInspector node={ctrl.selectedNode} onChange={handleInspectorChange} />
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", borderTop: "1px solid var(--border, #2a2a2a)" }}>
+        <ValidationPanel workflowId={detail.workflow.id} client={api} />
+        <CompilePreview workflowId={detail.workflow.id} client={api} />
       </div>
     </div>
   );

@@ -1,0 +1,57 @@
+import { useCallback, useState } from "react";
+import { getApiClient } from "../host";
+import type { WorkflowsApi } from "../api/client";
+import type { HermesPlan } from "../api/types";
+
+export interface CompilePreviewProps {
+  workflowId: string;
+  /** Injected for tests; defaults to the host-bound client. */
+  client?: WorkflowsApi;
+}
+
+// Shows the compiled Hermes plan (the native Kanban tasks / Cron jobs the
+// workflow lowers to) for the saved spec, so the author sees what will run
+// before triggering it.
+export function CompilePreview({ workflowId, client }: CompilePreviewProps): React.ReactElement {
+  const api = client ?? getApiClient();
+  const [plan, setPlan] = useState<HermesPlan | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const preview = useCallback(() => {
+    setBusy(true);
+    api
+      .compilePreview(workflowId)
+      .then(setPlan)
+      .finally(() => setBusy(false));
+  }, [api, workflowId]);
+
+  return (
+    <section style={{ padding: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <strong>Compile preview</strong>
+        <button type="button" onClick={preview} disabled={busy}>
+          Preview plan
+        </button>
+      </div>
+      {plan !== null && (
+        <div>
+          <p>
+            First node: <code>{plan.first_node ?? "—"}</code>
+          </p>
+          <p>
+            {plan.kanban_tasks.length} Kanban task(s), {plan.cron_jobs.length} cron job(s)
+          </p>
+          {plan.profiles.length > 0 && <p>Profiles: {plan.profiles.join(", ")}</p>}
+          {plan.skills.length > 0 && <p>Skills: {plan.skills.join(", ")}</p>}
+          <ul>
+            {plan.kanban_tasks.map((task) => (
+              <li key={task.node}>
+                <code>{task.node}</code> → {task.assignee || "(unassigned)"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
