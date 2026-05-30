@@ -16,6 +16,7 @@ import {
   cmdRunLoad,
   cmdRunSave,
   cmdRunList,
+  cmdRunListSummary,
   cmdListSpecs,
   cmdSpecGet,
   cmdSpecSave,
@@ -104,6 +105,8 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
       return { ok: true };
     case "run-list":
       return cmdRunList(required(db, "--db"), flags["active"] === true);
+    case "run-list-summary":
+      return cmdRunListSummary(required(db, "--db"), flags["active"] === true);
     case "spec-get":
       return cmdSpecGet(rootsOf(flags), required(str(flags, "id"), "--id"));
     case "spec-save":

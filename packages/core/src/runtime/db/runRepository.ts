@@ -17,7 +17,32 @@ export interface RunMeta {
   error?: string;
 }
 
+/**
+ * Flat, list-oriented projection of a run for the dashboard Runs page: the
+ * run-level fields plus persisted timing meta and a derived `current_node`.
+ * Distinct from {@link RunState} (which carries full per-node detail for the
+ * inspector); a summary is cheap to list many of.
+ */
+export interface RunSummary {
+  run_id: string;
+  workflow_id: string;
+  workflow_version: number;
+  status: RunStatus;
+  project_id?: string;
+  current_node?: string;
+  started_at?: number;
+  finished_at?: number;
+  error?: string;
+}
+
 const ACTIVE_STATUSES: readonly RunStatus[] = ["created", "running", "waiting"];
+
+/** Node statuses that mark a node as the one a run is currently working on. */
+const ACTIVE_NODE_STATUSES: ReadonlySet<string> = new Set([
+  "running",
+  "scheduled",
+  "waiting_for_review",
+]);
 
 interface RunRow {
   id: string;
@@ -158,5 +183,62 @@ export class RunRepository {
 
   private hydrate(ids: { id: string }[]): RunState[] {
     return ids.map((r) => this.loadRun(r.id)).filter((r): r is RunState => r !== null);
+  }
+
+  /**
+   * List runs as flat summaries for the dashboard Runs page. `activeOnly`
+   * restricts to in-flight runs (same filter as {@link listActiveRuns}). Each
+   * summary carries the persisted timing meta and a derived `current_node`.
+   */
+  listRunSummaries(activeOnly: boolean): RunSummary[] {
+    const rows = (
+      activeOnly
+        ? this.db
+            .query(
+              `SELECT * FROM workflow_runs WHERE status IN (${ACTIVE_STATUSES.map(() => "?").join(", ")})`,
+            )
+            .all(...ACTIVE_STATUSES)
+        : this.db.query(`SELECT * FROM workflow_runs`).all()
+    ) as RunRow[];
+    return rows.map((row) => this.toSummary(row));
+  }
+
+  private toSummary(row: RunRow): RunSummary {
+    const summary: RunSummary = {
+      run_id: row.id,
+      workflow_id: row.workflow_id,
+      workflow_version: row.workflow_version ?? 0,
+      status: row.status as RunStatus,
+    };
+    if (row.project_id !== null) summary.project_id = row.project_id;
+    if (row.started_at !== null) summary.started_at = row.started_at;
+    if (row.finished_at !== null) summary.finished_at = row.finished_at;
+    if (row.error !== null) summary.error = row.error;
+    const current = this.currentNode(row.id);
+    if (current !== undefined) summary.current_node = current;
+    return summary;
+  }
+
+  /**
+   * The node a run is "on": the active node (running / scheduled / awaiting
+   * review) if any, else the most recently settled node by `seq`. Returns
+   * undefined when no node has advanced yet.
+   */
+  private currentNode(runId: string): string | undefined {
+    const nodes = this.db
+      .query(`SELECT node_id, status, seq FROM workflow_node_runs WHERE run_id = $id`)
+      .all({ $id: runId }) as { node_id: string; status: string; seq: number | null }[];
+    let active: { node_id: string; seq: number } | undefined;
+    let latest: { node_id: string; seq: number } | undefined;
+    for (const n of nodes) {
+      const seq = n.seq ?? -1;
+      if (ACTIVE_NODE_STATUSES.has(n.status) && (active === undefined || seq > active.seq)) {
+        active = { node_id: n.node_id, seq };
+      }
+      if (n.seq !== null && (latest === undefined || n.seq > latest.seq)) {
+        latest = { node_id: n.node_id, seq: n.seq };
+      }
+    }
+    return (active ?? latest)?.node_id;
   }
 }

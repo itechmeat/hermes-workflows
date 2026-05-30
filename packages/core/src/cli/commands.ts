@@ -18,6 +18,7 @@ import { createRunState } from "../runtime/state.ts";
 import { cancelRun, retryRun } from "../runtime/runMutations.ts";
 import { openRunsDatabase } from "../runtime/db/connection.ts";
 import { RunRepository } from "../runtime/db/runRepository.ts";
+import type { RunSummary } from "../runtime/db/runRepository.ts";
 import { SpecStore, chooseWriteRoot } from "../runtime/specStore.ts";
 import type { SpecSummary, SpecDetail, WriteRoots } from "../runtime/specStore.ts";
 import { fromObject } from "../schema/load.ts";
@@ -92,6 +93,11 @@ export function cmdRunSave(dbPath: string, run: RunState): void {
 export function cmdRunList(dbPath: string, activeOnly: boolean): RunState[] {
   const repo = repository(dbPath);
   return activeOnly ? repo.listActiveRuns() : repo.listAllRuns();
+}
+
+/** Flat run summaries for the dashboard Runs page (see {@link RunSummary}). */
+export function cmdRunListSummary(dbPath: string, activeOnly: boolean): RunSummary[] {
+  return repository(dbPath).listRunSummaries(activeOnly);
 }
 
 /** Load one spec (graph + ui + path) for the editor. */

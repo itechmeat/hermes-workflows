@@ -97,3 +97,36 @@ describe("RunRepository — runs", () => {
     expect(ids).not.toContain("run-finished");
   });
 });
+
+describe("RunRepository — run summaries", () => {
+  test("lists summaries with meta and the derived current node", () => {
+    const running = createRunState(workflow, "sum-running", "projX");
+    running.status = "running";
+    running.nodes["a"] = { node_id: "a", status: "running", seq: 1 };
+    repo.saveRun(running, { started_at: 1000 });
+
+    const finished = createRunState(workflow, "sum-finished");
+    finished.status = "completed";
+    finished.nodes["a"] = { node_id: "a", status: "completed", outcome: "success", seq: 1 };
+    finished.nodes["done"] = { node_id: "done", status: "completed", seq: 2 };
+    repo.saveRun(finished, { started_at: 2000, finished_at: 2500 });
+
+    const all = repo.listRunSummaries(false);
+    const s1 = all.find((s) => s.run_id === "sum-running");
+    expect(s1?.workflow_id).toBe("wf");
+    expect(s1?.workflow_version).toBe(2);
+    expect(s1?.project_id).toBe("projX");
+    expect(s1?.status).toBe("running");
+    expect(s1?.current_node).toBe("a"); // the active node
+    expect(s1?.started_at).toBe(1000);
+    expect(s1?.finished_at).toBeUndefined();
+
+    const s2 = all.find((s) => s.run_id === "sum-finished");
+    expect(s2?.current_node).toBe("done"); // highest-seq settled node
+    expect(s2?.finished_at).toBe(2500);
+
+    const active = repo.listRunSummaries(true).map((s) => s.run_id);
+    expect(active).toContain("sum-running");
+    expect(active).not.toContain("sum-finished");
+  });
+});

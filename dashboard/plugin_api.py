@@ -105,20 +105,35 @@ async def export_workflow(workflow_id: str) -> dict:
 
 
 @router.get("/runs")
-async def list_runs() -> dict:
+async def list_runs(scope: str = "active") -> dict:
+    """List runs for the Runs page. ``scope=active`` (default) keeps the
+    historical behaviour — only in-flight runs; ``scope=all`` adds finished
+    runs. Each row carries the TZ columns, shaped from the core run summary
+    (``run-list-summary``); ``duration`` is derived from the timing meta."""
     from hermes_workflows import cli_bridge, config
 
-    runs = (
-        cli_bridge.invoke(
-            [*config.core_cli(), "run-list", "--db", str(config.runs_db_path()), "--active"]
-        )
-        or []
-    )
+    argv = [*config.core_cli(), "run-list-summary", "--db", str(config.runs_db_path())]
+    if scope != "all":
+        argv.append("--active")
+    runs = cli_bridge.invoke(argv) or []
+    return {"runs": [_run_row(r) for r in runs]}
+
+
+def _run_row(summary: dict) -> dict:
+    """Shape one core run summary into the Runs-page row, adding the derived
+    ``duration`` (``finished_at - started_at`` when both are known)."""
+    started = summary.get("started_at")
+    finished = summary.get("finished_at")
+    duration = finished - started if started is not None and finished is not None else None
     return {
-        "runs": [
-            {"run_id": r["run_id"], "workflow_id": r["workflow_id"], "status": r["status"]}
-            for r in runs
-        ]
+        "run_id": summary["run_id"],
+        "workflow_id": summary.get("workflow_id"),
+        "project_id": summary.get("project_id"),
+        "status": summary.get("status"),
+        "current_node": summary.get("current_node"),
+        "started_at": started,
+        "finished_at": finished,
+        "duration": duration,
     }
 
 
