@@ -5,6 +5,7 @@ fix loop and idempotent ticks. Uses the real Bun core CLI and a temp board.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import pytest
 kb = pytest.importorskip("hermes_cli.kanban_db")
 
 from hermes_workflows.engine import Engine
-from hermes_workflows.executor import DirectExecutor, KanbanExecutor
+from hermes_workflows.executor import DirectExecutor, KanbanExecutor, ScriptExecutor
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ROOT / "packages" / "core" / "src" / "cli.ts"
@@ -135,3 +136,49 @@ def test_global_workflow_runs_via_direct_executor(tmp_path: Path) -> None:
     run = eng.advance(str(GLOBAL_SPEC), "g-1")
     assert run["status"] == "completed"
     assert _node(run, "publish")["outcome"] == "success"
+
+
+_MIXED_SPEC = {
+    "id": "mixed",
+    "name": "Mixed",
+    "version": 1,
+    "scope": {"type": "project"},
+    "trigger": {"type": "manual"},
+    "defaults": {"profile": "p"},
+    "nodes": [
+        {"id": "work", "type": "agent_task", "prompt": "do"},
+        {"id": "lint", "type": "script", "command": "echo linted"},
+        {"id": "done", "type": "finish"},
+    ],
+    "edges": [{"from": "work", "to": "lint"}, {"from": "lint", "to": "done"}],
+}
+
+
+def test_mixed_run_routes_agent_to_kanban_and_script_to_script_executor(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    eng = Engine(
+        core_cli=["bun", "run", str(CLI)],
+        db_path=str(tmp_path / "runs.db"),
+        kanban=KanbanExecutor(board),
+        script=ScriptExecutor(store_dir=tmp_path / "scripts", env_allowlist=["PATH"]),
+    )
+    spec = tmp_path / "mixed.workflow.json"
+    spec.write_text(json.dumps(_MIXED_SPEC))
+
+    run = eng.run(str(spec), "m-1")
+    # The agent_task is a Kanban card (t_…), not a local script handle.
+    work_handle = _node(run, "work")["hermes_task_id"]
+    assert not work_handle.startswith("script:")
+
+    # Completing the agent card advances to the script node, which runs locally.
+    _complete(board, work_handle)
+    run = eng.advance(str(spec), "m-1")
+    lint_handle = _node(run, "lint")["hermes_task_id"]
+    assert lint_handle.startswith("script:")
+
+    # Polling settles the script via its backend; the run reaches finish.
+    run = eng.advance(str(spec), "m-1")
+    assert _node(run, "lint")["outcome"] == "success"
+    assert "linted" in (_node(run, "lint").get("output") or "")
+    assert run["status"] == "completed"
+    board.close()

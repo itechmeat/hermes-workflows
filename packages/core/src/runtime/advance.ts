@@ -22,7 +22,7 @@ export interface AdvanceResult {
   run_status: RunStatus;
   /** Set when the run reached a finish node. */
   finish_outcome?: NodeOutcome;
-  /** agent_task node ids whose Kanban task should be created now. */
+  /** Work node ids (agent_task, script) to schedule on their executor now. */
   schedule: string[];
   /** human_review node ids now awaiting a decision. */
   waiting: string[];
@@ -86,6 +86,10 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
     if (!node) return;
     switch (node.type) {
       case "agent_task":
+      case "script":
+        // Both are "work" nodes: schedule them and let the executor settle an
+        // outcome. The composite executor routes a script node to the local
+        // ScriptExecutor by its compiled `kind`.
         setStatus(id, "scheduled");
         schedule.push(id);
         break;

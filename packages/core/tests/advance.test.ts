@@ -123,3 +123,45 @@ describe("advance — dead end", () => {
     expect(advance(stuck, run).run_status).toBe("failed");
   });
 });
+
+describe("advance — script nodes", () => {
+  const scriptWf = fromObject({
+    id: "scripts",
+    name: "Scripts",
+    version: 1,
+    scope: { type: "global" },
+    trigger: { type: "manual" },
+    nodes: [
+      { id: "build", type: "script", command: "make" },
+      { id: "gate", type: "condition" },
+      { id: "ok", type: "finish", outcome: "success" },
+      { id: "bad", type: "finish", outcome: "failure" },
+    ],
+    edges: [
+      { from: "build", to: "gate" },
+      { from: "gate", to: "ok", condition: { type: "node_status", node: "build", equals: "success" } },
+      { from: "gate", to: "bad", condition: { type: "node_status", node: "build", equals: "failure" } },
+    ],
+  }).workflow;
+
+  test("schedules a script entry node like a work node", () => {
+    const result = advance(scriptWf, createRunState(scriptWf, "r"));
+    expect(result.schedule).toEqual(["build"]);
+    expect(result.node_updates["build"]).toBe("scheduled");
+    expect(result.run_status).toBe("running");
+  });
+
+  test("a script success routes through the condition to the success finish", () => {
+    const run = createRunState(scriptWf, "r");
+    run.status = "running";
+    complete(run, "build", "success", 1);
+    expect(advance(scriptWf, run).run_status).toBe("completed");
+  });
+
+  test("a script failure routes to the failure finish", () => {
+    const run = createRunState(scriptWf, "r");
+    run.status = "running";
+    complete(run, "build", "failure", 1);
+    expect(advance(scriptWf, run).run_status).toBe("failed");
+  });
+});

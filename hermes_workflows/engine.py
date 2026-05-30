@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 from . import cli_bridge
-from .executor import NodeExecutor
+from .executor import CompositeExecutor, NodeExecutor
 
 _ACTIVE_STATUSES = frozenset({"created", "running", "waiting"})
 REVIEW_OPTIONS = frozenset({"approved", "rejected", "needs_changes"})
@@ -34,6 +34,7 @@ class Engine:
         db_path: str,
         kanban: Optional[NodeExecutor] = None,
         direct: Optional[NodeExecutor] = None,
+        script: Optional[NodeExecutor] = None,
         kanban_factory: Optional[Callable[[str], NodeExecutor]] = None,
     ) -> None:
         self.core_cli = list(core_cli)
@@ -42,6 +43,9 @@ class Engine:
         # project; `kanban_factory(slug)` binds a project run to its own board.
         self.kanban = kanban
         self.direct = direct
+        # The script executor runs `script` nodes locally in any scope; when set,
+        # the scope executor is wrapped in a CompositeExecutor that routes by kind.
+        self.script = script
         self.kanban_factory = kanban_factory
 
     # --- core CLI helpers -------------------------------------------------
@@ -152,6 +156,10 @@ class Engine:
         run = self.status(run_id)
         plan = self._core(["compile-preview", spec_path])
         task_params = {task["node"]: task for task in plan["kanban_tasks"]}
+        # Script steps share the per-node params map; the composite executor
+        # routes them to the script backend by their `kind` tag.
+        for step in plan.get("script_steps", []):
+            task_params[step["node"]] = step
         executor = self._executor_for(plan["scope"], run)
 
         seq = _max_seq(run)
@@ -178,6 +186,15 @@ class Engine:
         return run
 
     def _executor_for(self, scope: dict, run: dict) -> NodeExecutor:
+        base = self._scope_executor(scope, run)
+        # Script nodes run locally in any scope: wrap the scope executor so the
+        # composite routes script steps to the script backend by kind, leaving
+        # the single-executor advance loop otherwise unchanged.
+        if self.script is not None:
+            return CompositeExecutor(scope=base, script=self.script)
+        return base
+
+    def _scope_executor(self, scope: dict, run: dict) -> NodeExecutor:
         scope_type = scope.get("type", "")
         if scope_type == "global":
             return self._require(self.direct, scope_type)
