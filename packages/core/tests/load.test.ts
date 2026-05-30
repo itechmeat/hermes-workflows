@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseWorkflow, fromObject, WorkflowParseError } from "../src/index.ts";
+import { parseWorkflow, fromObject, WorkflowParseError, isWorkflowEnabled } from "../src/index.ts";
 import { loadExample } from "./_fixtures.ts";
+
+const MINIMAL = {
+  id: "x",
+  name: "X",
+  version: 1,
+  scope: { type: "global" },
+  trigger: { type: "manual" },
+  nodes: [{ id: "done", type: "finish" }],
+  edges: [],
+};
 
 describe("parseWorkflow", () => {
   test("loads the feature-development example", async () => {
@@ -95,6 +105,25 @@ describe("parseWorkflow", () => {
         defaults: { memory: { provider: "bogus" } },
       }),
     ).toThrow(WorkflowParseError);
+  });
+
+  test("parses an explicit enabled flag", () => {
+    expect(fromObject({ ...MINIMAL, enabled: false }).workflow.enabled).toBe(false);
+    expect(fromObject({ ...MINIMAL, enabled: true }).workflow.enabled).toBe(true);
+  });
+
+  test("leaves enabled absent when not specified", () => {
+    expect("enabled" in fromObject(MINIMAL).workflow).toBe(false);
+  });
+
+  test("rejects a non-boolean enabled", () => {
+    expect(() => fromObject({ ...MINIMAL, enabled: "yes" })).toThrow(WorkflowParseError);
+  });
+
+  test("isWorkflowEnabled treats absent and true as enabled, false as disabled", () => {
+    expect(isWorkflowEnabled(fromObject(MINIMAL).workflow)).toBe(true);
+    expect(isWorkflowEnabled(fromObject({ ...MINIMAL, enabled: true }).workflow)).toBe(true);
+    expect(isWorkflowEnabled(fromObject({ ...MINIMAL, enabled: false }).workflow)).toBe(false);
   });
 
   test("accepts known memory providers", () => {

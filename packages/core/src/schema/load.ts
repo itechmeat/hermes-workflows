@@ -69,10 +69,14 @@ export function parseWorkflow(source: string): LoadResult {
 export function fromObject(raw: unknown): LoadResult {
   if (!isRecord(raw)) fail("workflow spec must be a mapping");
   const { ui: rawUi, ...rest } = raw;
+  const enabled = parseEnabled(rest["enabled"]);
   const workflow: Workflow = {
     id: str(rest["id"], "id"),
     name: str(rest["name"], "name"),
     version: parseVersion(rest["version"]),
+    // Keep the key absent (not `enabled: undefined`) when unspecified so the
+    // round-trip stays lossless for specs that never opt into the flag.
+    ...(enabled === undefined ? {} : { enabled }),
     scope: parseScope(rest["scope"]),
     trigger: parseTrigger(rest["trigger"]),
     defaults: parseDefaults(rest["defaults"]),
@@ -81,6 +85,12 @@ export function fromObject(raw: unknown): LoadResult {
   };
   const ui = parseUi(rawUi);
   return ui === undefined ? { workflow } : { workflow, ui };
+}
+
+function parseEnabled(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") fail("enabled must be a boolean");
+  return value;
 }
 
 function parseVersion(value: unknown): number {

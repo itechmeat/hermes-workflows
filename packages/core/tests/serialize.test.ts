@@ -65,6 +65,22 @@ describe("serializeWorkflow", () => {
     expect(round.workflow).toEqual(wf);
   });
 
+  test("round-trips the enabled flag", () => {
+    for (const enabled of [true, false] as const) {
+      const wf = fromObject({
+        id: "e",
+        name: "E",
+        version: 1,
+        enabled,
+        scope: { type: "global" },
+        trigger: { type: "manual" },
+        nodes: [{ id: "done", type: "finish" }],
+        edges: [],
+      }).workflow;
+      expect(parseWorkflow(serializeWorkflow(wf)).workflow).toEqual(wf);
+    }
+  });
+
   test("emits valid YAML that re-parses", () => {
     const { workflow, ui } = parseWorkflow(
       [

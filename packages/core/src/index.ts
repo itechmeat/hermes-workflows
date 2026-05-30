@@ -34,6 +34,7 @@ export type {
   Edge,
   Workflow,
 } from "./schema/workflow.ts";
+export { isWorkflowEnabled } from "./schema/workflow.ts";
 export type {
   RunStatus,
   NodeStatus,

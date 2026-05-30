@@ -68,9 +68,19 @@ export interface Workflow {
   id: string;
   name: string;
   version: number;
+  /**
+   * Whether the workflow is active. Absent means enabled, so existing specs are
+   * unchanged. A disabled workflow rejects manual runs and pauses its cron job.
+   */
+  enabled?: boolean;
   scope: Scope;
   trigger: Trigger;
   defaults?: Defaults;
   nodes: WorkflowNode[];
   edges: Edge[];
+}
+
+/** A workflow is enabled unless `enabled` is explicitly `false`. */
+export function isWorkflowEnabled(workflow: Pick<Workflow, "enabled">): boolean {
+  return workflow.enabled !== false;
 }
