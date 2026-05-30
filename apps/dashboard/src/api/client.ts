@@ -33,6 +33,7 @@ export interface WorkflowsApi {
   getWorkflow(id: string): Promise<SpecDetail>;
   createWorkflow(body: CreateWorkflowBody): Promise<SpecDetail>;
   deleteWorkflow(id: string): Promise<DeleteResult>;
+  setWorkflowEnabled(id: string, enabled: boolean): Promise<SpecDetail>;
   exportWorkflow(id: string): Promise<ExportedWorkflow>;
   saveWorkflow(id: string, body: SaveWorkflowBody): Promise<SpecDetail>;
   validateWorkflow(id: string): Promise<ValidationResult>;
@@ -84,6 +85,14 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
 
     deleteWorkflow(id) {
       return fetchJSON<DeleteResult>(workflow(id), { method: "DELETE" });
+    },
+
+    setWorkflowEnabled(id, enabled) {
+      return fetchJSON<SpecDetail>(`${workflow(id)}/enabled`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
     },
 
     exportWorkflow(id) {

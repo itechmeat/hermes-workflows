@@ -3,6 +3,7 @@ import { getApiClient } from "../host";
 import { downloadTextFile } from "../templates/download";
 import { NewWorkflowModal } from "../templates/NewWorkflowModal";
 import { isValidSlug } from "../templates/slug";
+import { formatEpochSeconds, orDash } from "../ui/format";
 import type { WorkflowsApi } from "../api/client";
 import type { Trigger, WorkflowListItem } from "../api/types";
 
@@ -138,6 +139,23 @@ export function TemplatesPage({
     [api],
   );
 
+  const handleToggleEnabled = useCallback(
+    (item: WorkflowListItem) => {
+      const next = !item.enabled;
+      setRunMessage(`${next ? "Enabling" : "Disabling"} ${item.id}…`);
+      api
+        .setWorkflowEnabled(item.id, next)
+        .then(() => {
+          setRunMessage(`${next ? "Enabled" : "Disabled"} ${item.id}`);
+          reload();
+        })
+        .catch((err: unknown) =>
+          setRunMessage(err instanceof Error ? err.message : `Failed to update ${item.id}`),
+        );
+    },
+    [api, reload],
+  );
+
   if (state.kind === "loading") {
     return <p style={{ padding: 16 }}>Loading workflows…</p>;
   }
@@ -175,23 +193,47 @@ export function TemplatesPage({
               <th style={cell}>Id</th>
               <th style={cell}>Scope</th>
               <th style={cell}>Trigger</th>
+              <th style={cell}>Status</th>
+              <th style={cell}>Last run</th>
+              <th style={cell}>Last status</th>
+              <th style={cell}>Next run</th>
               <th style={cell}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {state.items.map((item) => (
-              <tr key={item.id}>
+              <tr key={item.id} className={item.enabled ? undefined : "hw-row--disabled"}>
                 <td style={cell}>{item.name}</td>
                 <td style={cell}>{item.id}</td>
                 <td style={cell}>{item.scope}</td>
                 <td style={cell}>{describeTrigger(item.trigger)}</td>
                 <td style={cell}>
+                  <span className={`hw-badge hw-badge--${item.enabled ? "enabled" : "disabled"}`}>
+                    {item.enabled ? "Enabled" : "Disabled"}
+                  </span>
+                </td>
+                <td style={cell}>{formatEpochSeconds(item.last_run_at)}</td>
+                <td style={cell}>{orDash(item.last_status)}</td>
+                <td style={cell}>{orDash(item.next_run_at)}</td>
+                <td style={cell}>
                   <span className="hw-actions">
                     <button type="button" className="hw-btn hw-btn--sm" onClick={() => onOpen(item.id)}>
                       Open
                     </button>
-                    <button type="button" className="hw-btn hw-btn--sm" onClick={() => handleRun(item.id)}>
+                    <button
+                      type="button"
+                      className="hw-btn hw-btn--sm"
+                      disabled={!item.enabled}
+                      onClick={() => handleRun(item.id)}
+                    >
                       Run
+                    </button>
+                    <button
+                      type="button"
+                      className="hw-btn hw-btn--sm"
+                      onClick={() => handleToggleEnabled(item)}
+                    >
+                      {item.enabled ? "Disable" : "Enable"}
                     </button>
                     <button
                       type="button"

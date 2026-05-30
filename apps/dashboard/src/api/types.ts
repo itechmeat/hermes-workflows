@@ -48,12 +48,19 @@ export interface SpecDetail {
 }
 
 /** One row of `GET /workflows` — the Python list route flattens scope to its
- *  type string and carries the full trigger object. */
+ *  type string and carries the full trigger object. The Templates page also
+ *  shows `enabled` plus best-effort run/schedule columns: `last_run_at`
+ *  (epoch seconds) / `last_status` from the workflow's most recent run, and
+ *  `next_run_at` from its cron schedule (null when it has none / no run yet). */
 export interface WorkflowListItem {
   id: string;
   name: string;
   scope: ScopeType;
   trigger: Trigger;
+  enabled: boolean;
+  last_run_at: number | null;
+  last_status: RunStatus | null;
+  next_run_at: string | null;
 }
 
 /** One row of `GET /runs` — the Runs-page columns. `scope=active` (default)

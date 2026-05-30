@@ -167,3 +167,15 @@
   border-color: color-mix(in srgb, var(--color-destructive, #d35) 45%, transparent);
   color: var(--color-destructive, #d35);
 }
+.hw-badge--enabled {
+  border-color: color-mix(in srgb, var(--color-primary, #4a90e2) 50%, transparent);
+  color: var(--color-primary, #4a90e2);
+}
+.hw-badge--disabled {
+  opacity: 0.75;
+}
+
+/* A disabled workflow row reads dimmer than the active ones. */
+.hw-row--disabled {
+  opacity: 0.6;
+}

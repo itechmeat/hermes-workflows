@@ -16,7 +16,16 @@ const workflow: Workflow = {
 };
 const ui: UiLayout = { xyflow: { nodes: [{ id: "build", x: 0, y: 0 }] } };
 const detail: SpecDetail = { workflow, ui, path: "/x/deploy.workflow.yaml" };
-const listItem: WorkflowListItem = { id: "deploy", name: "Deploy", scope: "global", trigger: { type: "manual" } };
+const listItem: WorkflowListItem = {
+  id: "deploy",
+  name: "Deploy",
+  scope: "global",
+  trigger: { type: "manual" },
+  enabled: true,
+  last_run_at: null,
+  last_status: null,
+  next_run_at: null,
+};
 const run: RunState = {
   run_id: "deploy-1",
   workflow_id: "deploy",

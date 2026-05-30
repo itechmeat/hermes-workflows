@@ -18,6 +18,10 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
     ),
     createWorkflow: vi.fn(async (): Promise<SpecDetail> => ({ workflow: {} as never, path: "" })),
     deleteWorkflow: vi.fn(async () => ({ deleted: true })),
+    setWorkflowEnabled: vi.fn(async (id: string, enabled: boolean) => ({
+      workflow: { id, enabled } as never,
+      path: `/x/${id}.workflow.yaml`,
+    })),
     exportWorkflow: vi.fn(async (id: string) => ({
       id,
       filename: `${id}.workflow.yaml`,
@@ -28,12 +32,25 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
 }
 
 const items: WorkflowListItem[] = [
-  { id: "deploy", name: "Deploy", scope: "global", trigger: { type: "manual" } },
+  {
+    id: "deploy",
+    name: "Deploy",
+    scope: "global",
+    trigger: { type: "manual" },
+    enabled: true,
+    last_run_at: 1_700_000_000,
+    last_status: "completed",
+    next_run_at: null,
+  },
   {
     id: "nightly",
     name: "Nightly",
     scope: "project",
     trigger: { type: "cron", schedule: "0 5 * * *" },
+    enabled: false,
+    last_run_at: null,
+    last_status: null,
+    next_run_at: "2026-06-01T05:00:00Z",
   },
 ];
 
@@ -77,6 +94,61 @@ describe("TemplatesPage", () => {
 
     await waitFor(() => expect(runWorkflow).toHaveBeenCalledWith("deploy"));
     expect(await screen.findByText(/deploy-12345678/)).toBeInTheDocument();
+  });
+
+  it("shows the run/schedule columns and the enabled state", async () => {
+    const client = stubClient({ listWorkflows: vi.fn(async () => items) });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    // last status of the most recent run shows for the enabled row
+    expect(screen.getByText("completed")).toBeInTheDocument();
+    // the cron workflow's next-run timestamp surfaces
+    expect(screen.getByText(/2026-06-01/)).toBeInTheDocument();
+    // the disabled row carries a Disabled marker
+    expect(screen.getByText(/disabled/i)).toBeInTheDocument();
+  });
+
+  it("disables the Run action for a disabled workflow", async () => {
+    const client = stubClient({ listWorkflows: vi.fn(async () => items) });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Nightly");
+    // rows render in list order: [0]=deploy(enabled), [1]=nightly(disabled)
+    const runButtons = screen.getAllByRole("button", { name: /^run$/i });
+    expect(runButtons[0]).not.toBeDisabled();
+    expect(runButtons[1]).toBeDisabled();
+  });
+
+  it("toggles a workflow off via the Disable action and refreshes", async () => {
+    const setWorkflowEnabled = vi.fn(async (id: string, enabled: boolean) => ({
+      workflow: { id, enabled } as never,
+      path: "",
+    }));
+    const listWorkflows = vi.fn(async () => items);
+    const client = stubClient({ listWorkflows, setWorkflowEnabled });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    // deploy is enabled -> its toggle reads "Disable"
+    await userEvent.click(screen.getAllByRole("button", { name: /^disable$/i })[0]!);
+
+    await waitFor(() => expect(setWorkflowEnabled).toHaveBeenCalledWith("deploy", false));
+    await waitFor(() => expect(listWorkflows).toHaveBeenCalledTimes(2));
+  });
+
+  it("toggles a disabled workflow back on via the Enable action", async () => {
+    const setWorkflowEnabled = vi.fn(async (id: string, enabled: boolean) => ({
+      workflow: { id, enabled } as never,
+      path: "",
+    }));
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), setWorkflowEnabled });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Nightly");
+    await userEvent.click(screen.getByRole("button", { name: /^enable$/i }));
+
+    await waitFor(() => expect(setWorkflowEnabled).toHaveBeenCalledWith("nightly", true));
   });
 
   it("surfaces a load error", async () => {

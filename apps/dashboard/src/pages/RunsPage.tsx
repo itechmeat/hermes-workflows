@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
 import { downloadTextFile } from "../templates/download";
+import { formatEpochSeconds } from "../ui/format";
 import type { RunScope, WorkflowsApi } from "../api/client";
 import type { RunStatus, RunSummary } from "../api/types";
 
@@ -15,12 +16,6 @@ type LoadState =
   | { kind: "loading" }
   | { kind: "error" }
   | { kind: "ready"; items: RunSummary[] };
-
-/** Hermes timestamps are epoch seconds; render a readable local string or a dash. */
-function formatTime(value: number | null): string {
-  if (value === null) return "—";
-  return new Date(value * 1000).toLocaleString();
-}
 
 function formatDuration(seconds: number | null): string {
   if (seconds === null) return "—";
@@ -172,8 +167,8 @@ export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactEleme
                   <StatusBadge status={r.status} />
                 </td>
                 <td style={cell}>{r.current_node ?? "—"}</td>
-                <td style={cell}>{formatTime(r.started_at)}</td>
-                <td style={cell}>{formatTime(r.finished_at)}</td>
+                <td style={cell}>{formatEpochSeconds(r.started_at)}</td>
+                <td style={cell}>{formatEpochSeconds(r.finished_at)}</td>
                 <td style={cell}>{formatDuration(r.duration)}</td>
                 <td style={cell}>
                   <span className="hw-actions">

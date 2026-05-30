@@ -82,6 +82,39 @@ describe("workflows API client", () => {
     expect(JSON.parse(String(call.init?.body))).toEqual(body);
   });
 
+  it("carries the Templates run/next-run columns on a list row", async () => {
+    const h = harness();
+    const item = {
+      id: "wf-1",
+      name: "First",
+      scope: "global",
+      trigger: { type: "manual" },
+      enabled: false,
+      last_run_at: 1700,
+      last_status: "completed",
+      next_run_at: null,
+    };
+    h.reply({ workflows: [item] });
+    const [row] = await h.client.listWorkflows();
+    expect(row).toEqual(item);
+    expect(row?.enabled).toBe(false);
+  });
+
+  it("toggles a workflow's enabled flag via PUT", async () => {
+    const h = harness();
+    const saved = { workflow: { id: "wf-1", enabled: false }, path: "/x/wf-1.workflow.yaml" };
+    h.reply(saved);
+
+    const result = await h.client.setWorkflowEnabled("wf-1", false);
+
+    expect(result).toBe(saved);
+    const call = h.last();
+    expect(call.path).toBe(`${BASE}/workflows/wf-1/enabled`);
+    expect(call.init?.method).toBe("PUT");
+    expect(new Headers(call.init?.headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(String(call.init?.body))).toEqual({ enabled: false });
+  });
+
   it("validates a workflow via POST", async () => {
     const h = harness();
     const verdict = { valid: true, errors: [], warnings: [] };
