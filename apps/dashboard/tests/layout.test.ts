@@ -30,7 +30,7 @@ describe("layout", () => {
   it("terminates and ranks a graph with a router loop edge", () => {
     // a -> b -> a is a cycle; the back-edge must not create infinite ranks
     const pos = layout(nodes("a", "b"), [edge("a", "b"), edge("b", "a")]);
-    expect(Object.keys(pos).sort()).toEqual(["a", "b"]);
+    expect(Object.keys(pos).toSorted()).toEqual(["a", "b"]);
     expect(pos["a"]!.x).toBeLessThan(pos["b"]!.x);
   });
 
@@ -43,6 +43,6 @@ describe("layout", () => {
   it("returns a position for every node", () => {
     const ids = ["a", "b", "c", "d"];
     const pos = layout(nodes(...ids), [edge("a", "b"), edge("a", "c"), edge("c", "d")]);
-    expect(Object.keys(pos).sort()).toEqual(ids);
+    expect(Object.keys(pos).toSorted()).toEqual(ids);
   });
 });

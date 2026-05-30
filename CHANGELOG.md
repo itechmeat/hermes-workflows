@@ -72,6 +72,27 @@ run inspector it drives.
   `GET`/`PUT /settings`. The `kanban.internal_board` setting is honoured by the
   runtime; other knobs are persisted and displayed but labelled not-yet-enforced
   pending engine wiring.
+- Spec-level `enabled` flag (absent means enabled, so existing specs are
+  unchanged) with an `isWorkflowEnabled` helper; non-boolean values are rejected
+  at parse time. A core `run-latest` command and `latestRunByWorkflow` map each
+  workflow to its most recent run.
+- Templates page enable/disable: a Status badge plus Last run / Last status /
+  Next run columns, and an Enable/Disable action per row. Backed by
+  `PUT /workflows/{id}/enabled`, which writes the flag into the spec and
+  pauses/resumes any cron job to match; a disabled workflow's Run action is
+  disabled and `POST /workflows/{id}/run` returns `409`. The `GET /workflows`
+  rows carry `enabled` and best-effort `last_run_at` / `last_status` /
+  `next_run_at` columns.
+- Editor node inspector exposes the full node field set: `description` on every
+  node type, and for agent_task workdir, workspace type, max retries, timeout,
+  and `input_mapping` (edited as key/value rows; a duplicate key is flagged and
+  withheld so the saved spec never carries a collision). No schema change — the
+  fields already existed in core.
+- Editor canvas actions: **Duplicate node** (clone the selected node under a
+  fresh id at an offset) and **Auto-layout** (a dependency-free layered layout
+  that ranks nodes by longest forward distance, stacks branch siblings, trails
+  disconnected nodes, and treats router loop-edges as back-edges). Both write
+  through the existing save path and round-trip through `ui.xyflow`.
 
 ### Removed
 

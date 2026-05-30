@@ -36,7 +36,11 @@ TypeScript core CLI (the core owns all spec logic) or the orchestrator.
 
 Listing and status:
 
-- `GET /workflows` — workflows discovered under the spec roots.
+- `GET /workflows` — workflows discovered under the spec roots. Each row carries
+  `enabled` plus best-effort Templates-page columns: `last_run_at` / `last_status`
+  (the workflow's most recent run) and `next_run_at` (its cron schedule, `null`
+  when it has none). The columns are overlays — listing never fails if the run
+  store is empty or the cron module is unavailable.
 - `GET /runs?scope=active|all` — runs from `runs.db`, each shaped to the Runs-page
   row (run id, workflow, project, status, current node, started/finished,
   duration). `scope=active` (the default) keeps the historical active-only
@@ -59,10 +63,14 @@ Authoring (for the editor):
   `404` if absent. The stored file is the authority — no second serializer.
 - `POST /workflows/{id}/validate` — `{ valid, errors, warnings }` for the saved spec.
 - `POST /workflows/{id}/compile-preview` — the Hermes plan the spec compiles to.
+- `PUT /workflows/{id}/enabled` — enable/disable a workflow (body `{ "enabled": bool }`).
+  Writes `enabled` into the spec (the single source of truth) and pauses/resumes
+  any cron job to match; `404` if the workflow does not exist.
 
 Execution control:
 
-- `POST /workflows/{id}/run` — start a run (same path as the CLI `run`); `404` if absent.
+- `POST /workflows/{id}/run` — start a run (same path as the CLI `run`); `404` if
+  absent, `409` if the workflow is disabled.
 - `GET /runs/{id}` — full run state with per-node detail, for the run inspector; `404` if absent.
 - `POST /runs/{id}/cancel` — cancel a run; `404` if absent.
 - `POST /runs/{id}/retry` — retry a run, or one failed node via `{ "node_id": "..." }`.
@@ -115,16 +123,25 @@ registers the root component via
 
 ### Views
 
-- **Templates** — lists workflows (name, id, scope, trigger) and is the authoring
-  surface. **New workflow** opens a modal (name, scope, trigger; the id is
-  generated, not user-entered) that seeds a minimal valid graph and drops straight
-  into the editor. Per row: Open (editor),
-  Run (starts a run, opens the inspector), Duplicate (copy under a new id), Export
-  (download the canonical YAML), and Delete (with confirmation).
+- **Templates** — lists workflows (name, id, scope, trigger) with a Status badge
+  (enabled/disabled) and run/schedule columns (Last run, Last status, Next run),
+  and is the authoring surface. **New workflow** opens a modal (name, scope,
+  trigger; the id is generated, not user-entered) that seeds a minimal valid graph
+  and drops straight into the editor. Per row: Open (editor), Run (starts a run,
+  opens the inspector; disabled for a disabled workflow), Enable/Disable (toggles
+  the spec's `enabled` flag and syncs any cron job), Duplicate (copy under a new
+  id), Export (download the canonical YAML), and Delete (with confirmation). A
+  disabled row is dimmed.
 - **Editor** — the `@xyflow/react` canvas with a node palette, a per-type node
   inspector, and bottom panels for server-side validation and compile preview.
-  Layout round-trips losslessly through the spec's `ui.xyflow` block; Save sends
-  `{ workflow, ui }` via `PUT` (the server rejects an invalid graph).
+  The inspector edits `description` on every node type and, for `agent_task`,
+  profile, model, skills, prompt, workdir, workspace type, max retries, timeout,
+  and `input_mapping` (key/value rows; a duplicate key is flagged and withheld).
+  Toolbar actions **Duplicate node** (clone the selected node at an offset) and
+  **Auto-layout** (arrange the graph by a dependency-free layered layout) write
+  through the same save path. Layout round-trips losslessly through the spec's
+  `ui.xyflow` block; Save sends `{ workflow, ui }` via `PUT` (the server rejects
+  an invalid graph).
 - **Run inspector** — renders the run graph with per-node status colours, polls
   `GET /runs/{id}` while the run is active (stopping once terminal), and offers
   whole-run cancel/retry plus per-node retry.

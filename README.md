@@ -16,12 +16,14 @@ OpenSecondBrain is an optional long-term memory layer.
 The engine is headless-first and runs autonomously. A workflow advances on a self-terminating
 Cron tick with no human in the loop except an explicit `human_review` node. The dashboard tab
 manages the full authoring lifecycle: create a workflow from a modal (seeded with a minimal valid
-graph and opened in the editor), duplicate, export YAML, or delete it, then author the graph in a
-visual `@xyflow/react` editor — edit node fields, validate, preview the compiled Hermes plan, and
-save (layout included) — alongside a live run inspector with per-node status, cancel, and retry.
-It also has a **Runs** view (every run, with open / cancel / retry / export-logs), a **Schedules**
-view over Hermes cron (pause / resume / run-now / edit / delete), and a **Settings** view backed by
-the Hermes config. See [docs/dashboard.md](docs/dashboard.md).
+graph and opened in the editor), enable/disable, duplicate, export YAML, or delete it, with each
+template showing its last run and next scheduled run. Author the graph in a
+visual `@xyflow/react` editor — edit the full node field set (including agent_task workdir,
+workspace, retries, timeout, and input mapping), duplicate or auto-layout nodes, validate, preview
+the compiled Hermes plan, and save (layout included) — alongside a live run inspector with per-node
+status, cancel, and retry. It also has a **Runs** view (every run, with open / cancel / retry /
+export-logs), a **Schedules** view over Hermes cron (pause / resume / run-now / edit / delete), and
+a **Settings** view backed by the Hermes config. See [docs/dashboard.md](docs/dashboard.md).
 
 ## Node types
 
