@@ -1,0 +1,30 @@
+{
+  "name": "@hermes-workflows/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Visual workflow editor + run inspector frontend for the Hermes Workflows dashboard plugin.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "vite build",
+    "validate": "tsc --noEmit && vitest run && vite build"
+  },
+  "dependencies": {
+    "@xyflow/react": "12.10.2"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^26.0.0",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "typescript": "^5.5.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0"
+  }
+}

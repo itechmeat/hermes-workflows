@@ -8,6 +8,17 @@
   },
   "rules": {
     "no-console": "off",
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": [
+          "__HERMES_PLUGIN_SDK__",
+          "__HERMES_PLUGINS__",
+          "__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE",
+          "__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED"
+        ]
+      }
+    ],
     "no-control-regex": "warn",
     "no-unused-vars": "warn",
     "require-yield": "warn",
