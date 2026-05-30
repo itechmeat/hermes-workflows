@@ -18,7 +18,7 @@ import { createRunState } from "../runtime/state.ts";
 import { cancelRun, retryRun } from "../runtime/runMutations.ts";
 import { openRunsDatabase } from "../runtime/db/connection.ts";
 import { RunRepository } from "../runtime/db/runRepository.ts";
-import type { RunSummary } from "../runtime/db/runRepository.ts";
+import type { RunSummary, RunMeta } from "../runtime/db/runRepository.ts";
 import { SpecStore, chooseWriteRoot } from "../runtime/specStore.ts";
 import type { SpecSummary, SpecDetail, WriteRoots } from "../runtime/specStore.ts";
 import { fromObject } from "../schema/load.ts";
@@ -70,6 +70,28 @@ export async function cmdAdvance(specPath: string, run: RunState): Promise<Advan
   return advance(await loadWorkflow(specPath), run);
 }
 
+/** Wall-clock in epoch seconds (the unit Hermes uses for timestamps). */
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+const TERMINAL_STATUSES: ReadonlySet<RunState["status"]> = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+/** Timing meta for a save: stamp `started_at` at creation, `finished_at` once a
+ *  run is terminal, and clear `finished_at` while it is still in flight (so a
+ *  retried run is no longer marked finished). `started_at` is preserved across
+ *  meta-less saves by {@link RunRepository.saveRun}. */
+function timingMeta(run: RunState, atCreate: boolean): RunMeta {
+  const meta: RunMeta = {};
+  if (atCreate) meta.started_at = nowSeconds();
+  if (TERMINAL_STATUSES.has(run.status)) meta.finished_at = nowSeconds();
+  return meta;
+}
+
 export async function cmdRunCreate(
   dbPath: string,
   specPath: string,
@@ -78,7 +100,7 @@ export async function cmdRunCreate(
 ): Promise<RunState> {
   const workflow = await loadWorkflow(specPath);
   const run = createRunState(workflow, runId, projectId);
-  repository(dbPath).saveRun(run);
+  repository(dbPath).saveRun(run, timingMeta(run, true));
   return run;
 }
 
@@ -87,7 +109,7 @@ export function cmdRunLoad(dbPath: string, runId: string): RunState | null {
 }
 
 export function cmdRunSave(dbPath: string, run: RunState): void {
-  repository(dbPath).saveRun(run);
+  repository(dbPath).saveRun(run, timingMeta(run, false));
 }
 
 export function cmdRunList(dbPath: string, activeOnly: boolean): RunState[] {
@@ -152,13 +174,13 @@ function loadRunOrThrow(repo: RunRepository, runId: string): RunState {
 export function cmdRunCancel(dbPath: string, runId: string): RunState {
   const repo = repository(dbPath);
   const cancelled = cancelRun(loadRunOrThrow(repo, runId));
-  repo.saveRun(cancelled);
+  repo.saveRun(cancelled, timingMeta(cancelled, false)); // terminal → stamps finished_at
   return cancelled;
 }
 
 export function cmdRunRetry(dbPath: string, runId: string, node?: string): RunState {
   const repo = repository(dbPath);
   const retried = retryRun(loadRunOrThrow(repo, runId), node !== undefined ? { node } : {});
-  repo.saveRun(retried);
+  repo.saveRun(retried, timingMeta(retried, false)); // back in flight → clears finished_at
   return retried;
 }

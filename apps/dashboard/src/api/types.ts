@@ -57,8 +57,9 @@ export interface WorkflowListItem {
 }
 
 /** One row of `GET /runs` — the Runs-page columns. `scope=active` (default)
- *  lists in-flight runs; `scope=all` adds finished ones. Timing fields are null
- *  until set; `duration` is `finished_at - started_at` (ms) when both are known. */
+ *  lists in-flight runs; `scope=all` adds finished ones. `started_at`/`finished_at`
+ *  are epoch seconds (null until set); `duration` is `finished_at - started_at`
+ *  in seconds when both are known. */
 export interface RunSummary {
   run_id: string;
   workflow_id: string;

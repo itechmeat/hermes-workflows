@@ -44,6 +44,24 @@ const ACTIVE_NODE_STATUSES: ReadonlySet<string> = new Set([
   "waiting_for_review",
 ]);
 
+interface NodeSeq {
+  node_id: string;
+  seq: number;
+}
+
+/**
+ * Whether `cand` should replace `best` as the chosen node: higher `seq` wins,
+ * and ties (e.g. parallel nodes not yet sequenced) break on the lower `node_id`
+ * so the result is deterministic across calls regardless of SQLite row order.
+ */
+function nodeWins(cand: NodeSeq, best: NodeSeq | undefined): boolean {
+  return (
+    best === undefined ||
+    cand.seq > best.seq ||
+    (cand.seq === best.seq && cand.node_id < best.node_id)
+  );
+}
+
 interface RunRow {
   id: string;
   workflow_id: string;
@@ -82,7 +100,10 @@ export class RunRepository {
              status = excluded.status,
              project_id = excluded.project_id,
              input_json = excluded.input_json,
-             started_at = excluded.started_at,
+             -- started_at is stamped once (at run-create) and preserved across
+             -- meta-less tick saves; finished_at follows the live status, set
+             -- when terminal and cleared on retry.
+             started_at = COALESCE(workflow_runs.started_at, excluded.started_at),
              finished_at = excluded.finished_at,
              error = excluded.error`,
         )
@@ -228,15 +249,15 @@ export class RunRepository {
     const nodes = this.db
       .query(`SELECT node_id, status, seq FROM workflow_node_runs WHERE run_id = $id`)
       .all({ $id: runId }) as { node_id: string; status: string; seq: number | null }[];
-    let active: { node_id: string; seq: number } | undefined;
-    let latest: { node_id: string; seq: number } | undefined;
+    let active: NodeSeq | undefined;
+    let latest: NodeSeq | undefined;
     for (const n of nodes) {
-      const seq = n.seq ?? -1;
-      if (ACTIVE_NODE_STATUSES.has(n.status) && (active === undefined || seq > active.seq)) {
-        active = { node_id: n.node_id, seq };
+      const candidate: NodeSeq = { node_id: n.node_id, seq: n.seq ?? -1 };
+      if (ACTIVE_NODE_STATUSES.has(n.status) && nodeWins(candidate, active)) {
+        active = candidate;
       }
-      if (n.seq !== null && (latest === undefined || n.seq > latest.seq)) {
-        latest = { node_id: n.node_id, seq: n.seq };
+      if (n.seq !== null && nodeWins(candidate, latest)) {
+        latest = candidate;
       }
     }
     return (active ?? latest)?.node_id;

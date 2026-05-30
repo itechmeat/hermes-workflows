@@ -129,4 +129,42 @@ describe("RunRepository — run summaries", () => {
     expect(active).toContain("sum-running");
     expect(active).not.toContain("sum-finished");
   });
+
+  test("preserves started_at across meta-less saves and tracks finished_at", () => {
+    const run = createRunState(workflow, "sum-timing");
+    run.status = "running";
+    repo.saveRun(run, { started_at: 5000 });
+
+    // A later tick save without meta must not wipe started_at, and leaves the
+    // still-running run with no finished_at.
+    repo.saveRun(run);
+    let s = repo.listRunSummaries(false).find((r) => r.run_id === "sum-timing");
+    expect(s?.started_at).toBe(5000);
+    expect(s?.finished_at).toBeUndefined();
+
+    // Terminal save stamps finished_at; started_at is still preserved.
+    run.status = "completed";
+    repo.saveRun(run, { finished_at: 5200 });
+    s = repo.listRunSummaries(false).find((r) => r.run_id === "sum-timing");
+    expect(s?.started_at).toBe(5000);
+    expect(s?.finished_at).toBe(5200);
+
+    // Back in flight (retry) clears finished_at without losing started_at.
+    run.status = "created";
+    repo.saveRun(run);
+    s = repo.listRunSummaries(false).find((r) => r.run_id === "sum-timing");
+    expect(s?.started_at).toBe(5000);
+    expect(s?.finished_at).toBeUndefined();
+  });
+
+  test("breaks current-node ties on node_id deterministically", () => {
+    const run = createRunState(workflow, "sum-tie");
+    run.status = "running";
+    // two active nodes, same (default) seq -> lower node_id wins, stably.
+    run.nodes["a"] = { node_id: "a", status: "running" };
+    run.nodes["done"] = { node_id: "done", status: "scheduled" };
+    repo.saveRun(run);
+    const s = repo.listRunSummaries(false).find((r) => r.run_id === "sum-tie");
+    expect(s?.current_node).toBe("a");
+  });
 });

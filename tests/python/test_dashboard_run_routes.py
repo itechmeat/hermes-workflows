@@ -93,13 +93,26 @@ def test_list_runs_scope_all_includes_finished(client: TestClient) -> None:
     assert run_id in all_ids
 
 
-def test_list_runs_duration_from_meta(client: TestClient) -> None:
+def test_run_timing_is_recorded_end_to_end(client: TestClient) -> None:
     run_id = _start_run(client)
+    # started_at is stamped at run-create; a still-running run has no finish/duration.
     row = _find_run(client.get("/runs?scope=all").json()["runs"], run_id)
-    if row["started_at"] is not None and row["finished_at"] is not None:
-        assert row["duration"] == row["finished_at"] - row["started_at"]
-    else:
-        assert row["duration"] is None
+    assert row["started_at"] is not None
+    assert row["finished_at"] is None
+    assert row["duration"] is None
+
+    # Cancelling settles the run: finished_at is stamped and duration is derived.
+    client.post(f"/runs/{run_id}/cancel")
+    row = _find_run(client.get("/runs?scope=all").json()["runs"], run_id)
+    assert row["finished_at"] is not None
+    assert row["duration"] == row["finished_at"] - row["started_at"]
+    assert row["duration"] >= 0
+
+    # Retrying puts it back in flight: finished_at clears, started_at survives.
+    client.post(f"/runs/{run_id}/retry")
+    row = _find_run(client.get("/runs?scope=all").json()["runs"], run_id)
+    assert row["started_at"] is not None
+    assert row["finished_at"] is None
 
 
 def test_export_run_returns_bundle(client: TestClient) -> None:
