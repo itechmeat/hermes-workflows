@@ -41,7 +41,9 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(app)
 
 
-def _register(workflow_id: str = "blog", schedule: str = "0 9 * * *") -> str:
+# Interval schedules keep these route tests croniter-free; the routes exercise
+# the same bridge paths regardless of the schedule kind.
+def _register(workflow_id: str = "blog", schedule: str = "every 30m") -> str:
     return cron_bridge.register_workflow_trigger(workflow_id=workflow_id, schedule=schedule)
 
 
@@ -51,7 +53,7 @@ def test_list_schedules(client: TestClient) -> None:
     assert resp.status_code == 200
     rows = resp.json()["schedules"]
     row = next(r for r in rows if r["workflow_id"] == "blog")
-    assert row["cron_expression"] == "0 9 * * *"
+    assert row["cron_expression"] == "every 30m"
     assert row["hermes_cron_id"] == job_id
     assert row["enabled"] is True
 
@@ -79,9 +81,9 @@ def test_run_unknown_is_404(client: TestClient) -> None:
 
 def test_edit_cron(client: TestClient) -> None:
     job_id = _register()
-    resp = client.put(f"/schedules/{job_id}", json={"cron": "30 7 * * *"})
+    resp = client.put(f"/schedules/{job_id}", json={"cron": "every 10m"})
     assert resp.status_code == 200, resp.text
-    assert cj.get_job(job_id)["schedule"]["expr"] == "30 7 * * *"
+    assert cj.get_job(job_id)["schedule"]["minutes"] == 10
 
 
 def test_edit_bad_cron_is_400(client: TestClient) -> None:
