@@ -15,6 +15,8 @@ import type {
   RunState,
   RunSummary,
   ScheduleListItem,
+  SettingsResponse,
+  WorkflowSettings,
   SaveWorkflowBody,
   SpecDetail,
   ValidationResult,
@@ -47,6 +49,8 @@ export interface WorkflowsApi {
   runScheduleNow(id: string): Promise<unknown>;
   editSchedule(id: string, cron: string): Promise<unknown>;
   deleteSchedule(id: string): Promise<DeleteResult>;
+  getSettings(): Promise<SettingsResponse>;
+  saveSettings(values: WorkflowSettings): Promise<SettingsResponse>;
   o2bStatus(): Promise<O2BStatus>;
 }
 
@@ -155,6 +159,18 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
 
     deleteSchedule(id) {
       return fetchJSON<DeleteResult>(schedule(id), { method: "DELETE" });
+    },
+
+    getSettings() {
+      return fetchJSON<SettingsResponse>(`${BASE}/settings`);
+    },
+
+    saveSettings(values) {
+      return fetchJSON<SettingsResponse>(`${BASE}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
     },
 
     o2bStatus() {

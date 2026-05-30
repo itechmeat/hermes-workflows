@@ -238,6 +238,34 @@ describe("workflows API client", () => {
     expect(h.last().init?.method).toBe("DELETE");
   });
 
+  it("gets settings, returning values and schema", async () => {
+    const h = harness();
+    const payload = {
+      values: { default_mode: "durable", fail_open: true },
+      schema: { namespace: "plugins.workflows", groups: [] },
+    };
+    h.reply(payload);
+
+    const result = await h.client.getSettings();
+
+    expect(result).toBe(payload);
+    expect(h.last().path).toBe(`${BASE}/settings`);
+    expect(h.last().init?.method ?? "GET").toBe("GET");
+  });
+
+  it("saves settings via PUT, forwarding the values map", async () => {
+    const h = harness();
+    h.reply({ values: { internal_board: "b2" }, schema: { namespace: "plugins.workflows", groups: [] } });
+
+    await h.client.saveSettings({ internal_board: "b2", fail_open: false });
+
+    const call = h.last();
+    expect(call.path).toBe(`${BASE}/settings`);
+    expect(call.init?.method).toBe("PUT");
+    expect(new Headers(call.init?.headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(String(call.init?.body))).toEqual({ internal_board: "b2", fail_open: false });
+  });
+
   it("reads the O2B status badge", async () => {
     const h = harness();
     h.reply({ connected: true });

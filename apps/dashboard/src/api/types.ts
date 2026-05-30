@@ -128,3 +128,36 @@ export interface RunOptions {
 export interface O2BStatus {
   connected: boolean;
 }
+
+/** A single settings value (the Settings page handles string / int / bool). */
+export type SettingsValue = string | number | boolean;
+
+/** Effective settings: a flat map of field key → value. */
+export type WorkflowSettings = Record<string, SettingsValue>;
+
+/** One field descriptor in the settings schema. `enforced` is false for knobs
+ *  persisted/displayed but not yet honoured by the engine. */
+export interface SettingsField {
+  key: string;
+  type: "string" | "int" | "bool" | "enum";
+  enforced: boolean;
+  default: SettingsValue;
+  options?: string[];
+}
+
+export interface SettingsGroup {
+  key: string;
+  label: string;
+  fields: SettingsField[];
+}
+
+export interface SettingsSchema {
+  namespace: string;
+  groups: SettingsGroup[];
+}
+
+/** Body of `GET`/`PUT /settings` responses — effective values plus the schema. */
+export interface SettingsResponse {
+  values: WorkflowSettings;
+  schema: SettingsSchema;
+}
