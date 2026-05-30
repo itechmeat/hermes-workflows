@@ -4,11 +4,13 @@ import { getApiClient } from "./host";
 import type { WorkflowsApi } from "./api/client";
 import type { SpecDetail } from "./api/types";
 import { TemplatesPage } from "./pages/TemplatesPage";
+import { RunsPage } from "./pages/RunsPage";
 import { FlowEditor } from "./editor/FlowEditor";
 import { RunInspector } from "./run/RunInspector";
 
 type View =
   | { name: "templates" }
+  | { name: "runs" }
   | { name: "editor"; id: string }
   | { name: "inspector"; runId: string };
 
@@ -54,6 +56,9 @@ export function App({ client }: AppProps): React.ReactElement {
         <button type="button" className="hw-btn hw-btn--sm" onClick={() => setView({ name: "templates" })}>
           Workflows
         </button>
+        <button type="button" className="hw-btn hw-btn--sm" onClick={() => setView({ name: "runs" })}>
+          Runs
+        </button>
         {view.name === "editor" && <span>Editing {view.id}</span>}
         {view.name === "inspector" && <span>Run {view.runId}</span>}
         <span style={{ marginLeft: "auto" }}>
@@ -68,6 +73,9 @@ export function App({ client }: AppProps): React.ReactElement {
             onOpenRun={(runId) => setView({ name: "inspector", runId })}
             onCreated={(id) => setView({ name: "editor", id })}
           />
+        )}
+        {view.name === "runs" && (
+          <RunsPage client={api} onOpenRun={(runId) => setView({ name: "inspector", runId })} />
         )}
         {view.name === "editor" && <EditorLoader id={view.id} client={api} />}
         {view.name === "inspector" && <RunInspector runId={view.runId} client={api} />}

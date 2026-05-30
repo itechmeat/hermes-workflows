@@ -1,0 +1,149 @@
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { RunsPage } from "../src/pages/RunsPage";
+import type { WorkflowsApi } from "../src/api/client";
+import type { ExportedRun, RunState, RunSummary } from "../src/api/types";
+
+function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
+  const base = {
+    listRuns: vi.fn(async () => [] as RunSummary[]),
+    cancelRun: vi.fn(async () => ({ run_id: "r1", status: "cancelled", nodes: {} }) as RunState),
+    retryRun: vi.fn(async () => ({ run_id: "r1", status: "created", nodes: {} }) as RunState),
+    exportRunLogs: vi.fn(
+      async (id: string): Promise<ExportedRun> => ({
+        run_id: id,
+        filename: `${id}.run.json`,
+        json: { run_id: id, nodes: {} } as RunState,
+      }),
+    ),
+  };
+  return { ...base, ...overrides } as unknown as WorkflowsApi;
+}
+
+const runs: RunSummary[] = [
+  {
+    run_id: "deploy-aaaa1111",
+    workflow_id: "deploy",
+    project_id: "acme",
+    status: "running",
+    current_node: "build",
+    started_at: 1_700_000_000,
+    finished_at: null,
+    duration: null,
+  },
+  {
+    run_id: "nightly-bbbb2222",
+    workflow_id: "nightly",
+    project_id: null,
+    status: "completed",
+    current_node: "done",
+    started_at: 1_700_000_000,
+    finished_at: 1_700_000_042,
+    duration: 42,
+  },
+];
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("RunsPage", () => {
+  it("renders a row per run with the page columns", async () => {
+    const client = stubClient({ listRuns: vi.fn(async () => runs) });
+    render(<RunsPage client={client} onOpenRun={() => {}} />);
+
+    expect(await screen.findByText("deploy-aaaa1111")).toBeInTheDocument();
+    expect(screen.getByText("nightly-bbbb2222")).toBeInTheDocument();
+    expect(screen.getByText("deploy")).toBeInTheDocument();
+    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.getByText("build")).toBeInTheDocument(); // current node
+    expect(screen.getByText("acme")).toBeInTheDocument(); // project
+  });
+
+  it("loads all runs by default", async () => {
+    const listRuns = vi.fn(async () => runs);
+    render(<RunsPage client={stubClient({ listRuns })} onOpenRun={() => {}} />);
+    await screen.findByText("deploy-aaaa1111");
+    expect(listRuns).toHaveBeenCalledWith("all");
+  });
+
+  it("re-fetches active-only when the filter is toggled", async () => {
+    const listRuns = vi.fn(async () => runs);
+    render(<RunsPage client={stubClient({ listRuns })} onOpenRun={() => {}} />);
+    await screen.findByText("deploy-aaaa1111");
+    await userEvent.click(screen.getByLabelText(/active only/i));
+    await waitFor(() => expect(listRuns).toHaveBeenCalledWith("active"));
+  });
+
+  it("shows an empty state when there are no runs", async () => {
+    render(<RunsPage client={stubClient()} onOpenRun={() => {}} />);
+    expect(await screen.findByText(/no runs/i)).toBeInTheDocument();
+  });
+
+  it("opens the inspector when Open is clicked", async () => {
+    const onOpenRun = vi.fn();
+    const client = stubClient({ listRuns: vi.fn(async () => runs) });
+    render(<RunsPage client={client} onOpenRun={onOpenRun} />);
+
+    await screen.findByText("deploy-aaaa1111");
+    await userEvent.click(screen.getAllByRole("button", { name: /open/i })[0]!);
+    expect(onOpenRun).toHaveBeenCalledWith("deploy-aaaa1111");
+  });
+
+  it("cancels a run and refreshes", async () => {
+    const cancelRun = vi.fn(async () => ({ run_id: "deploy-aaaa1111", status: "cancelled", nodes: {} }) as RunState);
+    const listRuns = vi.fn(async () => runs);
+    render(<RunsPage client={stubClient({ listRuns, cancelRun })} onOpenRun={() => {}} />);
+
+    await screen.findByText("deploy-aaaa1111");
+    await userEvent.click(screen.getAllByRole("button", { name: /cancel/i })[0]!);
+    await waitFor(() => expect(cancelRun).toHaveBeenCalledWith("deploy-aaaa1111"));
+    await waitFor(() => expect(listRuns).toHaveBeenCalledTimes(2));
+  });
+
+  it("retries a whole run", async () => {
+    const retryRun = vi.fn(async () => ({ run_id: "deploy-aaaa1111", status: "created", nodes: {} }) as RunState);
+    render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => runs), retryRun })} onOpenRun={() => {}} />);
+
+    await screen.findByText("deploy-aaaa1111");
+    await userEvent.click(screen.getAllByRole("button", { name: /retry run/i })[0]!);
+    await waitFor(() => expect(retryRun).toHaveBeenCalledWith("deploy-aaaa1111"));
+  });
+
+  it("retries a single node, prompting for its id", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("build");
+    const retryRun = vi.fn(async () => ({ run_id: "deploy-aaaa1111", status: "created", nodes: {} }) as RunState);
+    render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => runs), retryRun })} onOpenRun={() => {}} />);
+
+    await screen.findByText("deploy-aaaa1111");
+    await userEvent.click(screen.getAllByRole("button", { name: /retry node/i })[0]!);
+    await waitFor(() => expect(retryRun).toHaveBeenCalledWith("deploy-aaaa1111", "build"));
+  });
+
+  it("exports a run's logs as a download", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    const exportRunLogs = vi.fn(
+      async (id: string): Promise<ExportedRun> => ({
+        run_id: id,
+        filename: `${id}.run.json`,
+        json: { run_id: id, nodes: {} } as RunState,
+      }),
+    );
+    render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => runs), exportRunLogs })} onOpenRun={() => {}} />);
+
+    await screen.findByText("deploy-aaaa1111");
+    await userEvent.click(screen.getAllByRole("button", { name: /export/i })[0]!);
+    await waitFor(() => expect(exportRunLogs).toHaveBeenCalledWith("deploy-aaaa1111"));
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces a load error", async () => {
+    const client = stubClient({
+      listRuns: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+    });
+    render(<RunsPage client={client} onOpenRun={() => {}} />);
+    expect(await screen.findByText(/failed to load runs/i)).toBeInTheDocument();
+  });
+});
