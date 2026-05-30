@@ -11,7 +11,7 @@ import type {
   ScopeType,
   Trigger,
 } from "@hermes-workflows/core/schema/workflow.ts";
-import type { WorkflowNode, NodeType } from "@hermes-workflows/core/schema/nodes.ts";
+import type { WorkflowNode, NodeType, ReviewOption } from "@hermes-workflows/core/schema/nodes.ts";
 import type { RunState, RunStatus, NodeStatus } from "@hermes-workflows/core/schema/run.ts";
 import type { UiLayout } from "@hermes-workflows/core/schema/ui.ts";
 import type {
@@ -25,6 +25,7 @@ export type {
   Edge,
   WorkflowNode,
   NodeType,
+  ReviewOption,
   Scope,
   ScopeType,
   Trigger,

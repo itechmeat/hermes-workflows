@@ -109,6 +109,34 @@ describe("useFlowEditor", () => {
     expect(result.current.dirty).toBe(false);
   });
 
+  it("selects a node and exposes it", () => {
+    const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
+    expect(result.current.selectedNode).toBeNull();
+    act(() => result.current.selectNode("build"));
+    expect(result.current.selectedNode?.id).toBe("build");
+  });
+
+  it("updates a node field and marks dirty", () => {
+    const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
+    act(() => result.current.updateNode("build", { prompt: "rebuild it" }));
+    const build = result.current.nodes.find((n) => n.id === "build")!;
+    expect((build.data.node as { prompt: string }).prompt).toBe("rebuild it");
+    expect(result.current.dirty).toBe(true);
+  });
+
+  it("adds a node of the requested type, selects it, and marks dirty", () => {
+    const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
+    let id = "";
+    act(() => {
+      id = result.current.addNode("condition");
+    });
+    expect(id).toBe("condition-1");
+    const added = result.current.nodes.find((n) => n.id === id);
+    expect(added?.data.node.type).toBe("condition");
+    expect(result.current.selectedNode?.id).toBe(id);
+    expect(result.current.dirty).toBe(true);
+  });
+
   it("keeps dirty and reports an error when save fails", async () => {
     const client = stubClient({
       saveWorkflow: vi.fn(async () => {

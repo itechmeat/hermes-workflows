@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { FlowEditor } from "../src/editor/FlowEditor";
 import type { WorkflowsApi } from "../src/api/client";
 import type { SpecDetail, Workflow, UiLayout } from "../src/api/types";
@@ -59,5 +60,16 @@ describe("FlowEditor", () => {
   it("renders the workflow name in the toolbar", () => {
     render(<FlowEditor detail={detail} client={stubClient()} />);
     expect(screen.getByText("Deploy Pipeline")).toBeInTheDocument();
+  });
+
+  it("adds a node from the palette, selecting it for editing and marking dirty", async () => {
+    render(<FlowEditor detail={detail} client={stubClient()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Agent task" }));
+
+    // newly added node is auto-selected -> inspector shows agent_task fields
+    expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
+    // and the graph is now dirty, enabling Save
+    expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
   });
 });

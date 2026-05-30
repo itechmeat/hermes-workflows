@@ -11,9 +11,15 @@ import {
   type NodeChange,
   type Viewport,
 } from "@xyflow/react";
-import { flowToWorkflow, workflowToFlow, type FlowEdge, type FlowNode } from "./graphMapping";
+import {
+  flowToWorkflow,
+  workflowToFlow,
+  WORKFLOW_NODE_TYPE,
+  type FlowEdge,
+  type FlowNode,
+} from "./graphMapping";
 import type { WorkflowsApi } from "../api/client";
-import type { SpecDetail } from "../api/types";
+import type { NodeType, SpecDetail, WorkflowNode } from "../api/types";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -33,20 +39,36 @@ export interface FlowEditorController {
   viewport: Viewport | undefined;
   dirty: boolean;
   status: SaveStatus;
+  selectedNode: FlowNode | null;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   onMoveEnd: (event: unknown, viewport: Viewport) => void;
+  selectNode: (id: string | null) => void;
+  updateNode: (id: string, patch: Partial<WorkflowNode>) => void;
+  addNode: (type: NodeType) => string;
   save: () => Promise<SpecDetail | null>;
+}
+
+function freshId(type: NodeType, nodes: readonly FlowNode[]): string {
+  const taken = new Set(nodes.map((node) => node.id));
+  let n = 1;
+  while (taken.has(`${type}-${n}`)) n += 1;
+  return `${type}-${n}`;
+}
+
+function blankNode(type: NodeType, id: string): WorkflowNode {
+  return type === "agent_task" ? { id, type, prompt: "" } : { id, type };
 }
 
 export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEditorController {
   const initial = useMemo(() => workflowToFlow(detail.workflow, detail.ui), [detail]);
-  const [nodes, , onNodesChangeRaw] = useNodesState<FlowNode>(initial.nodes);
+  const [nodes, setNodes, onNodesChangeRaw] = useNodesState<FlowNode>(initial.nodes);
   const [edges, setEdges, onEdgesChangeRaw] = useEdgesState<FlowEdge>(initial.edges);
   const [viewport, setViewport] = useState<Viewport | undefined>(initial.viewport);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -77,6 +99,42 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     setDirty(true);
   }, []);
 
+  const selectNode = useCallback((id: string | null) => setSelectedNodeId(id), []);
+
+  const updateNode = useCallback(
+    (id: string, patch: Partial<WorkflowNode>) => {
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === id
+            ? { ...node, data: { node: { ...node.data.node, ...patch } as WorkflowNode } }
+            : node,
+        ),
+      );
+      setDirty(true);
+    },
+    [setNodes],
+  );
+
+  const addNode = useCallback(
+    (type: NodeType): string => {
+      let id = "";
+      setNodes((current) => {
+        id = freshId(type, current);
+        const placed: FlowNode = {
+          id,
+          type: WORKFLOW_NODE_TYPE,
+          position: { x: 80 + current.length * 40, y: 80 + current.length * 20 },
+          data: { node: blankNode(type, id) },
+        };
+        return [...current, placed];
+      });
+      setSelectedNodeId(id);
+      setDirty(true);
+      return id;
+    },
+    [setNodes],
+  );
+
   const save = useCallback(async (): Promise<SpecDetail | null> => {
     setStatus({ kind: "saving" });
     const { workflow, ui } = flowToWorkflow(detail.workflow, nodes, edges, viewport);
@@ -91,5 +149,22 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     }
   }, [client, detail.workflow, nodes, edges, viewport]);
 
-  return { nodes, edges, viewport, dirty, status, onNodesChange, onEdgesChange, onConnect, onMoveEnd, save };
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+
+  return {
+    nodes,
+    edges,
+    viewport,
+    dirty,
+    status,
+    selectedNode,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    onMoveEnd,
+    selectNode,
+    updateNode,
+    addNode,
+    save,
+  };
 }
