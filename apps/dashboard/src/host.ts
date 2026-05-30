@@ -39,7 +39,13 @@ export function getRegistry(): HermesPluginRegistry {
   return registry;
 }
 
-/** Workflows API client bound to the host's `fetchJSON`. */
+let cachedClient: WorkflowsApi | undefined;
+
+/** Workflows API client bound to the host's `fetchJSON`. Memoised: the client is
+ *  pure over `fetchJSON` (stable on the host), and a stable identity matters —
+ *  components pass it into effect dependency arrays, so a fresh object per call
+ *  would re-fire load/poll effects on every render. */
 export function getApiClient(): WorkflowsApi {
-  return createApiClient(getSdk().fetchJSON);
+  cachedClient ??= createApiClient(getSdk().fetchJSON);
+  return cachedClient;
 }

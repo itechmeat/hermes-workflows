@@ -57,6 +57,17 @@ describe("FlowEditor", () => {
     expect(screen.getByText(/no changes/i)).toBeInTheDocument();
   });
 
+  it("stays clean on mount even when the spec has no saved viewport (fitView)", () => {
+    // No viewport -> fitView runs and fires onMoveEnd; that must not dirty the
+    // untouched graph.
+    const noViewport: SpecDetail = {
+      ...detail,
+      ui: { xyflow: { nodes: ui.xyflow!.nodes } },
+    };
+    render(<FlowEditor detail={noViewport} client={stubClient()} />);
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+  });
+
   it("renders the workflow name in the toolbar", () => {
     render(<FlowEditor detail={detail} client={stubClient()} />);
     expect(screen.getByText("Deploy Pipeline")).toBeInTheDocument();

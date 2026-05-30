@@ -94,9 +94,12 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     [setEdges],
   );
 
-  const onMoveEnd = useCallback((_event: unknown, next: Viewport) => {
+  const onMoveEnd = useCallback((event: unknown, next: Viewport) => {
+    // Always track the viewport so a save persists the current view, but only
+    // mark dirty on a user gesture: xyflow's programmatic fitView on mount fires
+    // onMoveEnd with a null event, which must not dirty an untouched graph.
     setViewport(next);
-    setDirty(true);
+    if (event !== null && event !== undefined) setDirty(true);
   }, []);
 
   const selectNode = useCallback((id: string | null) => setSelectedNodeId(id), []);

@@ -82,6 +82,19 @@ describe("useFlowEditor", () => {
     expect(result.current.dirty).toBe(true);
   });
 
+  it("marks dirty on a user pan/zoom but not on a programmatic fitView", () => {
+    const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
+    const viewport = { x: 1, y: 2, zoom: 1.5 };
+
+    // programmatic fitView fires onMoveEnd with a null event
+    act(() => result.current.onMoveEnd(null, viewport));
+    expect(result.current.dirty).toBe(false);
+
+    // a user gesture carries an event
+    act(() => result.current.onMoveEnd(new MouseEvent("mouseup"), viewport));
+    expect(result.current.dirty).toBe(true);
+  });
+
   it("marks dirty on an edge removal", () => {
     const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
     act(() =>
