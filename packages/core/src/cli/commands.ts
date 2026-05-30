@@ -18,7 +18,7 @@ import { createRunState } from "../runtime/state.ts";
 import { cancelRun, retryRun } from "../runtime/runMutations.ts";
 import { openRunsDatabase } from "../runtime/db/connection.ts";
 import { RunRepository } from "../runtime/db/runRepository.ts";
-import type { RunSummary, RunMeta } from "../runtime/db/runRepository.ts";
+import type { RunSummary, RunMeta, LatestRun } from "../runtime/db/runRepository.ts";
 import { SpecStore, chooseWriteRoot } from "../runtime/specStore.ts";
 import type { SpecSummary, SpecDetail, WriteRoots } from "../runtime/specStore.ts";
 import { fromObject } from "../schema/load.ts";
@@ -120,6 +120,11 @@ export function cmdRunList(dbPath: string, activeOnly: boolean): RunState[] {
 /** Flat run summaries for the dashboard Runs page (see {@link RunSummary}). */
 export function cmdRunListSummary(dbPath: string, activeOnly: boolean): RunSummary[] {
   return repository(dbPath).listRunSummaries(activeOnly);
+}
+
+/** Map each workflow id to its most recent run (for the Templates page). */
+export function cmdRunLatest(dbPath: string): Record<string, LatestRun> {
+  return repository(dbPath).latestRunByWorkflow();
 }
 
 /** Load one spec (graph + ui + path) for the editor. */

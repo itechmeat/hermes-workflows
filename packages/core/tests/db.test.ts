@@ -168,3 +168,62 @@ describe("RunRepository — run summaries", () => {
     expect(s?.current_node).toBe("a");
   });
 });
+
+describe("RunRepository — latest run by workflow", () => {
+  let ldir: string;
+  let ldb: Database;
+  let lrepo: RunRepository;
+  const wfB = fromObject({ ...workflow, id: "wfB" }).workflow;
+
+  beforeAll(async () => {
+    ldir = await mkdtemp(join(tmpdir(), "hw-latest-"));
+    ldb = openRunsDatabase(join(ldir, "runs.db"));
+    lrepo = new RunRepository(ldb);
+  });
+
+  afterAll(async () => {
+    ldb.close();
+    await rm(ldir, { recursive: true, force: true });
+  });
+
+  test("maps each workflow to its most recent run by started_at", () => {
+    const older = createRunState(workflow, "wf-older");
+    older.status = "completed";
+    lrepo.saveRun(older, { started_at: 100, finished_at: 150 });
+
+    const newer = createRunState(workflow, "wf-newer");
+    newer.status = "running";
+    lrepo.saveRun(newer, { started_at: 200 });
+
+    const otherWf = createRunState(wfB, "wfB-run");
+    otherWf.status = "completed";
+    lrepo.saveRun(otherWf, { started_at: 50, finished_at: 80 });
+
+    const latest = lrepo.latestRunByWorkflow();
+    expect(latest["wf"]).toEqual({
+      run_id: "wf-newer",
+      status: "running",
+      started_at: 200,
+    });
+    expect(latest["wfB"]).toEqual({
+      run_id: "wfB-run",
+      status: "completed",
+      started_at: 50,
+      finished_at: 80,
+    });
+  });
+
+  test("breaks ties on run_id and omits workflows with no run", () => {
+    const a = createRunState(workflow, "tie-a");
+    a.status = "completed";
+    lrepo.saveRun(a, { started_at: 999, finished_at: 1000 });
+    const b = createRunState(workflow, "tie-b");
+    b.status = "completed";
+    lrepo.saveRun(b, { started_at: 999, finished_at: 1000 });
+
+    // equal started_at -> higher run_id wins ("tie-b" > "tie-a") so the result
+    // is stable regardless of SQLite row order.
+    expect(lrepo.latestRunByWorkflow()["wf"]?.run_id).toBe("tie-b");
+    expect(lrepo.latestRunByWorkflow()["never-ran"]).toBeUndefined();
+  });
+});

@@ -35,6 +35,14 @@ export interface RunSummary {
   error?: string;
 }
 
+/** The most recent run for one workflow, for the Templates page run columns. */
+export interface LatestRun {
+  run_id: string;
+  status: RunStatus;
+  started_at?: number;
+  finished_at?: number;
+}
+
 const ACTIVE_STATUSES: readonly RunStatus[] = ["created", "running", "waiting"];
 
 /** Node statuses that mark a node as the one a run is currently working on. */
@@ -222,6 +230,41 @@ export class RunRepository {
         : this.db.query(`SELECT * FROM workflow_runs`).all()
     ) as RunRow[];
     return rows.map((row) => this.toSummary(row));
+  }
+
+  /**
+   * Map each workflow id to its most recent run. "Most recent" is the highest
+   * `started_at` (a not-yet-started run sorts as -1, below any stamped run),
+   * with ties broken on the higher `run_id` so the result is stable regardless
+   * of SQLite row order. Workflows with no run are absent from the map.
+   */
+  latestRunByWorkflow(): Record<string, LatestRun> {
+    const rows = this.db
+      .query(
+        `SELECT id, workflow_id, status, started_at, finished_at FROM workflow_runs`,
+      )
+      .all() as Pick<
+      RunRow,
+      "id" | "workflow_id" | "status" | "started_at" | "finished_at"
+    >[];
+    const latest: Record<string, LatestRun> = {};
+    const sortKey: Record<string, number> = {};
+    for (const row of rows) {
+      const started = row.started_at ?? -1;
+      const prev = sortKey[row.workflow_id];
+      const prevRun = latest[row.workflow_id];
+      const wins =
+        prev === undefined ||
+        started > prev ||
+        (started === prev && prevRun !== undefined && row.id > prevRun.run_id);
+      if (!wins) continue;
+      sortKey[row.workflow_id] = started;
+      const run: LatestRun = { run_id: row.id, status: row.status as RunStatus };
+      if (row.started_at !== null) run.started_at = row.started_at;
+      if (row.finished_at !== null) run.finished_at = row.finished_at;
+      latest[row.workflow_id] = run;
+    }
+    return latest;
   }
 
   private toSummary(row: RunRow): RunSummary {

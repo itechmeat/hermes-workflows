@@ -34,6 +34,17 @@ describe("cli.ts dispatcher", () => {
     const { code } = await run(["run-load", "--id", "x"]);
     expect(code).not.toBe(0);
   });
+
+  test("run-latest maps a workflow to its created run", async () => {
+    const base = await mkdtemp(join(tmpdir(), "hw-latest-cli-"));
+    const db = join(base, "runs.db");
+    const created = await run(["run-create", "--db", db, example, "--id", "rl-1"]);
+    expect(created.code).toBe(0);
+    const { code, json } = await run(["run-latest", "--db", db]);
+    expect(code).toBe(0);
+    expect((json as Record<string, { run_id: string }>)["feature-development"]?.run_id).toBe("rl-1");
+    await rm(base, { recursive: true, force: true });
+  });
 });
 
 describe("cli.ts dispatcher — spec write round trip", () => {

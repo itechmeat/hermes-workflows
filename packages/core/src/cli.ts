@@ -17,6 +17,7 @@ import {
   cmdRunSave,
   cmdRunList,
   cmdRunListSummary,
+  cmdRunLatest,
   cmdListSpecs,
   cmdSpecGet,
   cmdSpecSave,
@@ -107,6 +108,8 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
       return cmdRunList(required(db, "--db"), flags["active"] === true);
     case "run-list-summary":
       return cmdRunListSummary(required(db, "--db"), flags["active"] === true);
+    case "run-latest":
+      return cmdRunLatest(required(db, "--db"));
     case "spec-get":
       return cmdSpecGet(rootsOf(flags), required(str(flags, "id"), "--id"));
     case "spec-save":
