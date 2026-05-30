@@ -1,11 +1,17 @@
 """Resolve user-owned storage paths. Everything lives under the Hermes home
 (``~/.hermes`` by default, override with ``HERMES_HOME``). The runtime board is
-where agent_task Kanban cards are created."""
+where agent_task Kanban cards are created.
+
+Plugin settings (the dashboard Settings page) live in the Hermes config under
+the ``plugins.workflows`` namespace — reusing the host's config store rather
+than a bespoke file. Effective values resolve config ▸ env ▸ default, so an
+unset setting keeps today's behaviour."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 
 def hermes_home() -> Path:
@@ -82,3 +88,204 @@ def core_cli() -> list[str]:
 
 def spec_roots() -> list[str]:
     return [str(global_workflows_dir()), str(templates_dir())]
+
+
+# --- plugin settings (Hermes config `plugins.workflows`) ---------------------
+
+# Field descriptors for the Settings page. ``enforced`` marks whether the engine
+# already honours the knob (the UI labels the rest as not-yet-enforced). ``env``
+# names an environment variable that overrides the default but loses to a stored
+# config value. Path defaults are computed per-home in ``_default_for``.
+SETTINGS_SCHEMA: dict = {
+    "namespace": "plugins.workflows",
+    "groups": [
+        {
+            "key": "storage",
+            "label": "Storage",
+            "fields": [
+                {"key": "global_workflows_path", "type": "string", "enforced": True},
+                {"key": "runs_db_path", "type": "string", "enforced": True},
+            ],
+        },
+        {
+            "key": "execution",
+            "label": "Execution",
+            "fields": [
+                {
+                    "key": "default_mode",
+                    "type": "enum",
+                    "options": ["durable", "direct"],
+                    "default": "durable",
+                    "enforced": True,
+                },
+                {"key": "max_parallel_runs", "type": "int", "default": 4, "enforced": False},
+                {"key": "default_timeout_seconds", "type": "int", "default": 120, "enforced": False},
+            ],
+        },
+        {
+            "key": "kanban",
+            "label": "Kanban",
+            "fields": [
+                {
+                    "key": "use_workflow_columns",
+                    "type": "enum",
+                    "options": ["auto", "on", "off"],
+                    "default": "auto",
+                    "enforced": False,
+                },
+                {
+                    "key": "internal_board",
+                    "type": "string",
+                    "default": "hermes-workflows",
+                    "env": "HERMES_WORKFLOWS_BOARD",
+                    "enforced": True,
+                },
+            ],
+        },
+        {
+            "key": "open_second_brain",
+            "label": "OpenSecondBrain",
+            "fields": [
+                {
+                    "key": "mode",
+                    "type": "enum",
+                    "options": ["auto", "open_second_brain", "none"],
+                    "default": "auto",
+                    "enforced": True,
+                },
+                {"key": "fail_open", "type": "bool", "default": True, "enforced": True},
+                {"key": "write_run_summaries", "type": "bool", "default": True, "enforced": True},
+                {"key": "write_node_failures", "type": "bool", "default": True, "enforced": True},
+                {"key": "write_node_events", "type": "bool", "default": False, "enforced": True},
+            ],
+        },
+    ],
+}
+
+
+def _iter_fields():
+    for group in SETTINGS_SCHEMA["groups"]:
+        for field in group["fields"]:
+            yield field
+
+
+def _default_for(field: dict) -> Any:
+    """The effective default — path fields resolve against the current home."""
+    key = field["key"]
+    if key == "global_workflows_path":
+        return str(global_workflows_dir())
+    if key == "runs_db_path":
+        return str(runs_db_path())
+    return field.get("default")
+
+
+def _coerce(field: dict, raw: Any) -> Any:
+    """Coerce a raw value (e.g. an env string) to the field's type."""
+    if raw is None:
+        return None
+    kind = field["type"]
+    if kind == "int":
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+    if kind == "bool":
+        if isinstance(raw, bool):
+            return raw
+        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+    return raw
+
+
+def _stored_settings() -> dict:
+    """The ``plugins.workflows`` namespace from the Hermes config, or ``{}``.
+    Imported lazily so environments without ``hermes_cli`` (e.g. the core test
+    venv) can still import this module."""
+    try:
+        from hermes_cli import config as hermes_config
+    except Exception:
+        return {}
+    plugins = hermes_config.load_config().get("plugins")
+    if not isinstance(plugins, dict):
+        return {}
+    workflows = plugins.get("workflows")
+    return workflows if isinstance(workflows, dict) else {}
+
+
+def settings() -> dict:
+    """Effective plugin settings: for each field, the stored config value wins,
+    then an env override, then the default. Unset everywhere → today's behaviour."""
+    stored = _stored_settings()
+    values: dict = {}
+    for field in _iter_fields():
+        key = field["key"]
+        if key in stored:
+            values[key] = _coerce(field, stored[key])
+            continue
+        env_name = field.get("env")
+        env_val = os.environ.get(env_name) if env_name else None
+        if env_val is not None:
+            values[key] = _coerce(field, env_val)
+            continue
+        values[key] = _default_for(field)
+    return values
+
+
+def settings_schema() -> dict:
+    """JSON-serializable schema for the Settings page: groups and fields with
+    their resolved (concrete) defaults, so the client can render and reset."""
+    groups = []
+    for group in SETTINGS_SCHEMA["groups"]:
+        fields = []
+        for field in group["fields"]:
+            entry = {
+                "key": field["key"],
+                "type": field["type"],
+                "enforced": bool(field.get("enforced", False)),
+                "default": _default_for(field),
+            }
+            if "options" in field:
+                entry["options"] = list(field["options"])
+            fields.append(entry)
+        groups.append({"key": group["key"], "label": group["label"], "fields": fields})
+    return {"namespace": SETTINGS_SCHEMA["namespace"], "groups": groups}
+
+
+def validate_settings(incoming: dict) -> dict:
+    """Validate and coerce a settings payload against the schema. Unknown keys
+    and type/enum violations raise ``ValueError``; returns the coerced subset of
+    recognised keys (only the provided ones)."""
+    by_key = {field["key"]: field for field in _iter_fields()}
+    unknown = set(incoming) - set(by_key)
+    if unknown:
+        raise ValueError(f"unknown setting(s): {', '.join(sorted(unknown))}")
+    cleaned: dict = {}
+    for key, raw in incoming.items():
+        field = by_key[key]
+        value = _coerce(field, raw)
+        if field["type"] == "int" and value is None:
+            raise ValueError(f"'{key}' must be an integer")
+        if field["type"] == "enum" and value not in field["options"]:
+            raise ValueError(f"'{key}' must be one of {field['options']}")
+        cleaned[key] = value
+    return cleaned
+
+
+def save_settings(incoming: dict) -> dict:
+    """Persist a validated settings payload to the Hermes config
+    ``plugins.workflows`` namespace (merging, not clobbering other config), and
+    return the new effective values. Raises ``ValueError`` on invalid input."""
+    cleaned = validate_settings(incoming)
+    from hermes_cli import config as hermes_config
+
+    cfg = hermes_config.load_config()
+    plugins = cfg.setdefault("plugins", {})
+    if not isinstance(plugins, dict):
+        plugins = {}
+        cfg["plugins"] = plugins
+    workflows = plugins.setdefault("workflows", {})
+    if not isinstance(workflows, dict):
+        workflows = {}
+        plugins["workflows"] = workflows
+    workflows.update(cleaned)
+    hermes_config.save_config(cfg)
+    return settings()
