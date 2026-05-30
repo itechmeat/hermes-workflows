@@ -318,6 +318,67 @@ async def retry_run(run_id: str, payload: dict = Body(default={})) -> dict:
         raise HTTPException(status_code=500, detail="failed to retry run") from exc
 
 
+@router.get("/schedules")
+async def list_schedules() -> dict:
+    """List every workflow cron schedule (native Hermes cron jobs). Read-only
+    projection of the cron bridge — Hermes cron owns the schedules."""
+    from hermes_workflows.bridge import cron as cron_bridge
+
+    return {"schedules": cron_bridge.list_workflow_schedules()}
+
+
+@router.post("/schedules/{job_id}/pause")
+async def pause_schedule(job_id: str) -> dict:
+    from hermes_workflows.bridge import cron as cron_bridge
+
+    if not cron_bridge.pause(job_id):
+        raise HTTPException(status_code=404, detail="schedule not found")
+    return {"ok": True}
+
+
+@router.post("/schedules/{job_id}/resume")
+async def resume_schedule(job_id: str) -> dict:
+    from hermes_workflows.bridge import cron as cron_bridge
+
+    if not cron_bridge.resume(job_id):
+        raise HTTPException(status_code=404, detail="schedule not found")
+    return {"ok": True}
+
+
+@router.post("/schedules/{job_id}/run")
+async def run_schedule_now(job_id: str) -> dict:
+    """Trigger a schedule's workflow on the next scheduler tick."""
+    from hermes_workflows.bridge import cron as cron_bridge
+
+    if not cron_bridge.run_now(job_id):
+        raise HTTPException(status_code=404, detail="schedule not found")
+    return {"ok": True}
+
+
+@router.put("/schedules/{job_id}")
+async def edit_schedule(job_id: str, cron: str = Body(..., embed=True)) -> dict:
+    """Change a schedule's cron expression. A bad expression is ``400``; an
+    unknown job is ``404``. Edits the live cron job, not the on-disk spec."""
+    from hermes_workflows.bridge import cron as cron_bridge
+
+    try:
+        updated = cron_bridge.edit_schedule(job_id, cron)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="schedule not found")
+    return {"ok": True, "cron_expression": cron}
+
+
+@router.delete("/schedules/{job_id}")
+async def delete_schedule(job_id: str) -> dict:
+    from hermes_workflows.bridge import cron as cron_bridge
+
+    if not cron_bridge.remove(job_id):
+        raise HTTPException(status_code=404, detail="schedule not found")
+    return {"deleted": True}
+
+
 @router.get("/o2b-status")
 async def o2b_status() -> dict:
     """Best-effort OpenSecondBrain availability for the connection badge.
