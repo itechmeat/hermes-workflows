@@ -3,6 +3,7 @@
 from .base import Completion, NodeExecutor, select_executor
 from .direct_executor import DirectExecutor, RunnerNotFound
 from .kanban_executor import KanbanExecutor
+from .script_executor import ScriptExecutor
 
 __all__ = [
     "Completion",
@@ -11,4 +12,5 @@ __all__ = [
     "KanbanExecutor",
     "DirectExecutor",
     "RunnerNotFound",
+    "ScriptExecutor",
 ]
