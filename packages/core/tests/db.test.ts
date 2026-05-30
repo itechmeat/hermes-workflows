@@ -42,11 +42,7 @@ describe("openRunsDatabase", () => {
     const tables = db
       .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[];
-    expect(tables.map((t) => t.name)).toEqual([
-      "workflow_node_runs",
-      "workflow_runs",
-      "workflow_schedules",
-    ]);
+    expect(tables.map((t) => t.name)).toEqual(["workflow_node_runs", "workflow_runs"]);
   });
 });
 
@@ -99,24 +95,5 @@ describe("RunRepository — runs", () => {
     const ids = repo.listActiveRuns().map((r) => r.run_id);
     expect(ids).toContain("run-active");
     expect(ids).not.toContain("run-finished");
-  });
-});
-
-describe("RunRepository — schedules", () => {
-  test("creates, reads, toggles, and deletes a schedule", () => {
-    repo.saveSchedule({
-      id: "sch-1",
-      workflow_id: "wf",
-      cron_expression: "0 9 * * *",
-      hermes_cron_id: "cron_abc",
-      enabled: true,
-    });
-    expect(repo.getSchedule("sch-1")?.hermes_cron_id).toBe("cron_abc");
-
-    repo.setScheduleEnabled("sch-1", false);
-    expect(repo.getSchedule("sch-1")?.enabled).toBe(false);
-
-    repo.deleteSchedule("sch-1");
-    expect(repo.getSchedule("sch-1")).toBeNull();
   });
 });

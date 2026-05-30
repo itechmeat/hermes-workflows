@@ -80,7 +80,7 @@ export type { HermesPlan, CompiledKanbanTask, CompiledCronJob } from "./compiler
 export { openRunsDatabase } from "./runtime/db/connection.ts";
 export { SCHEMA_SQL } from "./runtime/db/schema.ts";
 export { RunRepository } from "./runtime/db/runRepository.ts";
-export type { WorkflowSchedule, RunMeta } from "./runtime/db/runRepository.ts";
+export type { RunMeta } from "./runtime/db/runRepository.ts";
 export { SpecStore, SpecValidationError, SpecExistsError, chooseWriteRoot } from "./runtime/specStore.ts";
 export type { SpecSummary, SpecDetail, WriteRoots } from "./runtime/specStore.ts";
 export { ArtifactStore } from "./runtime/artifacts.ts";

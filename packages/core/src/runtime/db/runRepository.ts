@@ -1,22 +1,13 @@
 /**
- * Typed persistence for workflow runs, node runs, and cron schedules. Thin: it
- * stores and reconstructs RunState and schedule rows, with no orchestration
- * logic. The bridge loads a run, calls `advance`, applies updates, and saves.
+ * Typed persistence for workflow runs and node runs. Thin: it stores and
+ * reconstructs RunState with no orchestration logic. The bridge loads a run,
+ * calls `advance`, applies updates, and saves. Cron schedules are owned by
+ * Hermes cron, not this repository.
  */
 
 import type { Database } from "bun:sqlite";
 
 import type { RunState, RunStatus, NodeRunState } from "../../schema/run.ts";
-
-export interface WorkflowSchedule {
-  id: string;
-  workflow_id: string;
-  cron_expression: string;
-  hermes_cron_id?: string;
-  enabled: boolean;
-  last_run_id?: string;
-  next_run_at?: number;
-}
 
 /** Extra run-level fields persisted alongside the reconstructable RunState. */
 export interface RunMeta {
@@ -49,16 +40,6 @@ interface NodeRow {
   seq: number | null;
   output_json: string | null;
   error: string | null;
-}
-
-interface ScheduleRow {
-  id: string;
-  workflow_id: string;
-  cron_expression: string;
-  hermes_cron_id: string | null;
-  enabled: number;
-  last_run_id: string | null;
-  next_run_at: number | null;
 }
 
 export class RunRepository {
@@ -178,65 +159,4 @@ export class RunRepository {
   private hydrate(ids: { id: string }[]): RunState[] {
     return ids.map((r) => this.loadRun(r.id)).filter((r): r is RunState => r !== null);
   }
-
-  // --- schedules ---
-
-  saveSchedule(schedule: WorkflowSchedule): void {
-    this.db
-      .query(
-        `INSERT INTO workflow_schedules
-           (id, workflow_id, cron_expression, hermes_cron_id, enabled, last_run_id, next_run_at)
-         VALUES ($id, $wf, $cron, $cronId, $enabled, $last, $next)
-         ON CONFLICT(id) DO UPDATE SET
-           cron_expression = excluded.cron_expression,
-           hermes_cron_id = excluded.hermes_cron_id,
-           enabled = excluded.enabled,
-           last_run_id = excluded.last_run_id,
-           next_run_at = excluded.next_run_at`,
-      )
-      .run({
-        $id: schedule.id,
-        $wf: schedule.workflow_id,
-        $cron: schedule.cron_expression,
-        $cronId: schedule.hermes_cron_id ?? null,
-        $enabled: schedule.enabled ? 1 : 0,
-        $last: schedule.last_run_id ?? null,
-        $next: schedule.next_run_at ?? null,
-      });
-  }
-
-  getSchedule(id: string): WorkflowSchedule | null {
-    const row = this.db.query(`SELECT * FROM workflow_schedules WHERE id = $id`).get({ $id: id }) as
-      | ScheduleRow
-      | null;
-    return row ? toSchedule(row) : null;
-  }
-
-  listSchedules(): WorkflowSchedule[] {
-    const rows = this.db.query(`SELECT * FROM workflow_schedules`).all() as ScheduleRow[];
-    return rows.map(toSchedule);
-  }
-
-  setScheduleEnabled(id: string, enabled: boolean): void {
-    this.db
-      .query(`UPDATE workflow_schedules SET enabled = $enabled WHERE id = $id`)
-      .run({ $id: id, $enabled: enabled ? 1 : 0 });
-  }
-
-  deleteSchedule(id: string): void {
-    this.db.query(`DELETE FROM workflow_schedules WHERE id = $id`).run({ $id: id });
-  }
-}
-
-function toSchedule(row: ScheduleRow): WorkflowSchedule {
-  const schedule: WorkflowSchedule = {
-    id: row.id,
-    workflow_id: row.workflow_id,
-    cron_expression: row.cron_expression,
-    enabled: row.enabled === 1,
-  };
-  if (row.hermes_cron_id !== null) schedule.hermes_cron_id = row.hermes_cron_id;
-  if (row.last_run_id !== null) schedule.last_run_id = row.last_run_id;
-  if (row.next_run_at !== null) schedule.next_run_at = row.next_run_at;
-  return schedule;
 }
