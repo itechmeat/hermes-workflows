@@ -28,6 +28,8 @@ def list_workflows(*, roots: Sequence[str], core_cli: Sequence[str]) -> dict:
             "name": spec["name"],
             "scope": spec["scope"]["type"],
             "trigger": spec["trigger"],
+            # Absent in the spec means enabled (see core isWorkflowEnabled).
+            "enabled": spec.get("enabled", True),
         }
         for spec in _list_specs(roots, core_cli)
     ]

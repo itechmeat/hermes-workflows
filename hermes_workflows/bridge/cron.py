@@ -158,6 +158,18 @@ def list_workflow_schedules() -> list[dict]:
     return [_schedule_row(job) for job in cj.list_jobs(include_disabled=True) if _is_workflow_job(job)]
 
 
+def find_workflow_job(workflow_id: str) -> Optional[dict]:
+    """The native Cron job backing a workflow's cron trigger, or ``None`` when
+    the workflow has no schedule (e.g. a manual-only workflow)."""
+    return find_by_name(f"{WORKFLOW_JOB_PREFIX}{workflow_id}")
+
+
+def next_run_by_workflow() -> dict[str, object]:
+    """Map each scheduled workflow id to its next-run timestamp, for the
+    Templates page. Workflows without a cron schedule are simply absent."""
+    return {row["workflow_id"]: row["next_run"] for row in list_workflow_schedules()}
+
+
 def run_now(job_id: str) -> bool:
     """Trigger a schedule's workflow on the next scheduler tick."""
     return cj.trigger_job(job_id) is not None

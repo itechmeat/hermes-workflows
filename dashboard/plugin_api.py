@@ -35,11 +35,109 @@ def _spec_tempfile(workflow: dict, ui: object) -> Iterator[str]:
         os.unlink(tmp)
 
 
+def _save_spec(workflow: dict, ui: object) -> dict:
+    """Validate-and-persist a ``{workflow, ui?}`` through the core ``spec-save``.
+    A bad graph or id maps to ``400``; other failures to ``500``. Shared by the
+    save and enable/disable routes so the spec-save plumbing lives in one place."""
+    from hermes_workflows import cli_bridge, config
+
+    with _spec_tempfile(workflow, ui) as tmp:
+        try:
+            return cli_bridge.invoke(
+                [
+                    *config.core_cli(),
+                    "spec-save",
+                    "--roots",
+                    ",".join(config.spec_roots()),
+                    "--global-root",
+                    str(config.global_workflows_dir()),
+                    "--templates-root",
+                    str(config.templates_dir()),
+                    "--spec-file",
+                    tmp,
+                ]
+            )
+        except cli_bridge.CoreBridgeError as exc:
+            if exc.kind in ("SpecValidationError", "WorkflowParseError"):
+                raise HTTPException(status_code=400, detail=exc.detail) from exc
+            raise HTTPException(status_code=500, detail="failed to save workflow") from exc
+
+
 @router.get("/workflows")
 async def list_workflows() -> dict:
+    """List workflows for the Templates page. Each row carries ``enabled`` plus
+    the run/schedule columns: ``last_run_at`` / ``last_status`` (the workflow's
+    most recent run) and ``next_run_at`` (its cron schedule, ``null`` when it has
+    none). The columns are best-effort overlays — listing never fails if the run
+    store is empty or the cron module is unavailable."""
     from hermes_workflows import config, tools
 
-    return tools.list_workflows(roots=config.spec_roots(), core_cli=config.core_cli())
+    result = tools.list_workflows(roots=config.spec_roots(), core_cli=config.core_cli())
+    latest = _latest_runs()
+    next_runs = _next_run_by_workflow()
+    for wf in result["workflows"]:
+        run = latest.get(wf["id"]) or {}
+        wf["last_run_at"] = run.get("started_at")
+        wf["last_status"] = run.get("status")
+        wf["next_run_at"] = next_runs.get(wf["id"])
+    return result
+
+
+def _latest_runs() -> dict:
+    """Map each workflow id to its most recent run (core ``run-latest``). A
+    best-effort overlay: any non-mapping result yields no enrichment."""
+    from hermes_workflows import cli_bridge, config
+
+    result = cli_bridge.invoke(
+        [*config.core_cli(), "run-latest", "--db", str(config.runs_db_path())]
+    )
+    return result if isinstance(result, dict) else {}
+
+
+def _next_run_by_workflow() -> dict:
+    """Map each scheduled workflow id to its next-run timestamp. Returns ``{}``
+    when the Hermes cron module is unavailable (it is optional at runtime) or the
+    lookup fails — the columns are an overlay, never a hard dependency."""
+    try:
+        from hermes_workflows.bridge import cron as cron_bridge
+
+        return cron_bridge.next_run_by_workflow()
+    except Exception:
+        return {}
+
+
+@router.put("/workflows/{workflow_id}/enabled")
+async def set_workflow_enabled(workflow_id: str, enabled: bool = Body(..., embed=True)) -> dict:
+    """Enable or disable a workflow. Writes ``enabled`` into the spec (the single
+    source of truth) and, when the workflow has a cron schedule, pauses it on
+    disable / resumes it on enable so the schedule follows the flag. ``404`` if
+    the workflow does not exist."""
+    from hermes_workflows import cli_bridge, config
+
+    detail = cli_bridge.invoke(
+        [*config.core_cli(), "spec-get", "--roots", ",".join(config.spec_roots()), "--id", workflow_id]
+    )
+    if detail is None:
+        raise HTTPException(status_code=404, detail="workflow not found")
+
+    workflow = dict(detail["workflow"])
+    workflow["enabled"] = enabled
+    saved = _save_spec(workflow, detail.get("ui"))
+    _sync_schedule_enabled(workflow_id, enabled)
+    return saved
+
+
+def _sync_schedule_enabled(workflow_id: str, enabled: bool) -> None:
+    """Pause/resume the workflow's cron job to match the spec flag. No-op when
+    the workflow has no schedule or the cron module is unavailable."""
+    try:
+        from hermes_workflows.bridge import cron as cron_bridge
+    except Exception:
+        return
+    job = cron_bridge.find_workflow_job(workflow_id)
+    if job is None:
+        return
+    (cron_bridge.resume if enabled else cron_bridge.pause)(job["id"])
 
 
 @router.post("/workflows")
@@ -176,34 +274,26 @@ async def get_workflow(workflow_id: str) -> dict:
 async def save_workflow(workflow_id: str, payload: dict = Body(...)) -> dict:
     """Persist an edited graph. Body is ``{workflow, ui?}``; the body id must
     match the URL. An invalid graph is rejected by the core (400)."""
-    from hermes_workflows import cli_bridge, config
-
     workflow = payload.get("workflow")
     if not isinstance(workflow, dict):
         raise HTTPException(status_code=400, detail="body must contain a 'workflow' object")
     if workflow.get("id") != workflow_id:
         raise HTTPException(status_code=400, detail="workflow id in body does not match the URL")
 
-    with _spec_tempfile(workflow, payload.get("ui")) as tmp:
-        try:
-            return cli_bridge.invoke(
-                [
-                    *config.core_cli(),
-                    "spec-save",
-                    "--roots",
-                    ",".join(config.spec_roots()),
-                    "--global-root",
-                    str(config.global_workflows_dir()),
-                    "--templates-root",
-                    str(config.templates_dir()),
-                    "--spec-file",
-                    tmp,
-                ]
-            )
-        except cli_bridge.CoreBridgeError as exc:
-            if exc.kind in ("SpecValidationError", "WorkflowParseError"):
-                raise HTTPException(status_code=400, detail=exc.detail) from exc
-            raise HTTPException(status_code=500, detail="failed to save workflow") from exc
+    return _save_spec(workflow, payload.get("ui"))
+
+
+def _workflow_enabled(workflow_id: str) -> bool:
+    """Whether the workflow's spec permits runs. Absent ``enabled`` means on;
+    an unknown workflow is treated as enabled (the run path 404s separately)."""
+    from hermes_workflows import cli_bridge, config
+
+    detail = cli_bridge.invoke(
+        [*config.core_cli(), "spec-get", "--roots", ",".join(config.spec_roots()), "--id", workflow_id]
+    )
+    if detail is None:
+        return True
+    return detail["workflow"].get("enabled", True) is not False
 
 
 def _spec_path_or_404(workflow_id: str) -> str:
@@ -244,6 +334,8 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
         spec = _spec_path_for_workflow(engine, workflow_id)
     except SystemExit as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not _workflow_enabled(workflow_id):
+        raise HTTPException(status_code=409, detail="workflow is disabled")
     project_id = _default_project(engine, spec, payload.get("project_id"))
     run_id = f"{workflow_id}-{uuid.uuid4().hex[:8]}"
     return tools.run_workflow(

@@ -20,6 +20,8 @@ export interface SpecSummary {
   name: string;
   scope: Scope;
   trigger: Trigger["type"];
+  /** Mirrors the spec's `enabled` field; absent means enabled. */
+  enabled?: boolean;
   path: string;
 }
 
@@ -77,6 +79,7 @@ export class SpecStore {
         name: workflow.name,
         scope: workflow.scope,
         trigger: workflow.trigger.type,
+        ...(workflow.enabled === undefined ? {} : { enabled: workflow.enabled }),
         path,
       };
     } catch {

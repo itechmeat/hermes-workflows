@@ -99,6 +99,24 @@ def test_list_workflow_schedules(cron_env: Path) -> None:
     assert blog["hermes_cron_id"]
 
 
+def test_find_workflow_job(cron_env: Path) -> None:
+    job_id = cron_bridge.register_workflow_trigger(workflow_id="blog", schedule="every 30m")
+    found = cron_bridge.find_workflow_job("blog")
+    assert found is not None
+    assert found["id"] == job_id
+    assert cron_bridge.find_workflow_job("never-scheduled") is None
+
+
+def test_next_run_by_workflow(cron_env: Path) -> None:
+    cron_bridge.register_workflow_trigger(workflow_id="blog", schedule="every 30m")
+    cron_bridge.register_workflow_trigger(workflow_id="nightly", schedule="every 1h")
+    cron_bridge.sync_workflow_tick(active=True)  # excluded (not a workflow job)
+
+    by_wf = cron_bridge.next_run_by_workflow()
+    assert set(by_wf) == {"blog", "nightly"}
+    assert by_wf["blog"] is not None
+
+
 def test_run_now_triggers_or_reports_missing(cron_env: Path) -> None:
     job_id = cron_bridge.register_workflow_trigger(workflow_id="wf", schedule="every 2m")
     assert cron_bridge.run_now(job_id) is True

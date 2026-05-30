@@ -31,6 +31,12 @@ describe("SpecStore", () => {
     expect(result?.workflow.name).toBe("Feature Development");
   });
 
+  test("summaries carry the enabled flag (absent reads as enabled)", async () => {
+    const summary = (await store.list()).find((s) => s.id === "feature-development");
+    // The example does not set `enabled`, so a disabled view treats it as on.
+    expect(summary?.enabled).not.toBe(false);
+  });
+
   test("returns null for an unknown id", async () => {
     expect(await store.load("nope")).toBeNull();
   });
