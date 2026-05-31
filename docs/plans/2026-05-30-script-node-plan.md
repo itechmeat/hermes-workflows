@@ -1,6 +1,6 @@
 # Script Node — Implementation Plan
 
-NOT started — planning only; awaits operator go-ahead to implement.
+Planning snapshot captured before implementation; the implementation shipped in this PR.
 
 TDD throughout. Core uses `bun test`; the plugin uses pytest (route/cron/kanban
 tests guarded with `importorskip` and run in the Hermes runtime venv); frontend

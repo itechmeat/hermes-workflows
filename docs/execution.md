@@ -74,8 +74,10 @@ A `script` node runs an operator-authored shell command, so its mitigations
   default, so a command runs with no inherited environment: add `PATH` (and any
   of `HOME` / `LANG` / `CI` it needs) to the allowlist, or commands that resolve
   a binary by `PATH` will fail to find it.
-- **Workdir-only cwd and a timeout.** The command runs in its `workdir` and is
-  killed on `timeout_seconds` (settling `failure`).
+- **Workdir and a timeout.** The command runs in its `workdir` and is killed on
+  `timeout_seconds` (settling `failure`). Set a `workdir` to contain the command
+  to a known directory — with none, it runs in the orchestrator's working
+  directory, which is not a deterministic location.
 - **Redacted, capped output.** Captured stdout/stderr is secret-redacted and
   clipped to 100,000 characters before it is persisted.
 

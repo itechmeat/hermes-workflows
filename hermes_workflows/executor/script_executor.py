@@ -5,7 +5,8 @@ file-backed completion. Hermes has no no-agent Kanban task mode, so a script
 node runs here regardless of workflow scope.
 
 Security (TZ §25.2) is enforced, not cosmetic:
-  - the command runs only in its ``workdir``;
+  - the command runs in its ``workdir`` when one is set (set one to contain it;
+    with none, it runs in the orchestrator's working directory — see docs);
   - the environment is an allowlist (the settings-level ``env_allowlist``
     intersected with the node's requested ``env``), never the full process env;
   - a timeout always applies;
@@ -104,6 +105,11 @@ class ScriptExecutor:
         timeout = float(timeout) if timeout is not None else self.timeout_seconds
         env = self._build_env(params.get("env"))
         try:
+            # shell=True is deliberate: the command is operator-authored (the
+            # threat model is "an operator runs their own script", TZ §25.2), and
+            # real steps need shell features (pipes, `&&`, redirection). The gate
+            # + env allowlist + workdir + timeout are the mitigations, not a
+            # restricted argv.
             proc = subprocess.run(
                 command,
                 shell=True,
@@ -136,7 +142,12 @@ class ScriptExecutor:
 
     def _persist(self, handle: str, completion: Completion) -> None:
         self.store_dir.mkdir(parents=True, exist_ok=True)
-        self._path(handle).write_text(
+        path = self._path(handle)
+        # Atomic write: a crash mid-write must not leave a truncated file that a
+        # later tick's poll() would fail to parse — that would wedge the node and
+        # defeat the durable-recovery the idempotency guard relies on.
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(
             json.dumps(
                 {
                     "settled": completion.settled,
@@ -145,6 +156,7 @@ class ScriptExecutor:
                 }
             )
         )
+        os.replace(tmp, path)
 
 
 def _clean(text: Optional[str]) -> str:

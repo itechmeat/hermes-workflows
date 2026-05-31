@@ -1,6 +1,6 @@
 # Script Node — Design
 
-Status: draft (brainstorm complete, Variant 1 chosen) — implementation NOT started
+Status: implemented (Variant 1 chosen)
 Author: orchestrator (via feature-release-playbook)
 Audience: implementation
 
@@ -124,7 +124,7 @@ blocks the lightweight script-only workflows the spec calls out (§18.2).
 
 ## Component / route map (target)
 
-```
+```text
 packages/core/src/
   schema/nodes.ts        + ScriptNode (command, workdir?, timeout_seconds?, env?)
   schema/load.ts         + "script" in NODE_TYPES + parseScript
