@@ -28,6 +28,14 @@ export interface AdvanceResult {
   waiting: string[];
   /** Node status changes to persist (includes resolved condition/finish nodes). */
   node_updates: Record<string, NodeStatus>;
+  /**
+   * Whether the just-scheduled set can run inline (synchronously, no tick
+   * round-trip): non-empty and every scheduled node is a `script` (the script
+   * executor settles in-process). `agent_task` work, or a mixed set, makes the
+   * tick ineligible — those run durably. `condition` / `finish` resolve within
+   * this call and never appear in `schedule`, so they never gate eligibility.
+   */
+  inline_eligible: boolean;
 }
 
 const TERMINAL: ReadonlySet<NodeStatus> = new Set(["completed", "failed", "skipped", "cancelled"]);
@@ -135,12 +143,16 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
     for (const edge of targets) activate(edge.to);
   }
 
+  const inlineEligible =
+    schedule.length > 0 && schedule.every((id) => nodes.get(id)?.type === "script");
+
   return {
     run_status: resolveRunStatus(workflow, run, merged, finishOutcome, failedDeadEnd),
     ...(finishOutcome !== undefined ? { finish_outcome: finishOutcome } : {}),
     schedule,
     waiting,
     node_updates: updates,
+    inline_eligible: inlineEligible,
   };
 }
 

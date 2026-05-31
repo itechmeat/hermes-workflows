@@ -164,4 +164,53 @@ describe("advance — script nodes", () => {
     complete(run, "build", "failure", 1);
     expect(advance(scriptWf, run).run_status).toBe("failed");
   });
+
+  test("a scheduled script step is inline-eligible", () => {
+    // The fresh run schedules only the `build` script node — inline-eligible,
+    // so the engine may advance it synchronously without a tick round-trip.
+    expect(advance(scriptWf, createRunState(scriptWf, "r")).inline_eligible).toBe(true);
+  });
+
+  test("a tick that schedules nothing is not inline-eligible", () => {
+    const run = createRunState(scriptWf, "r");
+    run.status = "running";
+    run.nodes["build"] = { node_id: "build", status: "scheduled" };
+    const result = advance(scriptWf, run);
+    expect(result.schedule).toEqual([]);
+    expect(result.inline_eligible).toBe(false);
+  });
+});
+
+describe("advance — inline eligibility with agent and mixed steps", () => {
+  const mixedWf = fromObject({
+    id: "mixed-inline",
+    name: "Mixed Inline",
+    version: 1,
+    scope: { type: "project" },
+    trigger: { type: "manual" },
+    defaults: { profile: "p" },
+    nodes: [
+      { id: "start", type: "script", command: "echo go" },
+      { id: "agent", type: "agent_task", prompt: "do" },
+      { id: "lint", type: "script", command: "lint" },
+      { id: "done", type: "finish", outcome: "success" },
+    ],
+    edges: [
+      { from: "start", to: "agent" },
+      { from: "start", to: "lint" },
+      { from: "agent", to: "done" },
+      { from: "lint", to: "done" },
+    ],
+  }).workflow;
+
+  test("a step that schedules an agent_task is not inline-eligible", () => {
+    const run = createRunState(mixedWf, "r");
+    run.status = "running";
+    complete(run, "start", "success", 1);
+    const result = advance(mixedWf, run);
+    // `start` fans out to both an agent_task and a script: a single durable
+    // node in the scheduled set makes the whole tick ineligible for inline.
+    expect(result.schedule.toSorted()).toEqual(["agent", "lint"]);
+    expect(result.inline_eligible).toBe(false);
+  });
 });
