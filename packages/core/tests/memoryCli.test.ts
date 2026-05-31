@@ -3,7 +3,14 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { cmdMemoryEvent, cmdMemoryRetro, resolveMemoryProvider } from "../src/index.ts";
+import {
+  cmdMemoryEvent,
+  cmdMemoryRetro,
+  cmdMemoryRetroFromRun,
+  createRunState,
+  fromObject,
+  resolveMemoryProvider,
+} from "../src/index.ts";
 import type { CliRunner } from "../src/index.ts";
 
 function recordingRunner(exitCode = 0): { run: CliRunner; calls: string[][] } {
@@ -96,6 +103,23 @@ describe("memory CLI commands", () => {
     expect(result).toEqual({ ok: true });
     expect(calls[0]).toContain("workflow_retrospective");
     expect(calls[0]).toContain("# Retrospective\n\nok");
+  });
+
+  test("memory-retro from a run file builds the retrospective and writes it", async () => {
+    const { run, calls } = recordingRunner();
+    const { workflow } = fromObject({ ...specObject("open_second_brain"), id: "retro-run", name: "Retro Run" });
+    const path = await spec("retro-run", { ...specObject("open_second_brain"), id: "retro-run", name: "Retro Run" });
+    const runState = createRunState(workflow, "rr-1");
+    runState.status = "completed";
+    runState.nodes["done"] = { node_id: "done", status: "completed", seq: 1 };
+
+    const result = await cmdMemoryRetroFromRun(path, runState, undefined, run);
+    expect(result).toEqual({ ok: true });
+    expect(calls[0]).toContain("workflow_retrospective");
+    // the body is the built retrospective markdown
+    const body = calls[0]?.[calls[0].length - 1] ?? "";
+    expect(body).toContain("rr-1");
+    expect(body).toContain("Result");
   });
 
   test("a provider error is swallowed (fail-open) so the command exits ok", async () => {

@@ -15,6 +15,7 @@ import type { HermesPlan } from "../compiler/compileToHermesPlan.ts";
 import { resolveMemoryProvider } from "../memory/resolveProvider.ts";
 import type { CliRunner } from "../memory/O2BCLIProvider.ts";
 import type { WorkflowMemoryEventKind } from "../memory/MemoryProvider.ts";
+import { buildRetrospective } from "../memory/retrospective.ts";
 import { advance } from "../runtime/advance.ts";
 import type { AdvanceResult } from "../runtime/advance.ts";
 import { createRunState } from "../runtime/state.ts";
@@ -102,6 +103,24 @@ export async function cmdMemoryRetro(
   const workflow = await loadWorkflow(specPath);
   const provider = resolveMemoryProvider(workflow.defaults?.memory, runner);
   await provider.writeRetrospective({ title: title ?? workflow.name, markdown });
+  return { ok: true };
+}
+
+/**
+ * Build the §22.6 retrospective from a run and write it through the
+ * spec-selected provider. The engine calls this (via the CLI) so the markdown
+ * builder stays in the core, not duplicated in the Python orchestrator.
+ */
+export async function cmdMemoryRetroFromRun(
+  specPath: string,
+  run: RunState,
+  title?: string,
+  runner?: CliRunner,
+): Promise<{ ok: true }> {
+  const workflow = await loadWorkflow(specPath);
+  const provider = resolveMemoryProvider(workflow.defaults?.memory, runner);
+  const built = buildRetrospective(workflow, run);
+  await provider.writeRetrospective({ title: title ?? built.title, markdown: built.markdown });
   return { ok: true };
 }
 

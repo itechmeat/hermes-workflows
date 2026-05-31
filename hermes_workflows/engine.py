@@ -42,6 +42,7 @@ class Engine:
         sender: Optional[notifications.Sender] = None,
         default_deliver: Optional[str] = None,
         notifier_profile: Optional[str] = None,
+        memory: Optional[dict] = None,
     ) -> None:
         self.core_cli = list(core_cli)
         self.db_path = db_path
@@ -59,6 +60,10 @@ class Engine:
         self.sender = sender
         self.default_deliver = default_deliver
         self.notifier_profile = notifier_profile
+        # Open Second Brain write policy (the enforced open_second_brain.* knobs):
+        # {mode, write_run_summaries, write_node_failures, write_node_events}.
+        # None or mode 'none' disables all memory writes.
+        self.memory = memory or {}
 
     # --- core CLI helpers -------------------------------------------------
 
@@ -203,6 +208,7 @@ class Engine:
 
         run["status"] = decision["run_status"]
         self._emit_lifecycle(run, decision)
+        self._emit_memory(run, spec_path)
         self._save(run)
         return run
 
@@ -250,6 +256,69 @@ class Engine:
                 f"hermes-workflows: notify failed for run {run.get('run_id')}: {exc}",
                 file=sys.stderr,
             )
+
+    # --- lifecycle effects (memory writes) --------------------------------
+
+    def _emit_memory(self, run: dict, spec_path: str) -> None:
+        """Write Open Second Brain memory on lifecycle transitions, gated by the
+        enforced open_second_brain.* settings and idempotent per (run, event)
+        via the persisted markers. Fail-open (a memory error never fails a run).
+        """
+        mode = self.memory.get("mode")
+        if mode in (None, "none"):
+            return
+        notified = list(run.get("notified") or [])
+        seen = set(notified)
+
+        def mark(key: str) -> None:
+            if key not in seen:
+                seen.add(key)
+                notified.append(key)
+
+        status = run.get("status")
+        wf = run.get("workflow_id")
+        run_id = run.get("run_id")
+
+        # Granular per-run start event (quiet by default).
+        if self.memory.get("write_node_events") and "mem:run_started" not in seen:
+            self._memory_event(spec_path, "run_started", f"{wf} run {run_id} started", "")
+            mark("mem:run_started")
+
+        # One node_failed per newly failed node.
+        if self.memory.get("write_node_failures", True):
+            for node_id, node in run["nodes"].items():
+                if node.get("outcome") != "failure":
+                    continue
+                key = f"mem:node_failed:{node_id}"
+                if key not in seen:
+                    body = node.get("error") or node.get("output") or ""
+                    self._memory_event(spec_path, "node_failed", f"{wf} node {node_id} failed", body)
+                    mark(key)
+
+        # Run summary + retrospective on a terminal run.
+        if self.memory.get("write_run_summaries", True):
+            if status == "completed" and "mem:run_completed" not in seen:
+                self._memory_event(spec_path, "run_completed", f"{wf} run {run_id} completed", "")
+                mark("mem:run_completed")
+            if status in _TERMINAL_STATUSES and "mem:retro" not in seen:
+                self._memory_retro(spec_path, run)
+                mark("mem:retro")
+
+        if notified != (run.get("notified") or []):
+            run["notified"] = notified
+
+    def _memory_event(self, spec_path: str, kind: str, title: str, body: str) -> None:
+        try:
+            self._core(["memory-event", spec_path, "--kind", kind, "--title", title, "--body", body])
+        except Exception as exc:  # noqa: BLE001 - fail-open
+            print(f"hermes-workflows: memory-event failed: {exc}", file=sys.stderr)
+
+    def _memory_retro(self, spec_path: str, run: dict) -> None:
+        try:
+            with _temp_json(run) as run_file:
+                self._core(["memory-retro", spec_path, "--run-file", run_file])
+        except Exception as exc:  # noqa: BLE001 - fail-open
+            print(f"hermes-workflows: memory-retro failed: {exc}", file=sys.stderr)
 
     def _subscribe_card(self, executor: NodeExecutor, run: dict, handle: str, params: Optional[dict]) -> None:
         """Subscribe the run's origin to a Kanban card's terminal events via the

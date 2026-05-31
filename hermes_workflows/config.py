@@ -74,6 +74,17 @@ def script_store_dir() -> Path:
     return workflows_dir() / "scripts"
 
 
+def memory_settings() -> dict:
+    """Open Second Brain write policy from the enforced settings, for the engine:
+    mode + the write_* flags. Driven by the ``open_second_brain.*`` settings."""
+    return {
+        "mode": _setting_value("mode"),
+        "write_run_summaries": bool(_setting_value("write_run_summaries")),
+        "write_node_failures": bool(_setting_value("write_node_failures")),
+        "write_node_events": bool(_setting_value("write_node_events")),
+    }
+
+
 def default_deliver() -> str | None:
     """Fallback Hermes delivery target for run lifecycle notifications when a run
     has no captured origin. ``None`` means deliver nowhere by default."""

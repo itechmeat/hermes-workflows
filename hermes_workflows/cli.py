@@ -62,6 +62,8 @@ def build_engine() -> Engine:
         # configured default target.
         sender=make_sender(),
         default_deliver=config.default_deliver(),
+        # Open Second Brain write policy from the enforced settings.
+        memory=config.memory_settings(),
     )
 
 

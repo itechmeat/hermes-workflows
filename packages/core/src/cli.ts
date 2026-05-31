@@ -14,6 +14,7 @@ import {
   cmdAdvance,
   cmdMemoryEvent,
   cmdMemoryRetro,
+  cmdMemoryRetroFromRun,
   cmdRunCreate,
   cmdRunLoad,
   cmdRunSave,
@@ -106,12 +107,19 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
         str(flags, "title") ?? "",
         str(flags, "body") ?? "",
       );
-    case "memory-retro":
+    case "memory-retro": {
+      // Build the markdown from a run file (the engine's path, keeping the
+      // builder in one place) or take pre-built markdown from --markdown-file.
+      const runFile = str(flags, "run-file");
+      if (runFile !== undefined) {
+        return cmdMemoryRetroFromRun(requireSpec(spec), await readRunFile(runFile), str(flags, "title"));
+      }
       return cmdMemoryRetro(
         requireSpec(spec),
         await Bun.file(required(str(flags, "markdown-file"), "--markdown-file")).text(),
         str(flags, "title"),
       );
+    }
     case "run-create":
       return cmdRunCreate(required(db, "--db"), requireSpec(spec), required(str(flags, "id"), "--id"), str(flags, "project"), str(flags, "origin"));
     case "run-load":

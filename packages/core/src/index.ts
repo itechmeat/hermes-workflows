@@ -109,4 +109,4 @@ export { FailOpenMemoryProvider } from "./memory/FailOpenMemoryProvider.ts";
 export { buildRetrospective } from "./memory/retrospective.ts";
 export type { RetrospectiveMeta } from "./memory/retrospective.ts";
 export { resolveMemoryProvider } from "./memory/resolveProvider.ts";
-export { cmdMemoryEvent, cmdMemoryRetro } from "./cli/commands.ts";
+export { cmdMemoryEvent, cmdMemoryRetro, cmdMemoryRetroFromRun } from "./cli/commands.ts";
