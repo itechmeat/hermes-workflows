@@ -10,8 +10,13 @@
  * provider already no-ops cleanly when O2B is absent, and fail-open swallows any
  * error, so probing availability first would add a call without changing the
  * outcome. The distinction matters only for context *reads*, which are out of
- * scope here. `fail_open` (default true) wraps the provider so a memory error
- * never fails a run.
+ * scope here.
+ *
+ * Redaction is always applied (a security invariant, independent of fail_open):
+ * the base provider is wrapped in {@link RedactingMemoryProvider} before the
+ * fail-open decision, so even `fail_open: false` never writes un-redacted
+ * payloads. `fail_open` (default true) then additionally wraps it so a memory
+ * error never fails a run.
  */
 
 import type { MemoryDefaults } from "../schema/workflow.ts";
@@ -20,6 +25,7 @@ import { NoopMemoryProvider } from "./NoopMemoryProvider.ts";
 import { O2BCLIProvider } from "./O2BCLIProvider.ts";
 import type { CliRunner } from "./O2BCLIProvider.ts";
 import { FailOpenMemoryProvider } from "./FailOpenMemoryProvider.ts";
+import { RedactingMemoryProvider } from "./RedactingMemoryProvider.ts";
 
 export function resolveMemoryProvider(
   defaults: MemoryDefaults = {},
@@ -27,6 +33,7 @@ export function resolveMemoryProvider(
 ): WorkflowMemoryProvider {
   if ((defaults.provider ?? "auto") === "none") return new NoopMemoryProvider();
   // An undefined runner falls back to O2BCLIProvider's default (real `o2b`).
-  const base = new O2BCLIProvider(runner);
+  // Redaction wraps the base unconditionally; fail-open wraps it on top.
+  const base = new RedactingMemoryProvider(new O2BCLIProvider(runner));
   return (defaults.fail_open ?? true) ? new FailOpenMemoryProvider(base) : base;
 }

@@ -58,16 +58,21 @@ def make_sender(
     ``coro_runner`` are injectable for tests; production resolves the router
     from the in-process gateway and bridges the async delivery itself."""
 
-    def send(target: str, message: str) -> None:
+    def send(target: str, message: str) -> bool:
+        """Return True when the message was dispatched to a live target, False
+        when there was no router (headless) or delivery raised - the engine uses
+        this to retry rather than falsely mark an undelivered notice done."""
         try:
             router = router_provider()
             if router is None:
                 logger.debug("no delivery router; skipping notice to %s", target)
-                return
+                return False
             from gateway.delivery import DeliveryTarget
 
             coro_runner(router.deliver(message, [DeliveryTarget.parse(target)]))
+            return True
         except Exception as exc:  # noqa: BLE001 - fail-open: a notice never fails a run
             logger.warning("delivery to %s failed: %s", target, exc)
+            return False
 
     return send

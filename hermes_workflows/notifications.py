@@ -18,8 +18,13 @@ from typing import Callable, Optional, Tuple
 
 from .bridge import notify
 
-# A function that hands (target, message) to Hermes' native delivery.
-Sender = Callable[[str, str], None]
+# A function that hands (target, message) to Hermes' native delivery. It returns
+# whether the message was dispatched to a live target: ``True`` delivered,
+# ``False`` no live target (e.g. headless, no in-process gateway), ``None``
+# unknown (a sender that does not report). The engine only records a notice as
+# delivered when this is not ``False``, so a headless no-op is retried rather
+# than falsely marked done.
+Sender = Callable[[str, str], Optional[bool]]
 
 
 @dataclass
@@ -28,6 +33,7 @@ class Notification:
     event: str
     target: str
     text: str
+    delivered: Optional[bool] = None
 
 
 def resolve_target(origin: Optional[str], default: Optional[str]) -> Optional[str]:
@@ -92,5 +98,5 @@ def notify_run(
         target=target,
         text=text or f"Workflow run {run_id}: {event}",
     )
-    send(note.target, note.text)
+    note.delivered = send(note.target, note.text)
     return note

@@ -28,7 +28,7 @@ class _StubRouter:
 def test_valid_target_delivers_through_the_router() -> None:
     router = _StubRouter()
     send = notify_sender.make_sender(router_provider=lambda: router)
-    send("telegram:99:7", "run complete")
+    assert send("telegram:99:7", "run complete") is True  # reports delivery
 
     assert len(router.calls) == 1
     content, targets = router.calls[0]
@@ -40,15 +40,17 @@ def test_valid_target_delivers_through_the_router() -> None:
 
 def test_no_router_is_a_silent_noop() -> None:
     send = notify_sender.make_sender(router_provider=lambda: None)
-    # Must not raise when delivery is unavailable (e.g. headless cron tick).
-    send("telegram:99:7", "run complete")
+    # Must not raise when delivery is unavailable (e.g. headless cron tick), and
+    # reports False so the engine retries rather than marking the notice done.
+    assert send("telegram:99:7", "run complete") is False
 
 
 def test_router_error_is_swallowed() -> None:
     router = _StubRouter(raises=True)
     send = notify_sender.make_sender(router_provider=lambda: router)
-    # A delivery error never propagates — a notice must never fail a run.
-    send("telegram:99:7", "run complete")
+    # A delivery error never propagates — a notice must never fail a run — and
+    # reports False (not delivered).
+    assert send("telegram:99:7", "run complete") is False
 
 
 def test_target_parsing_covers_origin_local_and_platform_forms() -> None:

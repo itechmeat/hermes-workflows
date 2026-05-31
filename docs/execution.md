@@ -149,10 +149,19 @@ the Sender can reach its delivery router; it never alters dispatch.
   durable project runs that finish on a later cron tick (out-of-process) still
   reach the chat.
 
-Both paths are **idempotent** — a run-lifecycle notice is delivered at most once
-per event, tracked by per-run `notified` markers persisted in `runs.db`, so a run
-that stays terminal across ticks is never re-announced — and **fail-open**: a
-delivery or subscription error is logged and never changes a run outcome.
+Both paths are **idempotent** — a run-lifecycle notice is recorded done at most
+once per event, tracked by per-run `notified` markers persisted in `runs.db`, so
+a run that stays terminal across ticks is never re-announced — and **fail-open**:
+a delivery or subscription error is logged and never changes a run outcome. A
+notice is marked done only when it was actually dispatched to a live target; a
+headless no-op (no in-process gateway) is left unmarked so it is retried on a
+later in-process advance rather than silently lost.
+
+> A `human_review` node has no Kanban card, so the only notice for it is the
+> direct run-lifecycle one. A run that parks on review purely on a headless cron
+> tick therefore relies on the review surfacing on the dashboard (and the notice
+> delivering on the next in-process advance); the direct notice fires
+> immediately for tool-driven and inline runs.
 
 ## Open Second Brain writes
 

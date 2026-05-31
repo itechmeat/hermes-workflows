@@ -56,6 +56,15 @@ describe("resolveMemoryProvider", () => {
     expect(calls[0]).toContain("node_failed");
   });
 
+  test("redacts secrets even when fail_open is false (redaction is unconditional)", async () => {
+    const { run, calls } = recordingRunner();
+    const provider = resolveMemoryProvider({ provider: "open_second_brain", fail_open: false }, run);
+    await provider.writeEvent({ kind: "node_failed", title: "t", body: "token: ghp_ABCDEFGHIJKLMNOPQRSTU" });
+    const body = calls[0]?.[calls[0].length - 1] ?? "";
+    expect(body).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTU");
+    expect(body).toContain("[REDACTED]");
+  });
+
   test("'auto' routes through O2B and fail-open swallows a runner error", async () => {
     // fail_open defaults true: a thrown runner must not propagate.
     const provider = resolveMemoryProvider({ provider: "auto" }, throwingRunner);

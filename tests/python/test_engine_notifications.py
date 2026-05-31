@@ -123,6 +123,25 @@ def test_delivery_error_does_not_change_outcome(tmp_path: Path) -> None:
     assert run["status"] == "completed"  # fail-open: the run still finished
 
 
+def test_undelivered_notice_is_retried_not_falsely_marked(tmp_path: Path) -> None:
+    # A sender that reports no live target (False, e.g. headless) must not mark
+    # the notice done - it is retried on the next advance rather than lost.
+    attempts: list[str] = []
+
+    def headless(_target: str, message: str) -> bool:
+        attempts.append(message)
+        return False  # no live delivery target
+
+    eng = _engine(tmp_path, sender=headless, default="fallback:1")
+    spec = _spec(tmp_path, DONE_SPEC)
+    eng.run(spec, "h-1")
+    eng.advance(spec, "h-1")  # reaches completed; notice attempted, not marked
+    first = sum(1 for m in attempts if "completed" in m)
+    assert first >= 1
+    eng.advance(spec, "h-1")  # retried because it was never marked delivered
+    assert sum(1 for m in attempts if "completed" in m) > first
+
+
 def test_no_sender_means_no_notices_and_no_error(tmp_path: Path) -> None:
     eng = _engine(tmp_path)  # sender=None
     spec = _spec(tmp_path, DONE_SPEC)

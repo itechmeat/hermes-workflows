@@ -28,6 +28,11 @@ REVIEW_OPTIONS = frozenset({"approved", "rejected", "needs_changes"})
 # Terminal run statuses that warrant a single run-lifecycle notice.
 _TERMINAL_STATUSES = frozenset({"completed", "failed"})
 
+# Backstop for the inline drain: a cyclic script-only workflow could stay
+# inline-eligible indefinitely, so cap the synchronous steps per call and let
+# the durable tick carry on past the cap.
+_MAX_INLINE_STEPS = 10_000
+
 
 class Engine:
     def __init__(
@@ -187,10 +192,19 @@ class Engine:
         synchronously) - keep advancing in this same call until the run is
         terminal, waiting, or schedules a durable node. ``default_mode=durable``
         runs exactly one step per call (the unchanged durable behaviour)."""
-        while True:
+        for _ in range(_MAX_INLINE_STEPS):
             run, decision = self._advance_step(spec_path, run_id)
             if not (self._inline_permitted() and decision.get("inline_eligible")):
                 return run
+        # Backstop: a pathological cyclic script-only workflow could stay
+        # inline-eligible forever. Bail out of the synchronous drain and let the
+        # tick continue it durably rather than hang the caller.
+        print(
+            f"hermes-workflows: inline drain hit the {_MAX_INLINE_STEPS}-step cap "
+            f"for run {run_id}; continuing durably",
+            file=sys.stderr,
+        )
+        return run
 
     def _inline_permitted(self) -> bool:
         """Whether the global mode allows the inline drain. ``durable`` never
@@ -249,22 +263,26 @@ class Engine:
 
         status = run.get("status")
         if status in _TERMINAL_STATUSES and status not in seen:
-            self._notify(run, status)
-            mark(status)
+            if self._notify(run, status):
+                mark(status)
         for node_id in decision.get("waiting", []):
             key = f"waiting:{node_id}"
-            if key not in seen:
-                self._notify(run, "waiting", node_id=node_id)
+            if key not in seen and self._notify(run, "waiting", node_id=node_id):
                 mark(key)
 
         if notified != (run.get("notified") or []):
             run["notified"] = notified
 
-    def _notify(self, run: dict, event: str, node_id: Optional[str] = None) -> None:
+    def _notify(self, run: dict, event: str, node_id: Optional[str] = None) -> bool:
+        """Deliver one notice; return whether it should be recorded as done. A
+        headless no-op (no live target) returns False so the notice is retried on
+        a later in-process advance rather than falsely marked. No configured
+        sender, or no target at all, returns True (nothing to deliver, ever -
+        don't keep retrying)."""
         if self.sender is None:
-            return
+            return True
         try:
-            notifications.notify_run(
+            note = notifications.notify_run(
                 run_id=run["run_id"],
                 event=event,
                 send=self.sender,
@@ -277,6 +295,10 @@ class Engine:
                 f"hermes-workflows: notify failed for run {run.get('run_id')}: {exc}",
                 file=sys.stderr,
             )
+            return False  # delivery errored - retry, don't mark
+        if note is None:
+            return True  # no origin and no default target: nowhere to deliver, ever
+        return note.delivered is not False  # False == headless no-op -> retry
 
     # --- lifecycle effects (memory writes) --------------------------------
 

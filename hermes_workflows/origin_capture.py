@@ -15,12 +15,16 @@ its delivery router. It never alters dispatch (always returns ``None``).
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import Any, Optional
 
 from . import runtime
 
-# session key -> opaque origin string (<platform>:<chat>[:<thread>])
-_origins: dict[str, str] = {}
+# session key -> opaque origin string (<platform>:<chat>[:<thread>]). Bounded so
+# the long-lived gateway process never accumulates entries without limit; the
+# oldest is evicted past the cap (a re-captured session simply re-inserts).
+_MAX_ORIGINS = 2048
+_origins: "OrderedDict[str, str]" = OrderedDict()
 
 
 def reset() -> None:
@@ -84,6 +88,9 @@ def capture_origin(
         key = _session_key(gateway, session_store, source)
         if key:
             _origins[key] = origin
+            _origins.move_to_end(key)
+            while len(_origins) > _MAX_ORIGINS:
+                _origins.popitem(last=False)
     except Exception:  # noqa: BLE001 - a capture failure must never affect dispatch
         pass
     return None
