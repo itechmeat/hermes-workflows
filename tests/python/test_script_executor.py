@@ -114,3 +114,33 @@ def test_poll_unknown_handle_is_not_settled(tmp_path) -> None:
     completion = ex.poll("script:run-1:lint:0")
     assert completion.settled is False
     assert completion.outcome is None
+
+
+def test_disabled_executor_settles_failure_without_running(tmp_path) -> None:
+    # The execution-time gate: scripts disabled -> the command never runs, the
+    # node settles failure. This covers every advance path (run, review, tick,
+    # retry), not just the run entrypoint.
+    marker = tmp_path / "ran"
+    ex = ScriptExecutor(
+        store_dir=tmp_path / "scripts",
+        env_allowlist=["PATH"],
+        enabled=lambda: False,
+    )
+    handle = _schedule(ex, {"command": f"touch {marker}", "workdir": str(tmp_path)})
+    completion = ex.poll(handle)
+    assert completion.settled is True
+    assert completion.outcome == "failure"
+    assert "scripts_enabled" in (completion.output or "")
+    assert not marker.exists()  # the subprocess never ran
+
+
+def test_settled_handle_is_not_re_executed(tmp_path) -> None:
+    # Idempotent execution: scheduling the same (run, node, iteration) twice runs
+    # the command once, so a tick retry after a crash never double-runs it.
+    counter = tmp_path / "count"
+    ex = _executor(tmp_path)
+    params = {"command": f"echo x >> {counter}", "workdir": str(tmp_path)}
+    first = _schedule(ex, params)
+    again = _schedule(ex, params)
+    assert first == again
+    assert counter.read_text().count("x") == 1

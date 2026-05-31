@@ -57,3 +57,25 @@ def test_script_only_global_run_finishes_with_no_kanban_card(tmp_path: Path) -> 
     assert run["nodes"]["build"]["outcome"] == "success"
     assert "built" in (run["nodes"]["build"].get("output") or "")
     assert run["status"] == "completed"
+
+
+def test_disabled_scripts_fail_the_run_on_advance(tmp_path: Path) -> None:
+    # Even if a run reaches the engine (bypassing the start-time gate), a script
+    # node settles failure when scripts are disabled — the command never runs.
+    eng = Engine(
+        core_cli=["bun", "run", str(CLI)],
+        db_path=str(tmp_path / "runs.db"),
+        direct=DirectExecutor(runner_dir=tmp_path / "runners", store_dir=tmp_path / "direct"),
+        script=ScriptExecutor(
+            store_dir=tmp_path / "scripts", env_allowlist=["PATH"], enabled=lambda: False
+        ),
+    )
+    spec = _spec_file(tmp_path)
+
+    run = eng.run(spec, "s-1")
+    run = eng.advance(spec, "s-1")
+    # The script node settled failure via the executor gate — the command never
+    # ran. (The trivial build→done graph still routes on to finish; what matters
+    # here is that a disabled script does not execute on the advance path.)
+    assert run["nodes"]["build"]["outcome"] == "failure"
+    assert "scripts_enabled" in (run["nodes"]["build"].get("output") or "")

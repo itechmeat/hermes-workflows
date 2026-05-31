@@ -21,7 +21,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 from ..redact import redact_secrets
 from .base import Completion
@@ -43,11 +43,16 @@ class ScriptExecutor:
         store_dir: Path,
         env_allowlist: Sequence[str] = (),
         timeout_seconds: float = 1800.0,
+        enabled: Optional[Callable[[], bool]] = None,
     ) -> None:
         self.store_dir = Path(store_dir)
         # The settings-level ceiling: a node may only see vars named here.
         self.env_allowlist = set(env_allowlist)
         self.timeout_seconds = timeout_seconds
+        # Execution-time gate: consulted at schedule, so disabling scripts blocks
+        # every path that reaches the executor (run, review-driven advance, the
+        # tick cron, retry) — not just the run entrypoint.
+        self._enabled = enabled if enabled is not None else (lambda: True)
 
     def schedule(
         self,
@@ -59,6 +64,22 @@ class ScriptExecutor:
         iteration: int = 0,
     ) -> str:
         handle = _handle(run_id, node_id, iteration)
+        # Idempotent execution: a settled completion for this (run, node,
+        # iteration) means the command already ran. Never re-run it — a tick may
+        # retry after a crash, and a script command is not assumed idempotent.
+        # A loop re-entry uses a higher iteration, so it gets a fresh handle.
+        if self.poll(handle).settled:
+            return handle
+        if not self._enabled():
+            self._persist(
+                handle,
+                Completion(
+                    settled=True,
+                    outcome="failure",
+                    output="script execution is disabled (execution.scripts_enabled is false)",
+                ),
+            )
+            return handle
         completion = self._invoke(params)
         self._persist(handle, completion)
         return handle

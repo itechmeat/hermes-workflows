@@ -47,11 +47,13 @@ def build_engine() -> Engine:
             runner_dir=config.runner_dir(), store_dir=config.direct_store_dir()
         ),
         # The script executor runs script nodes locally in any scope. The enable
-        # gate is enforced separately at the run entrypoint; the executor only
-        # ever exposes the settings env allowlist.
+        # gate is enforced at the executor (consulted at schedule time, so every
+        # advance path is covered) as well as fail-fast at the run entrypoint;
+        # the executor only ever exposes the settings env allowlist.
         script=ScriptExecutor(
             store_dir=config.script_store_dir(),
             env_allowlist=config.script_env_allowlist(),
+            enabled=config.scripts_enabled,
         ),
         kanban_factory=kanban_factory,
     )

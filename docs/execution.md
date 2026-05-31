@@ -70,7 +70,10 @@ A `script` node runs an operator-authored shell command, so its mitigations
   anything is scheduled. Agent-only workflows are unaffected.
 - **Env allowlist.** A script sees only the env vars named in
   `execution.script_env_allowlist` (comma-separated), intersected with the
-  node's own `env` list — never the full process env.
+  node's own `env` list — never the full process env. The allowlist is empty by
+  default, so a command runs with no inherited environment: add `PATH` (and any
+  of `HOME` / `LANG` / `CI` it needs) to the allowlist, or commands that resolve
+  a binary by `PATH` will fail to find it.
 - **Workdir-only cwd and a timeout.** The command runs in its `workdir` and is
   killed on `timeout_seconds` (settling `failure`).
 - **Redacted, capped output.** Captured stdout/stderr is secret-redacted and
