@@ -136,6 +136,13 @@ run inspector it drives.
 
 ### Fixed
 
+- Open Second Brain writes reach the real `o2b` CLI. The provider invoked
+  `o2b brain note --kind … --title … --body …`, but the CLI takes a single
+  positional `<text>` argument (with an optional `--agent`); the unsupported
+  flags made every memory write a silent no-op (swallowed by fail-open). Writes
+  now compose a one-line note (`[workflow:<kind>] <title> — <body>`, the
+  retrospective markdown collapsed) tagged with `--agent hermes-workflows`, and
+  the provider test asserts the real CLI contract.
 - Production dashboard bundle loads under the host: `NODE_ENV` is inlined to
   `production` and the production JSX runtime is used, so the bundle no longer
   throws a `process is not defined` `ReferenceError` that prevented the plugin

@@ -53,16 +53,16 @@ describe("resolveMemoryProvider", () => {
     const provider = resolveMemoryProvider({ provider: "open_second_brain" }, run);
     await provider.writeEvent({ kind: "node_failed", title: "t", body: "b" });
     expect(calls[0]?.slice(0, 3)).toEqual(["o2b", "brain", "note"]);
-    expect(calls[0]).toContain("node_failed");
+    expect(calls[0]?.[3]).toContain("node_failed");
   });
 
   test("redacts secrets even when fail_open is false (redaction is unconditional)", async () => {
     const { run, calls } = recordingRunner();
     const provider = resolveMemoryProvider({ provider: "open_second_brain", fail_open: false }, run);
     await provider.writeEvent({ kind: "node_failed", title: "t", body: "token: ghp_ABCDEFGHIJKLMNOPQRSTU" });
-    const body = calls[0]?.[calls[0].length - 1] ?? "";
-    expect(body).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTU");
-    expect(body).toContain("[REDACTED]");
+    const text = calls[0]?.[3] ?? ""; // positional note text
+    expect(text).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTU");
+    expect(text).toContain("[REDACTED]");
   });
 
   test("'auto' routes through O2B and fail-open swallows a runner error", async () => {
@@ -93,8 +93,10 @@ describe("memory CLI commands", () => {
     const path = await spec("osb", specObject("open_second_brain"));
     const result = await cmdMemoryEvent(path, "run_completed", "Run done", "all good", run);
     expect(result).toEqual({ ok: true });
-    expect(calls[0]).toContain("run_completed");
-    expect(calls[0]).toContain("Run done");
+    const text = calls[0]?.[3] ?? "";
+    expect(text).toContain("run_completed");
+    expect(text).toContain("Run done");
+    expect(text).toContain("all good");
   });
 
   test("memory-event with provider 'none' writes nothing but still succeeds", async () => {
@@ -110,8 +112,9 @@ describe("memory CLI commands", () => {
     const path = await spec("retro", specObject("open_second_brain"));
     const result = await cmdMemoryRetro(path, "# Retrospective\n\nok", "Run retro", run);
     expect(result).toEqual({ ok: true });
-    expect(calls[0]).toContain("workflow_retrospective");
-    expect(calls[0]).toContain("# Retrospective\n\nok");
+    const text = calls[0]?.[3] ?? "";
+    expect(text).toContain("[workflow:retrospective]");
+    expect(text).toContain("# Retrospective\n\nok");
   });
 
   test("memory-retro from a run file builds the retrospective and writes it", async () => {
@@ -124,11 +127,11 @@ describe("memory CLI commands", () => {
 
     const result = await cmdMemoryRetroFromRun(path, runState, undefined, run);
     expect(result).toEqual({ ok: true });
-    expect(calls[0]).toContain("workflow_retrospective");
-    // the body is the built retrospective markdown
-    const body = calls[0]?.[calls[0].length - 1] ?? "";
-    expect(body).toContain("rr-1");
-    expect(body).toContain("Result");
+    // the note text carries the kind tag and the built retrospective markdown
+    const text = calls[0]?.[3] ?? "";
+    expect(text).toContain("[workflow:retrospective]");
+    expect(text).toContain("rr-1");
+    expect(text).toContain("Result");
   });
 
   test("a provider error is swallowed (fail-open) so the command exits ok", async () => {

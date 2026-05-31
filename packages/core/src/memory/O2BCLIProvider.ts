@@ -2,9 +2,14 @@
  * OpenSecondBrain memory provider over the `o2b` CLI. Availability is probed
  * with `o2b status` (configuration present), not `o2b brain doctor` — the
  * latter is a strict vault-content health check that fails on pre-existing
- * content issues and so is a poor "is O2B connected" signal. Writes go through
- * `o2b brain note`. The CLI runner is injected so the provider is testable
- * without a real installation.
+ * content issues and so is a poor "is O2B connected" signal.
+ *
+ * Writes go through `o2b brain note <text> [--agent <name>]`, the CLI's
+ * one-line milestone verb — its actual contract is a single positional text
+ * argument (multi-line collapses to one line), NOT `--kind` / `--title` /
+ * `--body` flags. We compose a readable one-line text from the event, and tag
+ * the writer identity with `--agent` for provenance. The CLI runner is injected
+ * so the provider is testable without a real installation.
  *
  * Reading context is a no-op in the MVP (returns empty); pulling O2B context
  * into prompts is post-MVP.
@@ -27,6 +32,9 @@ export const defaultRunner: CliRunner = async (argv) => {
   return { exitCode, stdout };
 };
 
+/** Identity tagged on Brain notes this provider writes, for provenance. */
+const WRITER_AGENT = "hermes-workflows";
+
 export class O2BCLIProvider implements WorkflowMemoryProvider {
   constructor(
     private readonly run: CliRunner = defaultRunner,
@@ -47,30 +55,19 @@ export class O2BCLIProvider implements WorkflowMemoryProvider {
   }
 
   async writeEvent(event: WorkflowMemoryEvent): Promise<void> {
-    await this.run([
-      this.bin,
-      "brain",
-      "note",
-      "--kind",
-      event.kind,
-      "--title",
-      event.title,
-      "--body",
-      event.body,
-    ]);
+    const body = event.body.trim();
+    const text = `[workflow:${event.kind}] ${event.title}${body ? ` — ${body}` : ""}`;
+    await this.note(text);
   }
 
   async writeRetrospective(retrospective: WorkflowRetrospective): Promise<void> {
-    await this.run([
-      this.bin,
-      "brain",
-      "note",
-      "--kind",
-      "workflow_retrospective",
-      "--title",
-      retrospective.title,
-      "--body",
-      retrospective.markdown,
-    ]);
+    // `brain note` is one-line (it collapses newlines), so the structured
+    // markdown is recorded as a single searchable line under the title.
+    await this.note(`[workflow:retrospective] ${retrospective.markdown}`);
+  }
+
+  /** Append one Brain note via the CLI's actual positional-text contract. */
+  private async note(text: string): Promise<void> {
+    await this.run([this.bin, "brain", "note", text, "--agent", WRITER_AGENT]);
   }
 }
