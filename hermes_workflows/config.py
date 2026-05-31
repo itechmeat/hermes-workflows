@@ -147,7 +147,9 @@ SETTINGS_SCHEMA: dict = {
                     "type": "enum",
                     "options": ["durable", "direct"],
                     "default": "durable",
-                    "enforced": False,
+                    # Enforced: durable runs one step per tick; direct drains
+                    # inline-eligible script steps synchronously (TZ §18.2).
+                    "enforced": True,
                 },
                 {"key": "max_parallel_runs", "type": "int", "default": 4, "enforced": False},
                 {"key": "default_timeout_seconds", "type": "int", "default": 120, "enforced": False},
@@ -182,17 +184,23 @@ SETTINGS_SCHEMA: dict = {
             "key": "open_second_brain",
             "label": "OpenSecondBrain",
             "fields": [
+                # The engine enforces the write policy on lifecycle transitions:
+                # `mode` gates all writes and picks the provider; the write_*
+                # flags gate run summaries + retrospective, per-node failures,
+                # and the granular run-start event. `fail_open` is the
+                # per-workflow provider concern (defaults.memory.fail_open),
+                # not an engine knob, so it stays not-yet-enforced here.
                 {
                     "key": "mode",
                     "type": "enum",
                     "options": ["auto", "open_second_brain", "none"],
                     "default": "auto",
-                    "enforced": False,
+                    "enforced": True,
                 },
                 {"key": "fail_open", "type": "bool", "default": True, "enforced": False},
-                {"key": "write_run_summaries", "type": "bool", "default": True, "enforced": False},
-                {"key": "write_node_failures", "type": "bool", "default": True, "enforced": False},
-                {"key": "write_node_events", "type": "bool", "default": False, "enforced": False},
+                {"key": "write_run_summaries", "type": "bool", "default": True, "enforced": True},
+                {"key": "write_node_failures", "type": "bool", "default": True, "enforced": True},
+                {"key": "write_node_events", "type": "bool", "default": False, "enforced": True},
             ],
         },
     ],

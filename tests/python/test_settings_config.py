@@ -106,8 +106,25 @@ def test_enforced_flags_are_honest(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     # the script gate knobs gate real behaviour from day one
     assert by_key["scripts_enabled"]["enforced"] is True
     assert by_key["script_env_allowlist"]["enforced"] is True
+    # the execution mode and Open Second Brain write policy are now enforced by
+    # the engine (inline mode + lifecycle memory writes)
+    for key in (
+        "default_mode",
+        "mode",
+        "write_run_summaries",
+        "write_node_failures",
+        "write_node_events",
+    ):
+        assert by_key[key]["enforced"] is True
     # the rest are persisted/displayed but not yet honoured by the engine
-    for key in ("default_mode", "mode", "write_node_events", "global_workflows_path"):
+    for key in (
+        "global_workflows_path",
+        "runs_db_path",
+        "max_parallel_runs",
+        "default_timeout_seconds",
+        "use_workflow_columns",
+        "fail_open",
+    ):
         assert by_key[key]["enforced"] is False
 
 
