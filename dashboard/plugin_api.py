@@ -63,6 +63,22 @@ def _save_spec(workflow: dict, ui: object) -> dict:
             raise HTTPException(status_code=500, detail="failed to save workflow") from exc
 
 
+def _workflow_detail(workflow_id: str) -> dict | None:
+    from hermes_workflows import cli_bridge, config
+
+    return cli_bridge.invoke(
+        [*config.core_cli(), "spec-get", "--roots", ",".join(config.spec_roots()), "--id", workflow_id]
+    )
+
+
+def _run_state(run_id: str) -> dict | None:
+    from hermes_workflows import cli_bridge, config
+
+    return cli_bridge.invoke(
+        [*config.core_cli(), "run-load", "--db", str(config.runs_db_path()), "--id", run_id]
+    )
+
+
 @router.get("/workflows")
 async def list_workflows() -> dict:
     """List workflows for the Templates page. Each row carries ``enabled`` plus
@@ -116,11 +132,7 @@ async def set_workflow_enabled(workflow_id: str, enabled: bool = Body(..., embed
     source of truth) and, when the workflow has a cron schedule, pauses it on
     disable / resumes it on enable so the schedule follows the flag. ``404`` if
     the workflow does not exist."""
-    from hermes_workflows import cli_bridge, config
-
-    detail = cli_bridge.invoke(
-        [*config.core_cli(), "spec-get", "--roots", ",".join(config.spec_roots()), "--id", workflow_id]
-    )
+    detail = _workflow_detail(workflow_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="workflow not found")
 
@@ -264,11 +276,7 @@ async def review_run(
 @router.get("/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str) -> dict:
     """Full graph (workflow + ui + path) for the editor to load."""
-    from hermes_workflows import cli_bridge, config
-
-    detail = cli_bridge.invoke(
-        [*config.core_cli(), "spec-get", "--roots", ",".join(config.spec_roots()), "--id", workflow_id]
-    )
+    detail = _workflow_detail(workflow_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="workflow not found")
     return detail
@@ -290,22 +298,14 @@ async def save_workflow(workflow_id: str, payload: dict = Body(...)) -> dict:
 def _workflow_enabled(workflow_id: str) -> bool:
     """Whether the workflow's spec permits runs. Absent ``enabled`` means on;
     an unknown workflow is treated as enabled (the run path 404s separately)."""
-    from hermes_workflows import cli_bridge, config
-
-    detail = cli_bridge.invoke(
-        [*config.core_cli(), "spec-get", "--roots", ",".join(config.spec_roots()), "--id", workflow_id]
-    )
+    detail = _workflow_detail(workflow_id)
     if detail is None:
         return True
     return detail["workflow"].get("enabled", True) is not False
 
 
 def _spec_path_or_404(workflow_id: str) -> str:
-    from hermes_workflows import cli_bridge, config
-
-    detail = cli_bridge.invoke(
-        [*config.core_cli(), "spec-get", "--roots", ",".join(config.spec_roots()), "--id", workflow_id]
-    )
+    detail = _workflow_detail(workflow_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="workflow not found")
     return detail["path"]
@@ -365,11 +365,7 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str) -> dict:
     """Full run state (per-node detail) for the run inspector."""
-    from hermes_workflows import cli_bridge, config
-
-    run = cli_bridge.invoke(
-        [*config.core_cli(), "run-load", "--db", str(config.runs_db_path()), "--id", run_id]
-    )
+    run = _run_state(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")
     return run
@@ -382,11 +378,7 @@ async def export_run(run_id: str) -> dict:
     travels over the host's JSON-only ``fetchJSON`` channel. Reuses the same
     ``run-load`` shape the inspector reads — no second serializer. ``404`` if
     the run is absent."""
-    from hermes_workflows import cli_bridge, config
-
-    run = cli_bridge.invoke(
-        [*config.core_cli(), "run-load", "--db", str(config.runs_db_path()), "--id", run_id]
-    )
+    run = _run_state(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")
     return {"run_id": run_id, "filename": f"{run_id}.run.json", "json": run}

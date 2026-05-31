@@ -8,6 +8,7 @@
 import type { Database } from "bun:sqlite";
 
 import type { RunState, RunStatus, NodeRunState } from "../../schema/run.ts";
+import { ACTIVE_NODE_STATUSES, ACTIVE_RUN_STATUSES } from "../status.ts";
 
 /** Extra run-level fields persisted alongside the reconstructable RunState. */
 export interface RunMeta {
@@ -42,15 +43,6 @@ export interface LatestRun {
   started_at?: number;
   finished_at?: number;
 }
-
-const ACTIVE_STATUSES: readonly RunStatus[] = ["created", "running", "waiting"];
-
-/** Node statuses that mark a node as the one a run is currently working on. */
-const ACTIVE_NODE_STATUSES: ReadonlySet<string> = new Set([
-  "running",
-  "scheduled",
-  "waiting_for_review",
-]);
 
 interface NodeSeq {
   node_id: string;
@@ -132,7 +124,10 @@ export class RunRepository {
           $finished: meta.finished_at ?? null,
           $error: meta.error ?? null,
           $origin: run.origin ?? null,
-          $notified: run.notified && run.notified.length > 0 ? JSON.stringify(run.notified) : null,
+          $notified:
+            run.notified && run.notified.length > 0
+              ? JSON.stringify(run.notified)
+              : null,
         });
 
       for (const node of Object.values(run.nodes)) {
@@ -172,9 +167,9 @@ export class RunRepository {
   }
 
   loadRun(runId: string): RunState | null {
-    const row = this.db.query(`SELECT * FROM workflow_runs WHERE id = $id`).get({ $id: runId }) as
-      | RunRow
-      | null;
+    const row = this.db
+      .query(`SELECT * FROM workflow_runs WHERE id = $id`)
+      .get({ $id: runId }) as RunRow | null;
     if (!row) return null;
 
     const nodeRows = this.db
@@ -183,10 +178,16 @@ export class RunRepository {
 
     const nodes: Record<string, NodeRunState> = {};
     for (const n of nodeRows) {
-      const node: NodeRunState = { node_id: n.node_id, status: n.status as NodeRunState["status"] };
+      const node: NodeRunState = {
+        node_id: n.node_id,
+        status: n.status as NodeRunState["status"],
+      };
       if (n.hermes_task_id !== null) node.hermes_task_id = n.hermes_task_id;
-      if (n.outcome !== null) node.outcome = n.outcome as NodeRunState["outcome"];
-      if (n.review_decision !== null) node.review_decision = n.review_decision as NodeRunState["review_decision"];
+      if (n.outcome !== null)
+        node.outcome = n.outcome as NodeRunState["outcome"];
+      if (n.review_decision !== null)
+        node.review_decision =
+          n.review_decision as NodeRunState["review_decision"];
       if (n.seq !== null) node.seq = n.seq;
       if (n.output_json !== null) node.output = n.output_json;
       if (n.error !== null) node.error = n.error;
@@ -212,19 +213,23 @@ export class RunRepository {
   listActiveRuns(): RunState[] {
     const ids = this.db
       .query(
-        `SELECT id FROM workflow_runs WHERE status IN (${ACTIVE_STATUSES.map(() => "?").join(", ")})`,
+        `SELECT id FROM workflow_runs WHERE status IN (${ACTIVE_RUN_STATUSES.map(() => "?").join(", ")})`,
       )
-      .all(...ACTIVE_STATUSES) as { id: string }[];
+      .all(...ACTIVE_RUN_STATUSES) as { id: string }[];
     return this.hydrate(ids);
   }
 
   listAllRuns(): RunState[] {
-    const ids = this.db.query(`SELECT id FROM workflow_runs`).all() as { id: string }[];
+    const ids = this.db.query(`SELECT id FROM workflow_runs`).all() as {
+      id: string;
+    }[];
     return this.hydrate(ids);
   }
 
   private hydrate(ids: { id: string }[]): RunState[] {
-    return ids.map((r) => this.loadRun(r.id)).filter((r): r is RunState => r !== null);
+    return ids
+      .map((r) => this.loadRun(r.id))
+      .filter((r): r is RunState => r !== null);
   }
 
   /**
@@ -237,9 +242,9 @@ export class RunRepository {
       activeOnly
         ? this.db
             .query(
-              `SELECT * FROM workflow_runs WHERE status IN (${ACTIVE_STATUSES.map(() => "?").join(", ")})`,
+              `SELECT * FROM workflow_runs WHERE status IN (${ACTIVE_RUN_STATUSES.map(() => "?").join(", ")})`,
             )
-            .all(...ACTIVE_STATUSES)
+            .all(...ACTIVE_RUN_STATUSES)
         : this.db.query(`SELECT * FROM workflow_runs`).all()
     ) as RunRow[];
     return rows.map((row) => this.toSummary(row));
@@ -272,7 +277,10 @@ export class RunRepository {
         (started === prev && prevRun !== undefined && row.id > prevRun.run_id);
       if (!wins) continue;
       sortKey[row.workflow_id] = started;
-      const run: LatestRun = { run_id: row.id, status: row.status as RunStatus };
+      const run: LatestRun = {
+        run_id: row.id,
+        status: row.status as RunStatus,
+      };
       if (row.started_at !== null) run.started_at = row.started_at;
       if (row.finished_at !== null) run.finished_at = row.finished_at;
       latest[row.workflow_id] = run;
@@ -303,13 +311,22 @@ export class RunRepository {
    */
   private currentNode(runId: string): string | undefined {
     const nodes = this.db
-      .query(`SELECT node_id, status, seq FROM workflow_node_runs WHERE run_id = $id`)
-      .all({ $id: runId }) as { node_id: string; status: string; seq: number | null }[];
+      .query(
+        `SELECT node_id, status, seq FROM workflow_node_runs WHERE run_id = $id`,
+      )
+      .all({ $id: runId }) as {
+      node_id: string;
+      status: string;
+      seq: number | null;
+    }[];
     let active: NodeSeq | undefined;
     let latest: NodeSeq | undefined;
     for (const n of nodes) {
       const candidate: NodeSeq = { node_id: n.node_id, seq: n.seq ?? -1 };
-      if (ACTIVE_NODE_STATUSES.has(n.status) && nodeWins(candidate, active)) {
+      if (
+        ACTIVE_NODE_STATUSES.has(n.status as NodeRunState["status"]) &&
+        nodeWins(candidate, active)
+      ) {
         active = candidate;
       }
       if (n.seq !== null && nodeWins(candidate, latest)) {

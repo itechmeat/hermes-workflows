@@ -14,9 +14,16 @@
  */
 
 import type { Workflow, Edge } from "../schema/workflow.ts";
-import type { RunState, RunStatus, NodeStatus, NodeOutcome, NodeRunState } from "../schema/run.ts";
+import type {
+  RunState,
+  RunStatus,
+  NodeStatus,
+  NodeOutcome,
+  NodeRunState,
+} from "../schema/run.ts";
 import { nodeMap, outgoingEdges, entryNodes } from "../schema/graph.ts";
 import { evaluateCondition } from "./conditions.ts";
+import { TERMINAL_NODE_STATUSES } from "./status.ts";
 
 export interface AdvanceResult {
   run_status: RunStatus;
@@ -38,15 +45,19 @@ export interface AdvanceResult {
   inline_eligible: boolean;
 }
 
-const TERMINAL: ReadonlySet<NodeStatus> = new Set(["completed", "failed", "skipped", "cancelled"]);
-
 /** Edges to follow out of a routing node, honouring conditions and fallbacks. */
-export function selectOutgoing(workflow: Workflow, run: RunState, nodeId: string): Edge[] {
+export function selectOutgoing(
+  workflow: Workflow,
+  run: RunState,
+  nodeId: string,
+): Edge[] {
   const edges = outgoingEdges(workflow, nodeId);
   const plain = edges.filter((e) => !e.condition && !e.fallback);
   const conditioned = edges.filter((e) => e.condition !== undefined);
   if (conditioned.length === 0) return plain;
-  const passed = conditioned.filter((e) => evaluateCondition(e.condition as never, run, nodeId));
+  const passed = conditioned.filter((e) =>
+    evaluateCondition(e.condition as never, run, nodeId),
+  );
   if (passed.length > 0) return [...passed, ...plain];
   return [...edges.filter((e) => e.fallback), ...plain];
 }
@@ -66,13 +77,16 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
   let finishOutcome: NodeOutcome | undefined;
   let failedDeadEnd = false;
 
-  const merged = (id: string): NodeStatus => updates[id] ?? run.nodes[id]?.status ?? "pending";
+  const merged = (id: string): NodeStatus =>
+    updates[id] ?? run.nodes[id]?.status ?? "pending";
   const setStatus = (id: string, status: NodeStatus): void => {
     if (merged(id) !== status) updates[id] = status;
   };
   const seqOf = (id: string): number => run.nodes[id]?.seq ?? 0;
 
-  const routerIds = workflow.nodes.filter((n) => routes(run.nodes[n.id], n.type)).map((n) => n.id);
+  const routerIds = workflow.nodes
+    .filter((n) => routes(run.nodes[n.id], n.type))
+    .map((n) => n.id);
 
   // Pass 1: detect loop re-entries. A target that is already terminal is reset
   // to pending when a router with a strictly higher completion seq points at it.
@@ -80,7 +94,11 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
   for (const rid of routerIds) {
     for (const edge of selectOutgoing(workflow, run, rid)) {
       const target = run.nodes[edge.to];
-      if (target && TERMINAL.has(target.status) && seqOf(rid) > seqOf(edge.to)) {
+      if (
+        target &&
+        TERMINAL_NODE_STATUSES.has(target.status) &&
+        seqOf(rid) > seqOf(edge.to)
+      ) {
         resets.add(edge.to);
       }
     }
@@ -132,7 +150,10 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
     processed.add(rid);
     const node = nodes.get(rid);
     if (!node) continue;
-    if (node.type === "human_review" && run.nodes[rid]?.review_decision !== undefined) {
+    if (
+      node.type === "human_review" &&
+      run.nodes[rid]?.review_decision !== undefined
+    ) {
       setStatus(rid, "completed");
     }
     const targets = selectOutgoing(workflow, run, rid);
@@ -144,10 +165,17 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
   }
 
   const inlineEligible =
-    schedule.length > 0 && schedule.every((id) => nodes.get(id)?.type === "script");
+    schedule.length > 0 &&
+    schedule.every((id) => nodes.get(id)?.type === "script");
 
   return {
-    run_status: resolveRunStatus(workflow, run, merged, finishOutcome, failedDeadEnd),
+    run_status: resolveRunStatus(
+      workflow,
+      run,
+      merged,
+      finishOutcome,
+      failedDeadEnd,
+    ),
     ...(finishOutcome !== undefined ? { finish_outcome: finishOutcome } : {}),
     schedule,
     waiting,
@@ -163,14 +191,18 @@ function resolveRunStatus(
   finishOutcome: NodeOutcome | undefined,
   failedDeadEnd: boolean,
 ): RunStatus {
-  if (finishOutcome !== undefined) return finishOutcome === "failure" ? "failed" : "completed";
+  if (finishOutcome !== undefined)
+    return finishOutcome === "failure" ? "failed" : "completed";
 
   let hasActive = false;
   let hasWaiting = false;
   for (const node of workflow.nodes) {
     const status = merged(node.id);
     if (status === "scheduled" || status === "running") hasActive = true;
-    if (status === "waiting_for_review" && run.nodes[node.id]?.review_decision === undefined) {
+    if (
+      status === "waiting_for_review" &&
+      run.nodes[node.id]?.review_decision === undefined
+    ) {
       hasWaiting = true;
     }
   }

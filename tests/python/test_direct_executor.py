@@ -110,6 +110,18 @@ def test_handle_is_idempotent_per_iteration(dirs) -> None:
     assert looped != first
 
 
+def test_settled_handle_is_not_re_executed(dirs) -> None:
+    runner_dir, store_dir = dirs
+    counter = store_dir.parent / "count"
+    _runner(runner_dir, "researcher", f'echo "x" >> {counter}')
+    ex = _executor(dirs)
+    params = {"assignee": "researcher"}
+    first = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
+    again = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
+    assert first == again
+    assert counter.read_text().count("x") == 1
+
+
 def test_persisted_completion_survives_a_fresh_executor(dirs) -> None:
     runner_dir, _ = dirs
     _runner(runner_dir, "researcher", 'echo "persisted"')

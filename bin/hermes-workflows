@@ -6,7 +6,14 @@ set -euo pipefail
 
 self="$(readlink -f "${BASH_SOURCE[0]:-$0}")"
 repo="$(cd "$(dirname "$self")/.." && pwd)"
-hermes_install="${HERMES_AGENT_HOME:-/usr/local/lib/hermes-agent}"
+
+if [[ -n "${HERMES_AGENT_HOME:-}" ]]; then
+	hermes_install="$HERMES_AGENT_HOME"
+elif [[ -d "${HOME}/.hermes/hermes-agent" ]]; then
+	hermes_install="${HOME}/.hermes/hermes-agent"
+else
+	hermes_install="/usr/local/lib/hermes-agent"
+fi
 
 export PYTHONPATH="${repo}:${hermes_install}${PYTHONPATH:+:${PYTHONPATH}}"
 exec python3 -m hermes_workflows.cli "$@"

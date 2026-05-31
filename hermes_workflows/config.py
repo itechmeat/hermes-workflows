@@ -13,6 +13,9 @@ import os
 from pathlib import Path
 from typing import Any
 
+_TRUE_BOOL_VALUES = frozenset({"1", "true", "yes", "on"})
+_FALSE_BOOL_VALUES = frozenset({"0", "false", "no", "off"})
+
 
 def hermes_home() -> Path:
     return Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
@@ -236,7 +239,12 @@ def _coerce(field: dict, raw: Any) -> Any:
     if kind == "bool":
         if isinstance(raw, bool):
             return raw
-        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+        normalized = str(raw).strip().lower()
+        if normalized in _TRUE_BOOL_VALUES:
+            return True
+        if normalized in _FALSE_BOOL_VALUES:
+            return False
+        return None
     return raw
 
 
@@ -320,6 +328,8 @@ def validate_settings(incoming: dict) -> dict:
         value = _coerce(field, raw)
         if field["type"] == "int" and value is None:
             raise ValueError(f"'{key}' must be an integer")
+        if field["type"] == "bool" and value is None:
+            raise ValueError(f"'{key}' must be a boolean")
         if field["type"] == "enum" and value not in field["options"]:
             raise ValueError(f"'{key}' must be one of {field['options']}")
         cleaned[key] = value

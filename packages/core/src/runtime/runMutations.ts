@@ -4,10 +4,8 @@
  * return a new state and never mutate the input.
  */
 
-import type { RunState, RunStatus, NodeStatus, NodeRunState } from "../schema/run.ts";
-
-const TERMINAL_RUN = new Set<RunStatus>(["completed", "failed", "cancelled"]);
-const TERMINAL_NODE = new Set<NodeStatus>(["completed", "failed", "skipped", "cancelled"]);
+import type { RunState, NodeRunState } from "../schema/run.ts";
+import { TERMINAL_NODE_STATUSES, TERMINAL_RUN_STATUSES } from "./status.ts";
 
 export class RetryError extends Error {
   override name = "RetryError";
@@ -18,10 +16,12 @@ export class RetryError extends Error {
  * is already terminal is returned unchanged (cancel is idempotent / safe).
  */
 export function cancelRun(run: RunState): RunState {
-  if (TERMINAL_RUN.has(run.status)) return run;
+  if (TERMINAL_RUN_STATUSES.has(run.status)) return run;
   const nodes: Record<string, NodeRunState> = {};
   for (const [id, node] of Object.entries(run.nodes)) {
-    nodes[id] = TERMINAL_NODE.has(node.status) ? node : { ...node, status: "cancelled" };
+    nodes[id] = TERMINAL_NODE_STATUSES.has(node.status)
+      ? node
+      : { ...node, status: "cancelled" };
   }
   return { ...run, status: "cancelled", nodes };
 }
@@ -37,16 +37,26 @@ function resetNode(node: NodeRunState): NodeRunState {
  * that node — which must currently be `failed` — resets, and the run resumes
  * `running`. Clearing the node's `hermes_task_id` forces a fresh backing handle.
  */
-export function retryRun(run: RunState, opts: { node?: string } = {}): RunState {
+export function retryRun(
+  run: RunState,
+  opts: { node?: string } = {},
+): RunState {
   if (opts.node !== undefined) {
     const node = run.nodes[opts.node];
     if (!node) throw new RetryError(`unknown node '${opts.node}'`);
     if (node.status !== "failed") {
-      throw new RetryError(`node '${opts.node}' is not failed (status ${node.status})`);
+      throw new RetryError(
+        `node '${opts.node}' is not failed (status ${node.status})`,
+      );
     }
-    return { ...run, status: "running", nodes: { ...run.nodes, [opts.node]: resetNode(node) } };
+    return {
+      ...run,
+      status: "running",
+      nodes: { ...run.nodes, [opts.node]: resetNode(node) },
+    };
   }
   const nodes: Record<string, NodeRunState> = {};
-  for (const [id, node] of Object.entries(run.nodes)) nodes[id] = resetNode(node);
+  for (const [id, node] of Object.entries(run.nodes))
+    nodes[id] = resetNode(node);
   return { ...run, status: "created", nodes };
 }

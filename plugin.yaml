@@ -13,3 +13,4 @@ provides_tools:
   - workflow_run
   - workflow_status
   - workflow_explain
+  - workflow_review

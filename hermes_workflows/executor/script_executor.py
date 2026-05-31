@@ -18,7 +18,6 @@ The completion handle is prefixed ``script:`` so a composite executor can route
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 from pathlib import Path
@@ -26,9 +25,7 @@ from typing import Callable, Optional, Sequence
 
 from ..redact import redact_secrets
 from .base import Completion
-
-# Cap captured output so a runaway command cannot bloat the run store.
-_MAX_OUTPUT_CHARS = 100_000
+from .store import CompletionStore, clip_output
 
 _HANDLE_PREFIX = "script:"
 
@@ -46,7 +43,7 @@ class ScriptExecutor:
         timeout_seconds: float = 1800.0,
         enabled: Optional[Callable[[], bool]] = None,
     ) -> None:
-        self.store_dir = Path(store_dir)
+        self.store = CompletionStore(Path(store_dir))
         # The settings-level ceiling: a node may only see vars named here.
         self.env_allowlist = set(env_allowlist)
         self.timeout_seconds = timeout_seconds
@@ -72,7 +69,7 @@ class ScriptExecutor:
         if self.poll(handle).settled:
             return handle
         if not self._enabled():
-            self._persist(
+            self.store.write(
                 handle,
                 Completion(
                     settled=True,
@@ -82,19 +79,11 @@ class ScriptExecutor:
             )
             return handle
         completion = self._invoke(params)
-        self._persist(handle, completion)
+        self.store.write(handle, completion)
         return handle
 
     def poll(self, handle: str) -> Completion:
-        path = self._path(handle)
-        if not path.is_file():
-            return Completion(settled=False)
-        data = json.loads(path.read_text())
-        return Completion(
-            settled=bool(data.get("settled")),
-            outcome=data.get("outcome"),
-            output=data.get("output"),
-        )
+        return self.store.read(handle)
 
     # --- internals --------------------------------------------------------
 
@@ -136,31 +125,5 @@ class ScriptExecutor:
         names = self.env_allowlist if requested is None else self.env_allowlist & set(requested)
         return {name: os.environ[name] for name in names if name in os.environ}
 
-    def _path(self, handle: str) -> Path:
-        safe = handle.replace("/", "_").replace(":", "_")
-        return self.store_dir / f"{safe}.json"
-
-    def _persist(self, handle: str, completion: Completion) -> None:
-        self.store_dir.mkdir(parents=True, exist_ok=True)
-        path = self._path(handle)
-        # Atomic write: a crash mid-write must not leave a truncated file that a
-        # later tick's poll() would fail to parse — that would wedge the node and
-        # defeat the durable-recovery the idempotency guard relies on.
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(
-            json.dumps(
-                {
-                    "settled": completion.settled,
-                    "outcome": completion.outcome,
-                    "output": completion.output,
-                }
-            )
-        )
-        os.replace(tmp, path)
-
-
 def _clean(text: Optional[str]) -> str:
-    cleaned = redact_secrets((text or "").strip())
-    if len(cleaned) <= _MAX_OUTPUT_CHARS:
-        return cleaned
-    return cleaned[:_MAX_OUTPUT_CHARS] + "\n…[truncated]"
+    return clip_output(redact_secrets(text))

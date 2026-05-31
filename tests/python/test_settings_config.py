@@ -76,9 +76,11 @@ def test_validate_rejects_unknown_and_bad_values(tmp_path: Path, monkeypatch: py
         config.validate_settings({"default_mode": "sideways"})
     with pytest.raises(ValueError):
         config.validate_settings({"max_parallel_runs": "not-an-int"})
+    with pytest.raises(ValueError):
+        config.validate_settings({"fail_open": "definitely"})
     # a valid subset coerces and passes
-    assert config.validate_settings({"fail_open": "true", "max_parallel_runs": "7"}) == {
-        "fail_open": True,
+    assert config.validate_settings({"fail_open": "false", "max_parallel_runs": "7"}) == {
+        "fail_open": False,
         "max_parallel_runs": 7,
     }
 
