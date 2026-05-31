@@ -105,6 +105,27 @@ run inspector it drives.
   only the `execution.script_env_allowlist` env vars, runs in its `workdir`
   under a timeout, and its captured output is redacted. The editor offers the
   node in the palette/inspector and previews the compiled command before a run.
+- Autonomous loop closed end to end. A run captures its chat `origin` (a
+  `pre_gateway_dispatch` hook keyed by the gateway session, or a cron schedule's
+  delivery target) and the engine delivers a single run-lifecycle notice on
+  completed / failed / review-needed - through Hermes' native delivery to the
+  origin or a configured default - while Kanban-backed cards are subscribed to
+  their terminal events via the native notifier, so durable runs close the loop
+  out-of-process. Notices are idempotent (persisted per-run markers) and
+  fail-open (a delivery error never fails a run).
+- Open Second Brain writes on lifecycle transitions: a `run_completed` event
+  plus a §22.6 retrospective on a terminal run, one `node_failed` per failed
+  node, and an optional `run_started` event. Writes route through the core
+  memory provider via new `memory-event` / `memory-retro` CLI commands (the
+  retrospective markdown is built in the core, not duplicated), gated by the now
+  enforced `open_second_brain.{mode,write_run_summaries,write_node_failures,write_node_events}`
+  settings, idempotent per event, and fail-open.
+- Lightweight inline mode (TZ §18.2): when `execution.default_mode` is `direct`
+  (or auto-eligible) the engine drains inline-eligible script-only steps
+  synchronously within one call, so a script-only run finishes with no tick
+  round-trip; a run that reaches an agent_task / human_review node parks it
+  durably. `durable` keeps the unchanged one-step-per-tick behaviour. The
+  `execution.default_mode` knob is now enforced.
 
 ### Removed
 

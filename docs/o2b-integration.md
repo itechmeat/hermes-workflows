@@ -38,11 +38,40 @@ Implementations:
 
 ## What is written
 
-Only useful, low-volume events — never every micro-step:
+Only useful, low-volume events — never every micro-step. The engine emits these
+on lifecycle transitions, idempotent per `(run, event)` via the run's persisted
+`notified` markers (so a run that stays terminal across ticks writes once):
 
-- `run_completed`
-- `node_failed`
-- a post-run `workflow_retrospective` (the main value)
+- `run_completed` — on a completed run (`write_run_summaries`).
+- a post-run `workflow_retrospective` (the main value) — on any terminal run,
+  completed or failed (`write_run_summaries`). The §22.6 markdown (workflow,
+  project, result, What happened / Decisions / Problems / Useful signals /
+  Follow-up) is built in the core from the run state.
+- `node_failed` — one per newly failed node (`write_node_failures`).
+- `run_started` — a granular per-run start event, quiet by default
+  (`write_node_events`).
+
+## Write path
+
+The Python engine never holds an O2B client. It writes through the core
+`memory-event` / `memory-retro` CLI commands, which resolve the provider from
+the workflow's `defaults.memory` and write fail-open — so the provider rules and
+the retrospective builder stay in one place (the TypeScript core), not
+duplicated in the orchestrator.
+
+## Settings (enforced)
+
+The engine honours the `open_second_brain.*` settings:
+
+- `mode` — `auto` / `open_second_brain` enable writes (and pick the provider);
+  `none` disables all memory writes.
+- `write_run_summaries` — `run_completed` + the retrospective.
+- `write_node_failures` — the per-node `node_failed` events.
+- `write_node_events` — the granular `run_started` event (off by default).
+
+`fail_open` is the per-workflow provider concern (`defaults.memory.fail_open`),
+not an engine knob, so it is not listed as engine-enforced. Reading O2B context
+into a run (`readContext`) is out of scope here — this is writes only.
 
 ## Detection modes
 

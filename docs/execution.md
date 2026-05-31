@@ -94,22 +94,74 @@ is actually awaiting review):
 - the CLI: `hermes-workflows review <run_id> <node_id> <decision>`,
 - the dashboard: `POST /api/plugins/workflows/runs/{run_id}/review`.
 
+## Inline mode (`execution.default_mode`)
+
+A run advances one node per tick (durable mode) unless inline mode is enabled.
+With `execution.default_mode = direct` (or `auto`), the engine drains
+**inline-eligible** steps synchronously within a single `run` / tick call:
+
+- A step is inline-eligible when every node it just scheduled is a `script`
+  (`condition` / `finish` already resolve in-call). The `ScriptExecutor` settles
+  synchronously at schedule time, so the engine can immediately advance again.
+- The drain stops when the run is terminal, enters `waiting` (review), or
+  schedules a durable node (an `agent_task` / `human_review`). A
+  `script → agent_task` run therefore runs the script inline, then parks the
+  agent_task as a Kanban card for the durable path.
+- `execution.default_mode = durable` (the default) keeps the unchanged
+  one-step-per-tick behaviour.
+
+The core advance reports inline-eligibility; the engine decides whether to act on
+it from the enforced `default_mode`. A script-only run thus reaches `finish` with
+no tick round-trip.
+
 ## Notifications
 
-The notification contract is channel-agnostic: a target is the run's captured
-**origin** when present, else a configured default (`HERMES_WORKFLOWS_DELIVER`),
-else nothing (stay silent). Origins and targets are opaque
+Notifications are channel-agnostic: a target is the run's captured **origin**
+when present, else a configured default (`HERMES_WORKFLOWS_DELIVER`), else
+nothing (stay silent). Origins and targets are opaque
 `<platform>:<chat>[:<thread>]` strings that Hermes' native delivery interprets —
-nothing branches on the platform. The resolution and the Kanban-notifier
-subscription (`subscribe_task`) are implemented and unit-tested in
-`notifications.py`.
+nothing branches on the platform.
 
-> **Status: contract only, not yet wired into the live run path.** Runs do not
-> yet capture an `origin`, and run-lifecycle delivery (a notice on
-> completed/failed/review-needed) is not hooked into `advance`. So today a run
-> does not actively send a notice on its own. Wiring it requires origin capture
-> on the run plus a run-lifecycle send; that is a deliberate next step, tracked
-> separately — the module is built so the wiring is a small, isolated change.
+**Origin capture.** A tool handler never receives the chat source (Hermes hands
+it only `task_id` / `user_task`), so a `pre_gateway_dispatch` hook
+(`origin_capture`) records each turn's source keyed by the gateway session key,
+and `workflow_run` reads it back by `task_id` (the session key on that turn),
+threading it into `run-create --origin`. A miss — dashboard, CLI, or a key
+mismatch — leaves the run with no origin and delivery falls back to the default
+target. A cron-started run carries the schedule's delivery target as its origin
+(the trigger shim passes `--origin`). The hook also stashes the live gateway so
+the Sender can reach its delivery router; it never alters dispatch.
+
+**Two complementary delivery paths**, so the loop closes in every context:
+
+- **Run-lifecycle notice (direct).** After each advance the engine delivers a
+  single notice on the transition into `completed` / `failed` / `waiting`
+  (review-needed), through a `Sender` over Hermes' `gateway/delivery.py`
+  (`DeliveryTarget` + `DeliveryRouter`), to the run's origin or the default. The
+  router is reachable only in-process, so this covers runs that advance under a
+  live gateway (a tool-driven `workflow_run` / `workflow_review`, including
+  inline runs that finish in one call). In the headless cron-tick subprocess
+  there is no gateway, so the direct notice degrades to a no-op there.
+- **Kanban card subscription (native notifier).** When the engine schedules an
+  agent_task card on a Kanban backend it subscribes the run's origin to that
+  card's terminal events via `bridge/notify` (`subscribe_task`). The gateway's
+  native notifier then delivers each card's `completed` / `blocked` notice — so
+  durable project runs that finish on a later cron tick (out-of-process) still
+  reach the chat.
+
+Both paths are **idempotent** — a run-lifecycle notice is delivered at most once
+per event, tracked by per-run `notified` markers persisted in `runs.db`, so a run
+that stays terminal across ticks is never re-announced — and **fail-open**: a
+delivery or subscription error is logged and never changes a run outcome.
+
+## Open Second Brain writes
+
+On lifecycle transitions the engine writes long-term memory through the core
+memory provider (the same `WorkflowMemoryProvider` the spec's `defaults.memory`
+selects), via the `memory-event` / `memory-retro` core CLI commands — so the
+retrospective markdown and the provider rules live in one place, not duplicated
+in the orchestrator. See [o2b-integration.md](./o2b-integration.md) for what is
+written and which settings gate it.
 
 ## Limits
 
