@@ -64,6 +64,9 @@ def build_engine() -> Engine:
         default_deliver=config.default_deliver(),
         # Open Second Brain write policy from the enforced settings.
         memory=config.memory_settings(),
+        # Enforced execution mode: durable (one step per tick) vs direct/auto
+        # (drain inline-eligible script steps synchronously).
+        default_mode=str(config.settings()["default_mode"]),
     )
 
 

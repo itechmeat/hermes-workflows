@@ -43,6 +43,7 @@ class Engine:
         default_deliver: Optional[str] = None,
         notifier_profile: Optional[str] = None,
         memory: Optional[dict] = None,
+        default_mode: str = "durable",
     ) -> None:
         self.core_cli = list(core_cli)
         self.db_path = db_path
@@ -64,6 +65,9 @@ class Engine:
         # {mode, write_run_summaries, write_node_failures, write_node_events}.
         # None or mode 'none' disables all memory writes.
         self.memory = memory or {}
+        # Enforced execution.default_mode: 'durable' (one step per tick) or
+        # 'direct' / 'auto' (drain inline-eligible script steps synchronously).
+        self.default_mode = default_mode
 
     # --- core CLI helpers -------------------------------------------------
 
@@ -178,6 +182,23 @@ class Engine:
         return advanced
 
     def advance(self, spec_path: str, run_id: str) -> dict:
+        """Advance a run one step, then - when inline mode is enabled and the
+        step it just scheduled is inline-eligible (script-only, settled
+        synchronously) - keep advancing in this same call until the run is
+        terminal, waiting, or schedules a durable node. ``default_mode=durable``
+        runs exactly one step per call (the unchanged durable behaviour)."""
+        while True:
+            run, decision = self._advance_step(spec_path, run_id)
+            if not (self._inline_permitted() and decision.get("inline_eligible")):
+                return run
+
+    def _inline_permitted(self) -> bool:
+        """Whether the global mode allows the inline drain. ``durable`` never
+        does; ``direct`` / ``auto`` do (eligibility is decided per-step by the
+        core advance)."""
+        return self.default_mode in ("direct", "auto")
+
+    def _advance_step(self, spec_path: str, run_id: str) -> tuple[dict, dict]:
         run = self.status(run_id)
         plan = self._core(["compile-preview", spec_path])
         task_params = {task["node"]: task for task in plan["kanban_tasks"]}
@@ -210,7 +231,7 @@ class Engine:
         self._emit_lifecycle(run, decision)
         self._emit_memory(run, spec_path)
         self._save(run)
-        return run
+        return run, decision
 
     # --- lifecycle effects (notifications) --------------------------------
 
