@@ -19,11 +19,14 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
-from . import cli_bridge
+from . import cli_bridge, notifications
 from .executor import CompositeExecutor, NodeExecutor
 
 _ACTIVE_STATUSES = frozenset({"created", "running", "waiting"})
 REVIEW_OPTIONS = frozenset({"approved", "rejected", "needs_changes"})
+
+# Terminal run statuses that warrant a single run-lifecycle notice.
+_TERMINAL_STATUSES = frozenset({"completed", "failed"})
 
 
 class Engine:
@@ -36,6 +39,9 @@ class Engine:
         direct: Optional[NodeExecutor] = None,
         script: Optional[NodeExecutor] = None,
         kanban_factory: Optional[Callable[[str], NodeExecutor]] = None,
+        sender: Optional[notifications.Sender] = None,
+        default_deliver: Optional[str] = None,
+        notifier_profile: Optional[str] = None,
     ) -> None:
         self.core_cli = list(core_cli)
         self.db_path = db_path
@@ -47,6 +53,12 @@ class Engine:
         # the scope executor is wrapped in a CompositeExecutor that routes by kind.
         self.script = script
         self.kanban_factory = kanban_factory
+        # Run-lifecycle notifications: `sender` delivers to the run's origin or
+        # `default_deliver`; None disables delivery (headless). Subscriptions of
+        # Kanban cards to their terminal events use the native notifier.
+        self.sender = sender
+        self.default_deliver = default_deliver
+        self.notifier_profile = notifier_profile
 
     # --- core CLI helpers -------------------------------------------------
 
@@ -190,8 +202,77 @@ class Engine:
             self._schedule_node(executor, run, run_id, node_id, task_params.get(node_id))
 
         run["status"] = decision["run_status"]
+        self._emit_lifecycle(run, decision)
         self._save(run)
         return run
+
+    # --- lifecycle effects (notifications) --------------------------------
+
+    def _emit_lifecycle(self, run: dict, decision: dict) -> None:
+        """Fire run-lifecycle notices once per transition into completed /
+        failed / waiting, tracked by persisted markers so a run that stays in a
+        state across ticks is never re-announced. Fail-open."""
+        notified = list(run.get("notified") or [])
+        seen = set(notified)
+
+        def mark(key: str) -> None:
+            if key not in seen:
+                seen.add(key)
+                notified.append(key)
+
+        status = run.get("status")
+        if status in _TERMINAL_STATUSES and status not in seen:
+            self._notify(run, status)
+            mark(status)
+        for node_id in decision.get("waiting", []):
+            key = f"waiting:{node_id}"
+            if key not in seen:
+                self._notify(run, "waiting", node_id=node_id)
+                mark(key)
+
+        if notified != (run.get("notified") or []):
+            run["notified"] = notified
+
+    def _notify(self, run: dict, event: str, node_id: Optional[str] = None) -> None:
+        if self.sender is None:
+            return
+        try:
+            notifications.notify_run(
+                run_id=run["run_id"],
+                event=event,
+                send=self.sender,
+                origin=run.get("origin"),
+                default=self.default_deliver,
+                text=_notice_text(run, event, node_id),
+            )
+        except Exception as exc:  # noqa: BLE001 - a notice must never fail a run
+            print(
+                f"hermes-workflows: notify failed for run {run.get('run_id')}: {exc}",
+                file=sys.stderr,
+            )
+
+    def _subscribe_card(self, executor: NodeExecutor, run: dict, handle: str, params: Optional[dict]) -> None:
+        """Subscribe the run's origin to a Kanban card's terminal events via the
+        native notifier, so durable project runs close the loop out-of-process
+        (where direct delivery cannot reach). No-op for local script handles and
+        when there is no origin or board connection. Fail-open."""
+        origin = run.get("origin")
+        if not origin or (params and params.get("kind") == "script"):
+            return
+        if isinstance(handle, str) and handle.startswith("script:"):
+            return
+        conn = _board_conn(executor)
+        if conn is None:
+            return
+        try:
+            notifications.subscribe_task(
+                conn, task_id=handle, origin=origin, notifier_profile=self.notifier_profile
+            )
+        except Exception as exc:  # noqa: BLE001 - subscription failure never fails a run
+            print(
+                f"hermes-workflows: subscribe failed for {handle}: {exc}",
+                file=sys.stderr,
+            )
 
     def _executor_for(self, scope: dict, run: dict) -> NodeExecutor:
         base = self._scope_executor(scope, run)
@@ -238,6 +319,22 @@ class Engine:
         )
         node["hermes_task_id"] = handle
         node["status"] = "scheduled"
+        self._subscribe_card(executor, run, handle, params)
+
+
+def _board_conn(executor: NodeExecutor):
+    """The Kanban DB connection behind an executor, when it has one. Reaches
+    through a CompositeExecutor to its scope executor."""
+    scope = getattr(executor, "scope", executor)
+    return getattr(scope, "board_conn", None)
+
+
+def _notice_text(run: dict, event: str, node_id: Optional[str]) -> str:
+    workflow_id = run.get("workflow_id")
+    run_id = run.get("run_id")
+    if event == "waiting":
+        return f"Workflow {workflow_id} run {run_id}: review needed ({node_id})."
+    return f"Workflow {workflow_id} run {run_id}: {event}."
 
 
 def _max_seq(run: dict) -> int:

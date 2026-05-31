@@ -30,6 +30,7 @@ def build_engine() -> Engine:
 
     from .bridge import boards
     from .executor import DirectExecutor, KanbanExecutor, ScriptExecutor
+    from .notify_sender import make_sender
 
     cache: dict[str, KanbanExecutor] = {}
 
@@ -56,6 +57,11 @@ def build_engine() -> Engine:
             enabled=config.scripts_enabled,
         ),
         kanban_factory=kanban_factory,
+        # Run-lifecycle notices: deliver through the in-process gateway's
+        # delivery router (no-op when headless), to the run origin or the
+        # configured default target.
+        sender=make_sender(),
+        default_deliver=config.default_deliver(),
     )
 
 
