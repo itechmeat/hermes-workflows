@@ -48,9 +48,16 @@ def register_workflow_trigger(
     command: Optional[Path] = None,
 ) -> str:
     """Compile a workflow's cron trigger into a native Cron job that runs
-    ``hermes-workflows run <id>`` on schedule."""
+    ``hermes-workflows run <id>`` on schedule. When the schedule has a delivery
+    target it is also threaded onto the run as its origin, so a cron-started run
+    notifies the same place its output is delivered."""
+    origin_args = ["--origin", deliver] if deliver else []
     shim = write_shim(
-        f"hermes-workflows-trigger-{workflow_id}", "run", workflow_id, command=command
+        f"hermes-workflows-trigger-{workflow_id}",
+        "run",
+        workflow_id,
+        *origin_args,
+        command=command,
     )
     return register_trigger(
         workflow_id=workflow_id, schedule=schedule, script=str(shim), deliver=deliver

@@ -124,7 +124,7 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
             raise SystemExit(str(exc)) from exc
         project_id = _default_project(engine, spec, args.project)
         run_id = f"{args.workflow_id}-{uuid.uuid4().hex[:8]}"
-        return engine.run(spec, run_id, project_id=project_id)
+        return engine.run(spec, run_id, project_id=project_id, origin=args.origin)
     if args.command == "advance-all":
         return _advance_all(engine)
     if args.command == "status":
@@ -142,6 +142,9 @@ def _parser() -> argparse.ArgumentParser:
     p_run = sub.add_parser("run", help="start a run and advance it once")
     p_run.add_argument("workflow_id")
     p_run.add_argument("--project", default=None)
+    # Chat origin (<platform>:<chat>[:<thread>]) for run-lifecycle notices; the
+    # cron trigger shim carries the schedule's delivery target here.
+    p_run.add_argument("--origin", default=None)
 
     sub.add_parser("advance-all", help="advance every active run")
 

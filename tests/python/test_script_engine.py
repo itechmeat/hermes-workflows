@@ -59,6 +59,20 @@ def test_script_only_global_run_finishes_with_no_kanban_card(tmp_path: Path) -> 
     assert run["status"] == "completed"
 
 
+def test_run_created_with_origin_carries_it(tmp_path: Path) -> None:
+    eng = _engine(tmp_path)
+    spec = _spec_file(tmp_path)
+    eng.run(spec, "o-1", origin="telegram:5:6")
+    assert eng.status("o-1")["origin"] == "telegram:5:6"
+
+
+def test_run_without_origin_has_none(tmp_path: Path) -> None:
+    eng = _engine(tmp_path)
+    spec = _spec_file(tmp_path)
+    eng.run(spec, "o-2")
+    assert eng.status("o-2").get("origin") is None
+
+
 def test_disabled_scripts_fail_the_run_on_advance(tmp_path: Path) -> None:
     # Even if a run reaches the engine (bypassing the start-time gate), a script
     # node settles failure when scripts are disabled — the command never runs.

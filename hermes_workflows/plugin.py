@@ -52,6 +52,17 @@ def register(ctx: Any) -> None:
         except Exception:
             pass
 
+    # Capture each turn's chat origin before dispatch so a model-started
+    # workflow_run can carry it (tool handlers never see the SessionSource).
+    register_hook = getattr(ctx, "register_hook", None)
+    if callable(register_hook):
+        try:
+            from .origin_capture import capture_origin
+
+            register_hook("pre_gateway_dispatch", capture_origin)
+        except Exception:
+            pass
+
     ctx.register_tool(
         name="workflow_list",
         toolset=TOOLSET,
@@ -103,12 +114,16 @@ def _handle_explain(args: dict, **_kwargs: Any) -> str:
     )
 
 
-def _handle_run(args: dict, **_kwargs: Any) -> str:
+def _handle_run(args: dict, task_id: Any = None, **_kwargs: Any) -> str:
     import uuid
 
-    from . import config, tools
+    from . import config, origin_capture, tools
 
     run_id = f"run_{uuid.uuid4().hex[:12]}"
+    # The pre_gateway_dispatch hook stashed this turn's origin under the session
+    # key; the gateway passes that key as task_id. A miss -> no origin -> the
+    # configured default delivery target.
+    origin = origin_capture.origin_for(task_id if isinstance(task_id, str) else None)
     return json.dumps(
         tools.run_workflow(
             args["workflow_id"],
@@ -117,6 +132,7 @@ def _handle_run(args: dict, **_kwargs: Any) -> str:
             core_cli=config.core_cli(),
             run_id=run_id,
             project_id=args.get("project_id"),
+            origin=origin,
         )
     )
 

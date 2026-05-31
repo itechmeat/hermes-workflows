@@ -66,10 +66,18 @@ class Engine:
 
     # --- public API -------------------------------------------------------
 
-    def run(self, spec_path: str, run_id: str, project_id: Optional[str] = None) -> dict:
+    def run(
+        self,
+        spec_path: str,
+        run_id: str,
+        project_id: Optional[str] = None,
+        origin: Optional[str] = None,
+    ) -> dict:
         args = ["run-create", spec_path, "--db", self.db_path, "--id", run_id]
         if project_id:
             args += ["--project", project_id]
+        if origin:
+            args += ["--origin", origin]
         self._core(args)
         return self.advance(spec_path, run_id)
 

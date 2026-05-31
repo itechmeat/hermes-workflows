@@ -49,9 +49,10 @@ def run_workflow(
     core_cli: Sequence[str],
     run_id: str,
     project_id: Optional[str] = None,
+    origin: Optional[str] = None,
 ) -> dict:
     path = _resolve_spec_path(workflow_id, roots, core_cli)
-    run = engine.run(path, run_id, project_id)
+    run = engine.run(path, run_id, project_id, origin=origin)
     return {"run_id": run_id, "status": run["status"]}
 
 
