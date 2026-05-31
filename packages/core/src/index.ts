@@ -108,3 +108,5 @@ export { redactSecrets } from "./memory/redact.ts";
 export { FailOpenMemoryProvider } from "./memory/FailOpenMemoryProvider.ts";
 export { buildRetrospective } from "./memory/retrospective.ts";
 export type { RetrospectiveMeta } from "./memory/retrospective.ts";
+export { resolveMemoryProvider } from "./memory/resolveProvider.ts";
+export { cmdMemoryEvent, cmdMemoryRetro } from "./cli/commands.ts";

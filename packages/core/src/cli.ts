@@ -12,6 +12,8 @@ import {
   cmdCompilePreview,
   cmdExplain,
   cmdAdvance,
+  cmdMemoryEvent,
+  cmdMemoryRetro,
   cmdRunCreate,
   cmdRunLoad,
   cmdRunSave,
@@ -97,6 +99,19 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
       return cmdExplain(requireSpec(spec));
     case "advance":
       return cmdAdvance(requireSpec(spec), await readRunFile(required(str(flags, "run-file"), "--run-file")));
+    case "memory-event":
+      return cmdMemoryEvent(
+        requireSpec(spec),
+        required(str(flags, "kind"), "--kind") as never,
+        str(flags, "title") ?? "",
+        str(flags, "body") ?? "",
+      );
+    case "memory-retro":
+      return cmdMemoryRetro(
+        requireSpec(spec),
+        await Bun.file(required(str(flags, "markdown-file"), "--markdown-file")).text(),
+        str(flags, "title"),
+      );
     case "run-create":
       return cmdRunCreate(required(db, "--db"), requireSpec(spec), required(str(flags, "id"), "--id"), str(flags, "project"), str(flags, "origin"));
     case "run-load":

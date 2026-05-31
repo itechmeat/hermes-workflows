@@ -55,6 +55,37 @@ describe("cli.ts dispatcher", () => {
     await rm(base, { recursive: true, force: true });
   });
 
+  test("memory-event dispatches and exits 0 for a none-memory spec", async () => {
+    const base = await mkdtemp(join(tmpdir(), "hw-mem-cli-"));
+    const specFile = join(base, "none.workflow.json");
+    await writeFile(
+      specFile,
+      JSON.stringify({
+        id: "mem-none",
+        name: "Mem None",
+        version: 1,
+        scope: { type: "global" },
+        trigger: { type: "manual" },
+        defaults: { memory: { provider: "none" } },
+        nodes: [{ id: "done", type: "finish" }],
+        edges: [],
+      }),
+    );
+    const { code, json } = await run([
+      "memory-event",
+      specFile,
+      "--kind",
+      "run_completed",
+      "--title",
+      "t",
+      "--body",
+      "b",
+    ]);
+    expect(code).toBe(0);
+    expect((json as { ok: boolean }).ok).toBe(true);
+    await rm(base, { recursive: true, force: true });
+  });
+
   test("run-latest maps a workflow to its created run", async () => {
     const base = await mkdtemp(join(tmpdir(), "hw-latest-cli-"));
     const db = join(base, "runs.db");
