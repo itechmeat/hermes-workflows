@@ -80,6 +80,8 @@ interface RunRow {
   started_at: number | null;
   finished_at: number | null;
   error: string | null;
+  origin: string | null;
+  notified: string | null;
 }
 
 interface NodeRow {
@@ -102,8 +104,8 @@ export class RunRepository {
       this.db
         .query(
           `INSERT INTO workflow_runs
-             (id, workflow_id, workflow_version, status, project_id, input_json, started_at, finished_at, error)
-           VALUES ($id, $wf, $ver, $status, $project, $input, $started, $finished, $error)
+             (id, workflow_id, workflow_version, status, project_id, input_json, started_at, finished_at, error, origin, notified)
+           VALUES ($id, $wf, $ver, $status, $project, $input, $started, $finished, $error, $origin, $notified)
            ON CONFLICT(id) DO UPDATE SET
              status = excluded.status,
              project_id = excluded.project_id,
@@ -113,7 +115,11 @@ export class RunRepository {
              -- when terminal and cleared on retry.
              started_at = COALESCE(workflow_runs.started_at, excluded.started_at),
              finished_at = excluded.finished_at,
-             error = excluded.error`,
+             error = excluded.error,
+             -- origin and notified live on the RunState, which every save carries
+             -- in full, so overwriting with the incoming value is correct.
+             origin = excluded.origin,
+             notified = excluded.notified`,
         )
         .run({
           $id: run.run_id,
@@ -125,6 +131,8 @@ export class RunRepository {
           $started: meta.started_at ?? null,
           $finished: meta.finished_at ?? null,
           $error: meta.error ?? null,
+          $origin: run.origin ?? null,
+          $notified: run.notified && run.notified.length > 0 ? JSON.stringify(run.notified) : null,
         });
 
       for (const node of Object.values(run.nodes)) {
@@ -193,6 +201,11 @@ export class RunRepository {
       nodes,
     };
     if (row.project_id !== null) run.project_id = row.project_id;
+    if (row.origin !== null) run.origin = row.origin;
+    if (row.notified !== null) {
+      const parsed = JSON.parse(row.notified) as string[];
+      if (parsed.length > 0) run.notified = parsed;
+    }
     return run;
   }
 

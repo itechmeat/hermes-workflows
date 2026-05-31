@@ -44,6 +44,7 @@ export function createRunState(
   workflow: Workflow,
   runId: string,
   projectId?: string,
+  origin?: string,
 ): RunState {
   const nodes: Record<string, NodeRunState> = {};
   for (const node of workflow.nodes) {
@@ -57,6 +58,7 @@ export function createRunState(
     nodes,
   };
   if (projectId !== undefined) run.project_id = projectId;
+  if (origin !== undefined && origin !== "") run.origin = origin;
   return run;
 }
 

@@ -75,6 +75,34 @@ describe("RunRepository — runs", () => {
     expect(loaded?.nodes["done"]?.status).toBe("pending");
   });
 
+  test("round-trips a run origin and notification markers", () => {
+    const run = createRunState(workflow, "run-origin", undefined, "telegram:1:2");
+    run.status = "running";
+    run.notified = ["completed", "mem:run_completed"];
+    repo.saveRun(run);
+
+    const loaded = repo.loadRun("run-origin");
+    expect(loaded?.origin).toBe("telegram:1:2");
+    expect(loaded?.notified).toEqual(["completed", "mem:run_completed"]);
+
+    // A run without an origin loads with origin absent and no markers.
+    const bare = createRunState(workflow, "run-bare");
+    repo.saveRun(bare);
+    const bareLoaded = repo.loadRun("run-bare");
+    expect(bareLoaded?.origin).toBeUndefined();
+    expect(bareLoaded?.notified).toBeUndefined();
+
+    // A marker set on one save survives a reload (idempotency store).
+    const reloaded = repo.loadRun("run-origin") as typeof run;
+    reloaded.notified = [...(reloaded.notified ?? []), "failed"];
+    repo.saveRun(reloaded);
+    expect(repo.loadRun("run-origin")?.notified).toEqual([
+      "completed",
+      "mem:run_completed",
+      "failed",
+    ]);
+  });
+
   test("upserts on save and returns null for an unknown run", () => {
     const run = createRunState(workflow, "run-2");
     repo.saveRun(run);

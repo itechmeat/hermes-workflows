@@ -97,9 +97,10 @@ export async function cmdRunCreate(
   specPath: string,
   runId: string,
   projectId?: string,
+  origin?: string,
 ): Promise<RunState> {
   const workflow = await loadWorkflow(specPath);
-  const run = createRunState(workflow, runId, projectId);
+  const run = createRunState(workflow, runId, projectId, origin);
   repository(dbPath).saveRun(run, timingMeta(run, true));
   return run;
 }

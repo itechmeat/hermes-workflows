@@ -98,7 +98,7 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
     case "advance":
       return cmdAdvance(requireSpec(spec), await readRunFile(required(str(flags, "run-file"), "--run-file")));
     case "run-create":
-      return cmdRunCreate(required(db, "--db"), requireSpec(spec), required(str(flags, "id"), "--id"), str(flags, "project"));
+      return cmdRunCreate(required(db, "--db"), requireSpec(spec), required(str(flags, "id"), "--id"), str(flags, "project"), str(flags, "origin"));
     case "run-load":
       return cmdRunLoad(required(db, "--db"), required(str(flags, "id"), "--id"));
     case "run-save":

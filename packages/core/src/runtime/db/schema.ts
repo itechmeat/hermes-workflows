@@ -19,7 +19,12 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   input_json       TEXT,
   started_at       INTEGER,
   finished_at      INTEGER,
-  error            TEXT
+  error            TEXT,
+  -- Chat origin (platform:chat[:thread]) and lifecycle-effect markers (JSON
+  -- array) for run-lifecycle notifications and memory writes. Added after the
+  -- initial schema, so connection.ts ALTERs pre-existing databases.
+  origin           TEXT,
+  notified         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS workflow_node_runs (

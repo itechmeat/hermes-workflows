@@ -53,5 +53,20 @@ export interface RunState {
   workflow_version: number;
   status: RunStatus;
   project_id?: string;
+  /**
+   * The chat the run originated from, an opaque `<platform>:<chat>[:<thread>]`
+   * string Hermes' native delivery interprets. Captured for model-started runs
+   * (a `pre_gateway_dispatch` hook) and cron-started runs (the schedule);
+   * absent for dashboard / CLI / headless runs, which fall back to a configured
+   * default delivery target.
+   */
+  origin?: string;
+  /**
+   * Opaque markers for lifecycle effects already emitted for this run
+   * (notification notices keyed by event name, memory writes keyed `mem:…`), so
+   * a run that stays terminal across ticks is never re-announced or re-written.
+   * The engine is the only writer; absent means nothing emitted yet.
+   */
+  notified?: string[];
   nodes: Record<string, NodeRunState>;
 }

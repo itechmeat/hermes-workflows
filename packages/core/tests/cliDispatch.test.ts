@@ -35,6 +35,26 @@ describe("cli.ts dispatcher", () => {
     expect(code).not.toBe(0);
   });
 
+  test("run-create --origin persists the chat origin on the run", async () => {
+    const base = await mkdtemp(join(tmpdir(), "hw-origin-cli-"));
+    const db = join(base, "runs.db");
+    const created = await run([
+      "run-create",
+      "--db",
+      db,
+      example,
+      "--id",
+      "ro-1",
+      "--origin",
+      "telegram:42:7",
+    ]);
+    expect(created.code).toBe(0);
+    expect((created.json as { origin?: string }).origin).toBe("telegram:42:7");
+    const loaded = await run(["run-load", "--db", db, "--id", "ro-1"]);
+    expect((loaded.json as { origin?: string }).origin).toBe("telegram:42:7");
+    await rm(base, { recursive: true, force: true });
+  });
+
   test("run-latest maps a workflow to its created run", async () => {
     const base = await mkdtemp(join(tmpdir(), "hw-latest-cli-"));
     const db = join(base, "runs.db");
