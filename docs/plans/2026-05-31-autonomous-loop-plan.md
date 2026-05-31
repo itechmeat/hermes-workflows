@@ -1,6 +1,7 @@
 # Close the Autonomous Loop — Implementation Plan
 
-NOT started — planning only; awaits operator go-ahead to implement.
+Status: implemented (PR #10). This document is the implementation plan that was
+followed; all tasks A1-D1 shipped.
 
 One PR closes all three wiring gaps in TZ point 1 (notifications, O2B writes,
 lightweight inline mode); model-visible tools (§21) are already complete and out

@@ -26,6 +26,21 @@ from .notifications import Sender
 
 logger = logging.getLogger("hermes-workflows.notify_sender")
 
+# Holds references to in-flight fire-and-forget delivery tasks so the event loop
+# does not garbage-collect them mid-flight, and so their exceptions are observed
+# (a bare create_task can be GC'd before completion and its error swallowed).
+_INFLIGHT: set = set()
+
+
+def _on_delivery_done(task: Any) -> None:
+    _INFLIGHT.discard(task)
+    try:
+        exc = task.exception()
+    except Exception:  # noqa: BLE001 - cancelled / already-consumed
+        return
+    if exc is not None:
+        logger.warning("background delivery failed: %s", exc)
+
 
 def _default_router_provider() -> Optional[Any]:
     """The live gateway's delivery router, or ``None`` when headless."""
@@ -44,7 +59,9 @@ def _run_coro(coro: Any) -> None:
     except RuntimeError:
         loop = None
     if loop is not None and loop.is_running():
-        loop.create_task(coro)
+        task = loop.create_task(coro)
+        _INFLIGHT.add(task)
+        task.add_done_callback(_on_delivery_done)
     else:
         asyncio.run(coro)
 

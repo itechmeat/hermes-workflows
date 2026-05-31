@@ -44,9 +44,10 @@ on lifecycle transitions, idempotent per `(run, event)` via the run's persisted
 
 - `run_completed` — on a completed run (`write_run_summaries`).
 - a post-run `workflow_retrospective` (the main value) — on any terminal run,
-  completed or failed (`write_run_summaries`). The §22.6 markdown (workflow,
-  project, result, What happened / Decisions / Problems / Useful signals /
-  Follow-up) is built in the core from the run state.
+  completed or failed (`write_run_summaries`). The retrospective markdown
+  (workflow, project, result, What happened / Decisions / Problems / Useful
+  signals / Follow-up — the §22.6 structure from the autonomous-loop design
+  spec) is built in the core from the run state.
 - `node_failed` — one per newly failed node (`write_node_failures`).
 - `run_started` — a granular per-run start event, quiet by default
   (`write_node_events`).

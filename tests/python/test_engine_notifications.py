@@ -152,9 +152,6 @@ def test_no_sender_means_no_notices_and_no_error(tmp_path: Path) -> None:
 
 # --- Kanban subscribe (needs hermes_cli) -----------------------------------
 
-kb = pytest.importorskip("hermes_cli.kanban_db")
-from hermes_workflows.executor import KanbanExecutor  # noqa: E402
-
 REVIEW_SPEC = {
     "id": "notify-review",
     "name": "Notify Review",
@@ -185,34 +182,41 @@ def _complete(board, task_id: str, outcome: str = "completed") -> None:
 
 
 def test_waiting_run_notifies_and_subscribes_the_card(tmp_path: Path) -> None:
+    # importorskip is scoped to this test so the no-Kanban tests above still run
+    # where hermes_cli is absent (the core test venv).
+    kb = pytest.importorskip("hermes_cli.kanban_db")
+    from hermes_workflows.executor import KanbanExecutor
+
     rec = _Recorder()
     board = kb.connect(db_path=tmp_path / "kanban.db")
-    eng = Engine(
-        core_cli=["bun", "run", str(CLI)],
-        db_path=str(tmp_path / "runs.db"),
-        kanban=KanbanExecutor(board),
-        sender=rec,
-        default_deliver="fallback:1",
-    )
-    spec = _spec(tmp_path, REVIEW_SPEC)
+    try:
+        eng = Engine(
+            core_cli=["bun", "run", str(CLI)],
+            db_path=str(tmp_path / "runs.db"),
+            kanban=KanbanExecutor(board),
+            sender=rec,
+            default_deliver="fallback:1",
+        )
+        spec = _spec(tmp_path, REVIEW_SPEC)
 
-    run = eng.run(spec, "r-1", origin="telegram:8:4")
-    work_card = run["nodes"]["work"]["hermes_task_id"]
-    # The agent card was subscribed to its terminal events for the run origin.
-    subs = kb.list_notify_subs(board, work_card)
-    assert len(subs) == 1
-    assert subs[0]["platform"] == "telegram"
+        run = eng.run(spec, "r-1", origin="telegram:8:4")
+        work_card = run["nodes"]["work"]["hermes_task_id"]
+        # The agent card was subscribed to its terminal events for the run origin.
+        subs = kb.list_notify_subs(board, work_card)
+        assert len(subs) == 1
+        assert subs[0]["platform"] == "telegram"
 
-    _complete(board, work_card)
-    run = eng.advance(spec, "r-1")
-    assert run["status"] == "waiting"
-    # The waiting transition delivers a review-needed notice to the origin.
-    review_notices = [(t, m) for t, m in rec.sent if "review needed" in m]
-    assert len(review_notices) == 1
-    assert review_notices[0][0] == "telegram:8:4"
+        _complete(board, work_card)
+        run = eng.advance(spec, "r-1")
+        assert run["status"] == "waiting"
+        # The waiting transition delivers a review-needed notice to the origin.
+        review_notices = [(t, m) for t, m in rec.sent if "review needed" in m]
+        assert len(review_notices) == 1
+        assert review_notices[0][0] == "telegram:8:4"
 
-    # Advancing again while still waiting delivers no duplicate.
-    before = len(rec.sent)
-    eng.advance(spec, "r-1")
-    assert len(rec.sent) == before
-    board.close()
+        # Advancing again while still waiting delivers no duplicate.
+        before = len(rec.sent)
+        eng.advance(spec, "r-1")
+        assert len(rec.sent) == before
+    finally:
+        board.close()

@@ -93,17 +93,17 @@ def test_durable_mode_disables_the_inline_loop(tmp_path: Path) -> None:
     assert run["status"] == "running"
     assert run["nodes"]["s1"]["status"] == "scheduled"
     assert run["nodes"]["s2"]["status"] == "pending"
-    # Durable advances proceed one node per tick.
-    eng.advance(spec, "i-3")
-    eng.advance(spec, "i-3")
+    # Durable advances proceed one node per tick - verify each step.
+    run = eng.advance(spec, "i-3")
+    assert run["nodes"]["s1"]["outcome"] == "success"
+    assert run["nodes"]["s2"]["status"] == "scheduled"
+    run = eng.advance(spec, "i-3")
+    assert run["nodes"]["s2"]["outcome"] == "success"
     run = eng.advance(spec, "i-3")
     assert run["status"] == "completed"
 
 
 # --- script -> agent_task parks the durable node (needs hermes_cli) --------
-
-kb = pytest.importorskip("hermes_cli.kanban_db")
-from hermes_workflows.executor import KanbanExecutor  # noqa: E402
 
 MIXED_SPEC = {
     "id": "inline-mixed",
@@ -122,19 +122,26 @@ MIXED_SPEC = {
 
 
 def test_script_then_agent_runs_script_inline_and_parks_the_agent(tmp_path: Path) -> None:
+    # importorskip is scoped here so the global-script inline tests above still
+    # run where hermes_cli is absent (the core test venv).
+    kb = pytest.importorskip("hermes_cli.kanban_db")
+    from hermes_workflows.executor import KanbanExecutor
+
     board = kb.connect(db_path=tmp_path / "kanban.db")
-    eng = Engine(
-        core_cli=["bun", "run", str(CLI)],
-        db_path=str(tmp_path / "runs.db"),
-        kanban=KanbanExecutor(board),
-        script=ScriptExecutor(store_dir=tmp_path / "scripts", env_allowlist=["PATH"]),
-        default_mode="auto",
-    )
-    spec = _spec(tmp_path, MIXED_SPEC)
-    run = eng.run(spec, "i-4")
-    # The script ran inline; the agent_task is parked as a durable Kanban card.
-    assert run["nodes"]["lint"]["outcome"] == "success"
-    assert run["nodes"]["work"]["status"] == "scheduled"
-    assert not run["nodes"]["work"]["hermes_task_id"].startswith("script:")
-    assert run["status"] == "running"
-    board.close()
+    try:
+        eng = Engine(
+            core_cli=["bun", "run", str(CLI)],
+            db_path=str(tmp_path / "runs.db"),
+            kanban=KanbanExecutor(board),
+            script=ScriptExecutor(store_dir=tmp_path / "scripts", env_allowlist=["PATH"]),
+            default_mode="auto",
+        )
+        spec = _spec(tmp_path, MIXED_SPEC)
+        run = eng.run(spec, "i-4")
+        # The script ran inline; the agent_task is parked as a durable Kanban card.
+        assert run["nodes"]["lint"]["outcome"] == "success"
+        assert run["nodes"]["work"]["status"] == "scheduled"
+        assert not run["nodes"]["work"]["hermes_task_id"].startswith("script:")
+        assert run["status"] == "running"
+    finally:
+        board.close()

@@ -114,8 +114,9 @@ run inspector it drives.
   out-of-process. Notices are idempotent (persisted per-run markers) and
   fail-open (a delivery error never fails a run).
 - Open Second Brain writes on lifecycle transitions: a `run_completed` event
-  plus a §22.6 retrospective on a terminal run, one `node_failed` per failed
-  node, and an optional `run_started` event. Writes route through the core
+  plus a terminal-run retrospective (the structured run summary - workflow,
+  result, what happened, problems, follow-up) on a terminal run, one
+  `node_failed` per failed node, and an optional `run_started` event. Writes route through the core
   memory provider via new `memory-event` / `memory-retro` CLI commands (the
   retrospective markdown is built in the core, not duplicated), gated by the now
   enforced `open_second_brain.{mode,write_run_summaries,write_node_failures,write_node_events}`

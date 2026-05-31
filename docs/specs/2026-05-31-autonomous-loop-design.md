@@ -1,6 +1,6 @@
 # Close the Autonomous Loop — Design
 
-Status: draft (brainstorm complete, Variant 2 chosen) — implementation NOT started
+Status: implemented (PR #10) — Variant 2 as designed
 Author: orchestrator (via feature-release-playbook)
 Audience: implementation
 
@@ -156,17 +156,21 @@ packages/core/src/
   runtime/db/{schema,runRepository}.ts  + origin column, persist/read
   runtime/advance.ts            + inline-eligibility of the scheduled set
   cli/commands.ts, cli.ts       + run-create --origin; memory-event; memory-retro
-  memory/…                      (reused: WorkflowMemoryProvider + providers)
+  memory/MemoryProvider + providers  (reused: O2B / FailOpen / Noop)
+  memory/resolveProvider.ts (new)    + provider selection from defaults.memory
+  memory/RedactingMemoryProvider.ts (new)  + unconditional redaction
+  memory/retrospective.ts (new)      + §22.6 markdown builder (in core, not Python)
 
 hermes_workflows/
   plugin.py                     + pre_gateway_dispatch hook (capture origin)
+  origin_capture.py (new)       + session-keyed origin store + hook
+  runtime.py (new)              + live-gateway handle for the Sender
   notify_sender.py (new)        + Sender over gateway/delivery.py
   engine.py                     + lifecycle effects: notify + subscribe + memory;
                                   inline advance loop honoring default_mode
   config.py                     enforce default_mode + open_second_brain.* (flags)
   notifications.py              (reused: resolve_target / parse_origin /
                                   subscribe_task / notify_run)
-  retrospective.py (new)        + §22.6 markdown builder
 ```
 
 ## Risks and open questions

@@ -97,7 +97,10 @@ is actually awaiting review):
 ## Inline mode (`execution.default_mode`)
 
 A run advances one node per tick (durable mode) unless inline mode is enabled.
-With `execution.default_mode = direct` (or `auto`), the engine drains
+`execution.default_mode` selects the behaviour: `durable` (the default) disables
+the inline drain; `direct` and `auto` both enable it (they are equivalent here -
+eligibility is decided per-step by the core advance, so neither forces inline on
+a step that is not script-only). When enabled, the engine drains
 **inline-eligible** steps synchronously within a single `run` / tick call:
 
 - A step is inline-eligible when every node it just scheduled is a `script`
