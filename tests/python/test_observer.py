@@ -24,6 +24,8 @@ OBSERVER_HOOKS = {
     "api_request_error",
     "post_tool_call",
     "subagent_stop",
+    "pre_approval_request",
+    "post_approval_response",
 }
 
 
@@ -145,3 +147,35 @@ def test_plugin_register_wires_observer_hooks(
     ctx = Ctx()
     plugin.register(ctx)
     assert OBSERVER_HOOKS <= set(ctx.hooks)
+
+
+def test_approval_hooks_record_pending_then_resolved(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ctx = _register_worker(monkeypatch, tmp_path)
+    # Exactly the kwargs tools/approval.py fires in hermes-agent 0.15.1.
+    ctx.hooks["pre_approval_request"](
+        command="rm -rf /tmp/x",
+        description="Delete files",
+        pattern_key="rm",
+        pattern_keys=["rm"],
+        session_key="default",
+        surface="gateway",
+    )
+    data = telemetry.load_node_telemetry(tmp_path, "t_card")
+    assert data["approval"]["state"] == "pending"
+    assert data["approval"]["command"] == "rm -rf /tmp/x"
+
+    ctx.hooks["post_approval_response"](
+        command="rm -rf /tmp/x",
+        description="Delete files",
+        pattern_key="rm",
+        pattern_keys=["rm"],
+        session_key="default",
+        surface="gateway",
+        choice="timeout",
+    )
+    data = telemetry.load_node_telemetry(tmp_path, "t_card")
+    assert data["approval"]["state"] == "resolved"
+    assert data["approval"]["choice"] == "timeout"
+    assert data["approval"]["command"] == "rm -rf /tmp/x"

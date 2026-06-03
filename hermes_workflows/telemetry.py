@@ -121,6 +121,50 @@ class NodeTelemetryRecorder:
         except Exception:
             self._swallow()
 
+    def record_approval_request(
+        self,
+        *,
+        command: Any = None,
+        description: Any = None,
+        surface: Any = None,
+        session_key: Any = None,
+        **_kwargs: Any,
+    ) -> None:
+        """A dangerous-command approval prompt opened (``pre_approval_request``).
+        The worker is now blocked on a human answer; surface that as pending
+        state. Approval events skip the duration stamp — waiting on a human is
+        not agent activity."""
+        try:
+            approval: dict = {"state": "pending", "requested_at": self._now()}
+            for key, value in (
+                ("command", command),
+                ("description", description),
+                ("surface", surface),
+                # Opaque host context only — verified to not embed the card id.
+                ("session_key", session_key),
+            ):
+                if value:
+                    approval[key] = str(value)
+            self._data["approval"] = approval
+            self._flush()
+        except Exception:
+            self._swallow()
+
+    def record_approval_response(self, *, choice: Any = None, **_kwargs: Any) -> None:
+        """The approval was answered or timed out (``post_approval_response``).
+        Keeps command/description so a deny or timeout stays explainable after
+        the node settles."""
+        try:
+            approval = dict(self._data.get("approval") or {})
+            approval["state"] = "resolved"
+            approval["resolved_at"] = self._now()
+            if choice:
+                approval["choice"] = str(choice)
+            self._data["approval"] = approval
+            self._flush()
+        except Exception:
+            self._swallow()
+
     # -- internals -----------------------------------------------------------
 
     def _bump(self, key: str) -> None:

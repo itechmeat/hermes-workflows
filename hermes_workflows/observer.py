@@ -53,6 +53,8 @@ def register_observer_hooks(ctx: Any) -> None:
         register_hook("api_request_error", _on_api_request_error)
         register_hook("post_tool_call", _on_post_tool_call)
         register_hook("subagent_stop", _on_subagent_stop)
+        register_hook("pre_approval_request", _on_pre_approval_request)
+        register_hook("post_approval_response", _on_post_approval_response)
     except Exception:
         _recorder = None
 
@@ -81,3 +83,22 @@ def _on_post_tool_call(**kwargs: Any) -> None:
 def _on_subagent_stop(**kwargs: Any) -> None:
     if _recorder is not None:
         _recorder.record_subagent()
+
+
+def _on_pre_approval_request(**kwargs: Any) -> None:
+    """The worker is now blocked on a dangerous-command approval prompt; the
+    run inspector shows the pending annotation while the node stays active."""
+    if _recorder is not None:
+        _recorder.record_approval_request(
+            command=kwargs.get("command"),
+            description=kwargs.get("description"),
+            surface=kwargs.get("surface"),
+            session_key=kwargs.get("session_key"),
+        )
+
+
+def _on_post_approval_response(**kwargs: Any) -> None:
+    """The approval was answered or timed out; a deny/timeout choice persists
+    so a subsequent node failure has context."""
+    if _recorder is not None:
+        _recorder.record_approval_response(choice=kwargs.get("choice"))

