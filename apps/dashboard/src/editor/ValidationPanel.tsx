@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { getApiClient } from "../host";
 import type { WorkflowsApi } from "../api/client";
 import type { ValidationResult } from "../api/types";
+import { Button } from "../ui/components";
 
 export interface ValidationPanelProps {
   workflowId: string;
@@ -33,12 +34,12 @@ export function ValidationPanel({ workflowId, client, onResult }: ValidationPane
   }, [api, workflowId, onResult]);
 
   return (
-    <section style={{ padding: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <section className="hw-section">
+      <div className="hw-row hw-row--sm">
         <strong>Validation</strong>
-        <button type="button" onClick={validate} disabled={busy}>
+        <Button onClick={validate} disabled={busy}>
           Validate
-        </button>
+        </Button>
       </div>
       {error !== null && <p role="alert">{error}</p>}
       {result !== null && (
@@ -49,18 +50,18 @@ export function ValidationPanel({ workflowId, client, onResult }: ValidationPane
             <p role="alert">{result.errors.length} error(s) — fix before saving.</p>
           )}
           {result.errors.length > 0 && (
-            <ul>
+            <ul className="hw-issues">
               {result.errors.map((issue, i) => (
-                <li key={`e${i}`} style={{ color: "#e06c6c" }}>
+                <li key={`e${i}`} className="hw-issue--error">
                   <code>{issue.code}</code>: {issue.message}
                 </li>
               ))}
             </ul>
           )}
           {result.warnings.length > 0 && (
-            <ul>
+            <ul className="hw-issues">
               {result.warnings.map((issue, i) => (
-                <li key={`w${i}`} style={{ color: "#d6b25e" }}>
+                <li key={`w${i}`} className="hw-issue--warn">
                   <code>{issue.code}</code>: {issue.message}
                 </li>
               ))}

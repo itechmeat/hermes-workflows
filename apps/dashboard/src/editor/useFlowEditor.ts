@@ -53,15 +53,18 @@ export interface FlowEditorController {
   save: () => Promise<SpecDetail | null>;
 }
 
-function freshId(type: NodeType, nodes: readonly FlowNode[]): string {
+// Node ids are sequential numbers (kept as strings, the schema's id type): a
+// stable handle that does not bake the node type into the name, so the canvas
+// can show the human type label separately from a short id.
+function freshId(nodes: readonly FlowNode[]): string {
   const taken = new Set(nodes.map((node) => node.id));
   let n = 1;
-  while (taken.has(`${type}-${n}`)) n += 1;
-  return `${type}-${n}`;
+  while (taken.has(String(n))) n += 1;
+  return String(n);
 }
 
 function blankNode(type: NodeType, id: string): WorkflowNode {
-  if (type === "agent_task") return { id, type, prompt: "" };
+  if (type === "agent_task") return { id, type, prompt: "", max_retries: 3 };
   if (type === "script") return { id, type, command: "" };
   return { id, type };
 }
@@ -127,7 +130,7 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     (type: NodeType): string => {
       // Derive the id/placement from the current nodes outside the state updater
       // so the updater stays pure (React may invoke it more than once).
-      const id = freshId(type, nodes);
+      const id = freshId(nodes);
       const placed: FlowNode = {
         id,
         type: WORKFLOW_NODE_TYPE,
@@ -146,7 +149,7 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     (id: string): string | null => {
       const source = nodes.find((node) => node.id === id);
       if (source === undefined) return null;
-      const newId = freshId(source.data.node.type, nodes);
+      const newId = freshId(nodes);
       const clone: FlowNode = {
         id: newId,
         type: WORKFLOW_NODE_TYPE,

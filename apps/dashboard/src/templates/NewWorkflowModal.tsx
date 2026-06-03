@@ -4,6 +4,7 @@ import type { WorkflowsApi } from "../api/client";
 import type { Scope, ScopeType, Trigger } from "../api/types";
 import { buildSeedWorkflow } from "./seed";
 import { generateWorkflowId } from "./id";
+import { Button, Field, Modal } from "../ui/components";
 
 export interface NewWorkflowModalProps {
   /** Called with the new workflow id once it is created on disk. */
@@ -81,14 +82,20 @@ export function NewWorkflowModal({
   );
 
   return (
-    <div role="dialog" aria-label="New workflow" className="hw-modal-overlay">
-      <form onSubmit={submit} className="hw-modal">
-        <h3 style={{ margin: 0 }}>New workflow</h3>
-
-        <div className="hw-field">
-          <label className="hw-label" htmlFor="nw-name">
-            Name
-          </label>
+    <Modal
+      title="New workflow"
+      onClose={onCancel}
+      footer={
+        <>
+          <Button onClick={onCancel}>Cancel</Button>
+          <Button type="submit" form="hw-new-workflow" variant="primary" disabled={busy}>
+            Create
+          </Button>
+        </>
+      }
+    >
+      <form id="hw-new-workflow" onSubmit={submit} className="hw-form">
+        <Field label="Name" htmlFor="nw-name">
           <input
             id="nw-name"
             className="hw-input"
@@ -96,12 +103,9 @@ export function NewWorkflowModal({
             onChange={(e) => setName(e.target.value)}
             autoFocus
           />
-        </div>
+        </Field>
 
-        <div className="hw-field">
-          <label className="hw-label" htmlFor="nw-scope">
-            Scope
-          </label>
+        <Field label="Scope" htmlFor="nw-scope">
           <select
             id="nw-scope"
             className="hw-select"
@@ -112,25 +116,19 @@ export function NewWorkflowModal({
             <option value="project">project</option>
             <option value="projects">projects</option>
           </select>
-        </div>
+        </Field>
         {scopeType !== "global" && (
-          <div className="hw-field">
-            <label className="hw-label" htmlFor="nw-projects">
-              Projects (comma-separated)
-            </label>
+          <Field label="Projects (comma-separated)" htmlFor="nw-projects">
             <input
               id="nw-projects"
               className="hw-input"
               value={projects}
               onChange={(e) => setProjects(e.target.value)}
             />
-          </div>
+          </Field>
         )}
 
-        <div className="hw-field">
-          <label className="hw-label" htmlFor="nw-trigger">
-            Trigger
-          </label>
+        <Field label="Trigger" htmlFor="nw-trigger">
           <select
             id="nw-trigger"
             className="hw-select"
@@ -140,12 +138,9 @@ export function NewWorkflowModal({
             <option value="manual">manual</option>
             <option value="cron">cron</option>
           </select>
-        </div>
+        </Field>
         {triggerType === "cron" && (
-          <div className="hw-field">
-            <label className="hw-label" htmlFor="nw-schedule">
-              Schedule (cron)
-            </label>
+          <Field label="Schedule (cron)" htmlFor="nw-schedule">
             <input
               id="nw-schedule"
               className="hw-input"
@@ -153,7 +148,7 @@ export function NewWorkflowModal({
               onChange={(e) => setSchedule(e.target.value)}
               placeholder="0 5 * * *"
             />
-          </div>
+          </Field>
         )}
 
         {error !== null && (
@@ -161,16 +156,7 @@ export function NewWorkflowModal({
             {error}
           </p>
         )}
-
-        <div className="hw-modal-actions">
-          <button type="button" className="hw-btn" onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="submit" className="hw-btn hw-btn--primary" disabled={busy}>
-            Create
-          </button>
-        </div>
       </form>
-    </div>
+    </Modal>
   );
 }

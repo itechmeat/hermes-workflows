@@ -9,6 +9,7 @@ import type {
   ExportedRun,
   ExportedWorkflow,
   HermesPlan,
+  ModelGroup,
   O2BStatus,
   RunOptions,
   RunStartResult,
@@ -53,6 +54,10 @@ export interface WorkflowsApi {
   getSettings(): Promise<SettingsResponse>;
   saveSettings(values: WorkflowSettings): Promise<SettingsResponse>;
   o2bStatus(): Promise<O2BStatus>;
+  /** Agent-task profile names from the user's Hermes roster. */
+  listProfiles(): Promise<string[]>;
+  /** Models grouped by authenticated provider (from the host model picker). */
+  listModels(): Promise<ModelGroup[]>;
 }
 
 const BASE = "/api/plugins/workflows";
@@ -184,6 +189,25 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
 
     o2bStatus() {
       return fetchJSON<O2BStatus>(`${BASE}/o2b-status`);
+    },
+    async listProfiles() {
+      const r = await fetchJSON<{ profiles: string[] }>(`${BASE}/profiles`);
+      return r.profiles;
+    },
+    async listModels() {
+      // The host gateway owns the authoritative model picker — every
+      // authenticated provider and its models. We read it directly (not a
+      // plugin route) so the list matches the rest of the dashboard.
+      const r = await fetchJSON<{
+        providers?: { slug?: string; name?: string; models?: string[] }[];
+      }>("/api/model/options");
+      return (r.providers ?? [])
+        .filter((p) => Array.isArray(p.models) && p.models.length > 0)
+        .map((p) => ({
+          provider: p.slug ?? "",
+          label: p.name ?? p.slug ?? "",
+          models: p.models ?? [],
+        }));
     },
   };
 }

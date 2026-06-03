@@ -5,6 +5,13 @@ import { SchedulesPage } from "../src/pages/SchedulesPage";
 import type { WorkflowsApi } from "../src/api/client";
 import type { ScheduleListItem } from "../src/api/types";
 
+/** Row actions live behind a per-row "Actions" dropdown: open the row's menu,
+ *  then click the named item. */
+async function clickRowAction(name: RegExp, row = 0): Promise<void> {
+  await userEvent.click(screen.getAllByRole("button", { name: /^actions$/i })[row]!);
+  await userEvent.click(await screen.findByRole("menuitem", { name }));
+}
+
 function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
   const base = {
     listSchedules: vi.fn(async () => [] as ScheduleListItem[]),
@@ -53,7 +60,7 @@ describe("SchedulesPage", () => {
     render(<SchedulesPage client={stubClient({ listSchedules, pauseSchedule })} />);
 
     await screen.findByText("blog");
-    await userEvent.click(screen.getByRole("button", { name: /pause/i }));
+    await clickRowAction(/pause/i);
     await waitFor(() => expect(pauseSchedule).toHaveBeenCalledWith("cron-blog-1"));
     await waitFor(() => expect(listSchedules).toHaveBeenCalledTimes(2));
   });
@@ -62,7 +69,7 @@ describe("SchedulesPage", () => {
     const resumeSchedule = vi.fn(async () => ({ ok: true }));
     render(<SchedulesPage client={stubClient({ listSchedules: vi.fn(async () => schedules), resumeSchedule })} />);
     await screen.findByText("blog");
-    await userEvent.click(screen.getByRole("button", { name: /resume/i }));
+    await clickRowAction(/resume/i);
     await waitFor(() => expect(resumeSchedule).toHaveBeenCalledWith("cron-blog-1"));
   });
 
@@ -70,7 +77,7 @@ describe("SchedulesPage", () => {
     const runScheduleNow = vi.fn(async () => ({ ok: true }));
     render(<SchedulesPage client={stubClient({ listSchedules: vi.fn(async () => schedules), runScheduleNow })} />);
     await screen.findByText("blog");
-    await userEvent.click(screen.getByRole("button", { name: /run now/i }));
+    await clickRowAction(/run now/i);
     await waitFor(() => expect(runScheduleNow).toHaveBeenCalledWith("cron-blog-1"));
   });
 
@@ -81,7 +88,7 @@ describe("SchedulesPage", () => {
     render(<SchedulesPage client={stubClient({ listSchedules, editSchedule })} />);
 
     await screen.findByText("blog");
-    await userEvent.click(screen.getByRole("button", { name: /edit/i }));
+    await clickRowAction(/edit/i);
     await waitFor(() => expect(editSchedule).toHaveBeenCalledWith("cron-blog-1", "30 7 * * *"));
     await waitFor(() => expect(listSchedules).toHaveBeenCalledTimes(2));
   });
@@ -91,7 +98,7 @@ describe("SchedulesPage", () => {
     const editSchedule = vi.fn(async () => ({ ok: true }));
     render(<SchedulesPage client={stubClient({ listSchedules: vi.fn(async () => schedules), editSchedule })} />);
     await screen.findByText("blog");
-    await userEvent.click(screen.getByRole("button", { name: /edit/i }));
+    await clickRowAction(/edit/i);
     expect(editSchedule).not.toHaveBeenCalled();
   });
 
@@ -102,7 +109,7 @@ describe("SchedulesPage", () => {
     render(<SchedulesPage client={stubClient({ listSchedules, deleteSchedule })} />);
 
     await screen.findByText("blog");
-    await userEvent.click(screen.getByRole("button", { name: /delete/i }));
+    await clickRowAction(/delete/i);
     await waitFor(() => expect(deleteSchedule).toHaveBeenCalledWith("cron-blog-1"));
     await waitFor(() => expect(listSchedules).toHaveBeenCalledTimes(2));
   });

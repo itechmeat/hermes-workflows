@@ -1,37 +1,45 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { FlowNode } from "../graphMapping";
+import { nodeTypeLabel } from "../graphMapping";
+import { useNodeOpen } from "../nodeOpenContext";
+import { ExpandIcon } from "../../ui/icons";
 
-const TYPE_LABEL: Record<string, string> = {
-  agent_task: "Agent task",
-  script: "Script",
-  condition: "Condition",
-  human_review: "Human review",
-  finish: "Finish",
-};
-
-// One generic renderer for every workflow node type (T3). It shows the type,
-// id, and title and exposes a target/source handle so edges can be drawn;
-// per-type detail editing lives in the inspector (T4).
+// One generic renderer for every workflow node type. The header line carries
+// the human type label and a short id; an open button (equivalent to a double
+// click) reveals the editor modal. agent_task nodes show profile · model under
+// the title.
 export function WorkflowNodeView({ data, selected }: NodeProps<FlowNode>): React.ReactElement {
   const { node } = data;
+  const openNode = useNodeOpen();
+  const meta =
+    node.type === "agent_task"
+      ? [node.profile, node.model].filter((v): v is string => Boolean(v)).join(" · ")
+      : "";
+
   return (
-    <div
-      data-node-type={node.type}
-      style={{
-        minWidth: 140,
-        padding: "8px 12px",
-        borderRadius: 6,
-        border: `1px solid ${selected ? "#5b9dd9" : "var(--border, #3a3a3a)"}`,
-        background: "var(--card, #1d1d1d)",
-        fontSize: 12,
-      }}
-    >
+    <div data-node-type={node.type} className={`hw-node${selected ? " is-selected" : ""}`}>
       <Handle type="target" position={Position.Left} />
-      <div style={{ opacity: 0.6, textTransform: "uppercase", fontSize: 10 }}>
-        {TYPE_LABEL[node.type] ?? node.type}
+      <div className="hw-node__head">
+        <div className="hw-node__type">
+          {nodeTypeLabel(node.type)} <span className="hw-node__id">{node.id}</span>
+        </div>
+        {openNode && (
+          <button
+            type="button"
+            className="hw-node__open nodrag"
+            aria-label="Open node"
+            title="Open node"
+            onClick={(e) => {
+              e.stopPropagation();
+              openNode(node.id);
+            }}
+          >
+            <ExpandIcon />
+          </button>
+        )}
       </div>
-      <div style={{ fontWeight: 600 }}>{node.title ?? node.id}</div>
-      {node.title !== undefined && <div style={{ opacity: 0.6 }}>{node.id}</div>}
+      {node.title !== undefined && <div className="hw-node__title">{node.title}</div>}
+      {meta !== "" && <div className="hw-node__meta">{meta}</div>}
       <Handle type="source" position={Position.Right} />
     </div>
   );

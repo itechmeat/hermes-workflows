@@ -39,6 +39,20 @@ export interface WorkflowGraph {
 /** The shared node type key; T3 ships one generic renderer, T4 adds per-type. */
 export const WORKFLOW_NODE_TYPE = "workflow";
 
+/** Human-readable label for a workflow node type, shared by the canvas node and
+ *  the editor modal so the technical type (`agent_task`) shows as "Agent task". */
+export const NODE_TYPE_LABEL: Record<string, string> = {
+  agent_task: "Agent task",
+  script: "Script",
+  condition: "Condition",
+  human_review: "Human review",
+  finish: "Finish",
+};
+
+export function nodeTypeLabel(type: string): string {
+  return NODE_TYPE_LABEL[type] ?? type;
+}
+
 function positionFor(
   id: string,
   index: number,

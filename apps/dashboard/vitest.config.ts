@@ -25,5 +25,12 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
+    // The bundle-load test runs a full `vite build` inside the suite; on a
+    // contended machine parallel workers starve and menu-interaction tests blow
+    // the default 5s timeout (observed: a different test flaking on every run,
+    // all green in isolation). Sequential files plus a generous per-test
+    // timeout keep the suite deterministic regardless of host load.
+    fileParallelism: false,
+    testTimeout: 30_000,
   },
 });

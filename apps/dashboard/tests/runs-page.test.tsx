@@ -5,6 +5,13 @@ import { RunsPage } from "../src/pages/RunsPage";
 import type { WorkflowsApi } from "../src/api/client";
 import type { ExportedRun, RunState, RunSummary } from "../src/api/types";
 
+/** Row actions live behind a per-row "Actions" dropdown: open the row's menu,
+ *  then click the named item. */
+async function clickRowAction(row: number, name: RegExp): Promise<void> {
+  await userEvent.click(screen.getAllByRole("button", { name: /^actions$/i })[row]!);
+  await userEvent.click(await screen.findByRole("menuitem", { name }));
+}
+
 function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
   const base = {
     listRuns: vi.fn(async () => [] as RunSummary[]),
@@ -85,7 +92,7 @@ describe("RunsPage", () => {
     render(<RunsPage client={client} onOpenRun={onOpenRun} />);
 
     await screen.findByText("deploy-aaaa1111");
-    await userEvent.click(screen.getAllByRole("button", { name: /open/i })[0]!);
+    await clickRowAction(0, /open/i);
     expect(onOpenRun).toHaveBeenCalledWith("deploy-aaaa1111");
   });
 
@@ -95,7 +102,7 @@ describe("RunsPage", () => {
     render(<RunsPage client={stubClient({ listRuns, cancelRun })} onOpenRun={() => {}} />);
 
     await screen.findByText("deploy-aaaa1111");
-    await userEvent.click(screen.getAllByRole("button", { name: /cancel/i })[0]!);
+    await clickRowAction(0, /cancel/i);
     await waitFor(() => expect(cancelRun).toHaveBeenCalledWith("deploy-aaaa1111"));
     await waitFor(() => expect(listRuns).toHaveBeenCalledTimes(2));
   });
@@ -105,7 +112,7 @@ describe("RunsPage", () => {
     render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => runs), retryRun })} onOpenRun={() => {}} />);
 
     await screen.findByText("deploy-aaaa1111");
-    await userEvent.click(screen.getAllByRole("button", { name: /retry run/i })[0]!);
+    await clickRowAction(0, /retry run/i);
     await waitFor(() => expect(retryRun).toHaveBeenCalledWith("deploy-aaaa1111"));
   });
 
@@ -115,7 +122,7 @@ describe("RunsPage", () => {
     render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => runs), retryRun })} onOpenRun={() => {}} />);
 
     await screen.findByText("deploy-aaaa1111");
-    await userEvent.click(screen.getAllByRole("button", { name: /retry node/i })[0]!);
+    await clickRowAction(0, /retry node/i);
     await waitFor(() => expect(retryRun).toHaveBeenCalledWith("deploy-aaaa1111", "build"));
   });
 
@@ -132,7 +139,7 @@ describe("RunsPage", () => {
     render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => runs), exportRunLogs })} onOpenRun={() => {}} />);
 
     await screen.findByText("deploy-aaaa1111");
-    await userEvent.click(screen.getAllByRole("button", { name: /export/i })[0]!);
+    await clickRowAction(0, /export/i);
     await waitFor(() => expect(exportRunLogs).toHaveBeenCalledWith("deploy-aaaa1111"));
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });

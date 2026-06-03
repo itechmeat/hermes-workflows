@@ -143,11 +143,22 @@ describe("useFlowEditor", () => {
     act(() => {
       id = result.current.addNode("condition");
     });
-    expect(id).toBe("condition-1");
+    // node ids are sequential numbers (no type prefix)
+    expect(id).toMatch(/^\d+$/);
     const added = result.current.nodes.find((n) => n.id === id);
     expect(added?.data.node.type).toBe("condition");
     expect(result.current.selectedNode?.id).toBe(id);
     expect(result.current.dirty).toBe(true);
+  });
+
+  it("defaults a new agent_task to max_retries 3", () => {
+    const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
+    let id = "";
+    act(() => {
+      id = result.current.addNode("agent_task");
+    });
+    const added = result.current.nodes.find((n) => n.id === id);
+    expect(added?.data.node).toMatchObject({ type: "agent_task", max_retries: 3 });
   });
 
   it("duplicates a node under a fresh id, copying fields at an offset, and selects it", () => {

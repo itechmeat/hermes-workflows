@@ -2,7 +2,7 @@
   "name": "workflows",
   "label": "Workflows",
   "description": "Visual workflow orchestration over Hermes Kanban, Cron, and Profiles.",
-  "icon": "Workflow",
+  "icon": "Activity",
   "version": "0.1.0",
   "tab": {
     "path": "/workflows",

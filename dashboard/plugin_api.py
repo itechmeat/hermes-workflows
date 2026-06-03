@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Iterator
 
 from fastapi import APIRouter, Body, HTTPException
@@ -500,17 +501,65 @@ async def put_settings(payload: dict = Body(...)) -> dict:
     return {"values": values, "schema": config.settings_schema()}
 
 
+def _home_dir() -> Path:
+    """The invoking user's home, resolved from the password database by uid
+    rather than ``$HOME``/``expanduser``. The gateway service mutates its
+    process environment, so ``$HOME`` is unreliable inside a request handler;
+    the passwd entry is stable."""
+    try:
+        import pwd
+
+        return Path(pwd.getpwuid(os.getuid()).pw_dir)
+    except Exception:
+        return Path(os.path.expanduser("~"))
+
+
+def _o2b_installed(home: Path) -> bool:
+    """Whether the OpenSecondBrain CLI is present — on PATH or at the
+    conventional user-local install dir (the gateway env may not carry
+    ``~/.local/bin``)."""
+    return shutil.which("o2b") is not None or (home / ".local/bin/o2b").exists()
+
+
 @router.get("/o2b-status")
 async def o2b_status() -> dict:
-    """Best-effort OpenSecondBrain availability for the connection badge.
-    Probes `o2b status` (configuration present), not `o2b brain doctor` (a
-    strict vault-content check). Never raises — O2B is optional."""
-    if shutil.which("o2b") is None:
-        return {"connected": False}
+    """Best-effort OpenSecondBrain availability for the connection badge: the
+    CLI is installed and a config file exists. Resolved from the filesystem
+    (paths derived from the passwd home, not ``$HOME``) rather than a
+    ``o2b status`` subprocess, whose exit code was an unreliable signal under
+    the gateway's mutated service environment — the probe reported
+    "not connected" even when O2B was configured. Never raises — O2B is
+    optional."""
+    home = _home_dir()
+    config = home / ".config/open-second-brain/config.yaml"
+    return {"connected": _o2b_installed(home) and config.is_file()}
+
+
+def _read_yaml(path: Path) -> dict:
+    """Parse a YAML mapping file, returning {} on any error (missing file, parse
+    failure, non-mapping root)."""
     try:
-        result = subprocess.run(
-            ["o2b", "status"], capture_output=True, text=True, timeout=10
-        )
-        return {"connected": result.returncode == 0}
+        import yaml
+
+        with path.open("r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+        return data if isinstance(data, dict) else {}
     except Exception:
-        return {"connected": False}
+        return {}
+
+
+@router.get("/profiles")
+async def list_profiles() -> dict:
+    """Agent-task profile names from the user's Hermes roster
+    (``<hermes_home>/agent-roster/agents.yaml``). Best-effort: [] if unreadable."""
+    from hermes_workflows import config as wf_config
+
+    roster = _read_yaml(wf_config.hermes_home() / "agent-roster" / "agents.yaml")
+    agents = roster.get("agents")
+    names = sorted(agents.keys()) if isinstance(agents, dict) else []
+    return {"profiles": names}
+
+
+# Model options are served by the host gateway (`/api/model/options`), which
+# enumerates every authenticated provider and its models. The dashboard calls
+# that endpoint directly, so the plugin does not duplicate a `/models` route.

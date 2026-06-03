@@ -4,6 +4,46 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+A visual overhaul of the dashboard plugin on a shared component kit, plus richer
+`agent_task` editing backed by live host data.
+
+### Added
+
+- Plugin header with section navigation (Workflows / Runs / Schedules / Settings),
+  an OpenSecondBrain connection indicator, and a portal slot the active view fills
+  with its own title and actions.
+- Hash-based routing: every view (including an open editor or run inspector) maps
+  to a URL hash, so deep links, refresh, and browser back/forward work.
+- Shared UI kit under `src/ui/components` (`Button`, `Badge`, `Field`, `Menu`,
+  `Modal`, `PageHeader`) and an inline SVG icon set, with component tests.
+- `GET /profiles` plugin route serving agent-profile names from the Hermes
+  roster, and a model list read from the host model picker
+  (`/api/model/options`); the node inspector offers both as select fields while
+  preserving values not in the current roster/model list.
+
+### Changed
+
+- All dashboard styling moved to token-driven `hw-` classes in `theme.css`;
+  no inline `style` objects remain.
+- The editor adds nodes from a toolbar Add-node menu instead of a side palette,
+  and a freshly added node opens directly in the inspector.
+- The dashboard test suite runs test files sequentially with a 30s per-test
+  timeout, so the in-suite bundle build cannot starve interaction tests on a
+  loaded machine.
+
+### Removed
+
+- `NodePalette` component (superseded by the toolbar Add-node menu).
+
+### Fixed
+
+- `GET /o2b-status` now resolves the OpenSecondBrain CLI and config from the
+  filesystem (home from the passwd database) instead of probing `o2b status`
+  in a subprocess, which misreported "not connected" under the dashboard
+  service's sanitized environment.
+
 ## 0.1.0 - 2026-05-30
 
 The editor backend foundation plus the visual `@xyflow/react` editor and live

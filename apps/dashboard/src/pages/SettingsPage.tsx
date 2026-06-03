@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
+import { Button, Field } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
 import type { SettingsField, SettingsSchema, SettingsValue, WorkflowSettings } from "../api/types";
 
@@ -60,27 +61,29 @@ export function SettingsPage({ client }: SettingsPageProps): React.ReactElement 
   }, [api, form]);
 
   if (state.kind === "loading") {
-    return <p style={{ padding: 16 }}>Loading settings…</p>;
+    return <p className="hw-page">Loading settings…</p>;
   }
   if (state.kind === "error") {
-    return <p style={{ padding: 16 }}>Failed to load settings.</p>;
+    return <p className="hw-page">Failed to load settings.</p>;
   }
 
   return (
-    <div style={{ padding: 16, maxWidth: 640 }}>
+    <div className="hw-page hw-page--narrow">
       <h2>Settings</h2>
       {state.schema.groups.map((group) => (
-        <section key={group.key} style={{ marginBottom: 20 }}>
-          <h3 style={{ margin: "12px 0 8px" }}>{group.label}</h3>
-          {group.fields.map((field) => (
-            <Field key={field.key} field={field} value={form[field.key]} onChange={setField} />
-          ))}
+        <section key={group.key} className="hw-group">
+          <h3>{group.label}</h3>
+          <div className="hw-form">
+            {group.fields.map((field) => (
+              <SettingField key={field.key} field={field} value={form[field.key]} onChange={setField} />
+            ))}
+          </div>
         </section>
       ))}
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <button type="button" className="hw-btn hw-btn--primary" onClick={handleSave}>
+      <div className="hw-row">
+        <Button variant="primary" onClick={handleSave}>
           Save settings
-        </button>
+        </Button>
         {saved && (
           <span role="status" className="hw-status">
             Settings saved.
@@ -102,16 +105,13 @@ interface FieldProps {
   onChange: (key: string, value: SettingsValue) => void;
 }
 
-function Field({ field, value, onChange }: FieldProps): React.ReactElement {
+function SettingField({ field, value, onChange }: FieldProps): React.ReactElement {
   const id = `hw-set-${field.key}`;
   const label = `${humanize(field.key)}${field.enforced ? "" : " (not yet enforced)"}`;
   return (
-    <div className="hw-field" style={{ marginBottom: 10 }}>
-      <label className="hw-label" htmlFor={id}>
-        {label}
-      </label>
+    <Field label={label} htmlFor={id}>
       <Control id={id} field={field} value={value} onChange={onChange} />
-    </div>
+    </Field>
   );
 }
 

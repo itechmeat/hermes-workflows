@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { getApiClient } from "../host";
 import type { WorkflowsApi } from "../api/client";
 import type { HermesPlan } from "../api/types";
+import { Button } from "../ui/components";
 
 export interface CompilePreviewProps {
   workflowId: string;
@@ -29,12 +30,12 @@ export function CompilePreview({ workflowId, client }: CompilePreviewProps): Rea
   }, [api, workflowId]);
 
   return (
-    <section style={{ padding: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <section className="hw-section">
+      <div className="hw-row hw-row--sm">
         <strong>Compile preview</strong>
-        <button type="button" onClick={preview} disabled={busy}>
+        <Button onClick={preview} disabled={busy}>
           Preview plan
-        </button>
+        </Button>
       </div>
       {error !== null && <p role="alert">{error}</p>}
       {plan !== null && (

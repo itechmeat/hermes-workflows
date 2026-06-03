@@ -33,10 +33,22 @@ const detail: SpecDetail = { workflow, ui, path: "/x/deploy.workflow.yaml" };
 function stubClient(): WorkflowsApi {
   return {
     saveWorkflow: vi.fn(async (_id, body) => ({ ...body, path: detail.path })),
+    listProfiles: vi.fn(async () => []),
+    listModels: vi.fn(async () => []),
   } as unknown as WorkflowsApi;
 }
 
 describe("FlowEditor", () => {
+  it("shows a back button only when onBack is provided, and fires it", async () => {
+    const { rerender } = render(<FlowEditor detail={detail} client={stubClient()} />);
+    expect(screen.queryByRole("button", { name: /^back$/i })).not.toBeInTheDocument();
+
+    const onBack = vi.fn();
+    rerender(<FlowEditor detail={detail} client={stubClient()} onBack={onBack} />);
+    await userEvent.click(screen.getByRole("button", { name: /^back$/i }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
   it("renders a node per workflow node at its ui position", () => {
     const { container } = render(<FlowEditor detail={detail} client={stubClient()} />);
 
@@ -73,12 +85,13 @@ describe("FlowEditor", () => {
     expect(screen.getByText("Deploy Pipeline")).toBeInTheDocument();
   });
 
-  it("adds a node from the palette, selecting it for editing and marking dirty", async () => {
+  it("adds a node from the Add-node menu, opening it for editing and marking dirty", async () => {
     render(<FlowEditor detail={detail} client={stubClient()} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Agent task" }));
+    await userEvent.click(screen.getByRole("button", { name: /add node/i }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Agent task" }));
 
-    // newly added node is auto-selected -> inspector shows agent_task fields
+    // a freshly added node opens straight into the editor modal
     expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
     // and the graph is now dirty, enabling Save
     expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
@@ -101,10 +114,17 @@ describe("FlowEditor", () => {
     const { container } = render(<FlowEditor detail={detail} client={stubClient()} />);
 
     // adding a node auto-selects it; duplicate then clones the selection
-    await userEvent.click(screen.getByRole("button", { name: "Agent task" }));
+    await userEvent.click(screen.getByRole("button", { name: /add node/i }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Agent task" }));
     await userEvent.click(screen.getByRole("button", { name: /duplicate node/i }));
 
-    expect(container.querySelector('[data-id="agent_task-1"]')).not.toBeNull();
-    expect(container.querySelector('[data-id="agent_task-2"]')).not.toBeNull();
+    // node ids are sequential numbers: the added node is "1", its clone "2"
+    expect(container.querySelector('[data-id="1"]')).not.toBeNull();
+    expect(container.querySelector('[data-id="2"]')).not.toBeNull();
   });
+
+  // The node modal opens on double-click (onNodeDoubleClick) and selection on
+  // single click (onNodeClick). These ReactFlow pointer paths can't be driven
+  // in jsdom — d3-drag dereferences a live `document` on mousedown and throws —
+  // so the editor-open path is covered above via the Add-node menu instead.
 });

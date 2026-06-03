@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
 import { downloadTextFile } from "../templates/download";
 import { formatEpochSeconds } from "../ui/format";
+import { Badge, Menu, PageHeader } from "../ui/components";
 import type { RunScope, WorkflowsApi } from "../api/client";
-import type { RunStatus, RunSummary } from "../api/types";
+import type { RunSummary } from "../api/types";
 
 export interface RunsPageProps {
   /** Injected for tests; defaults to the host-bound client. */
@@ -116,25 +117,27 @@ export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactEleme
   );
 
   if (state.kind === "loading") {
-    return <p style={{ padding: 16 }}>Loading runs…</p>;
+    return <p className="hw-page">Loading runs…</p>;
   }
   if (state.kind === "error") {
-    return <p style={{ padding: 16 }}>Failed to load runs.</p>;
+    return <p className="hw-page">Failed to load runs.</p>;
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <h2 style={{ marginRight: "auto" }}>Runs</h2>
-        <label className="hw-checkbox">
-          <input
-            type="checkbox"
-            checked={activeOnly}
-            onChange={(e) => setActiveOnly(e.target.checked)}
-          />{" "}
-          Active only
-        </label>
-      </div>
+    <div className="hw-page">
+      <PageHeader
+        title="Runs"
+        actions={
+          <label className="hw-checkbox">
+            <input
+              type="checkbox"
+              checked={activeOnly}
+              onChange={(e) => setActiveOnly(e.target.checked)}
+            />{" "}
+            Active only
+          </label>
+        }
+      />
       {message !== null && (
         <p role="status" className="hw-status">
           {message}
@@ -143,51 +146,46 @@ export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactEleme
       {state.items.length === 0 ? (
         <p>No runs yet.</p>
       ) : (
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <table className="hw-table hw-table--nowrap">
           <thead>
             <tr>
-              <th style={cell}>Run ID</th>
-              <th style={cell}>Workflow</th>
-              <th style={cell}>Project</th>
-              <th style={cell}>Status</th>
-              <th style={cell}>Current node</th>
-              <th style={cell}>Started</th>
-              <th style={cell}>Finished</th>
-              <th style={cell}>Duration</th>
-              <th style={cell}>Actions</th>
+              <th>Run ID</th>
+              <th>Workflow</th>
+              <th>Project</th>
+              <th>Status</th>
+              <th>Current node</th>
+              <th>Started</th>
+              <th>Finished</th>
+              <th>Duration</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {state.items.map((r) => (
               <tr key={r.run_id}>
-                <td style={cell}>{r.run_id}</td>
-                <td style={cell}>{r.workflow_id}</td>
-                <td style={cell}>{r.project_id ?? "—"}</td>
-                <td style={cell}>
-                  <StatusBadge status={r.status} />
+                <td>{r.run_id}</td>
+                <td>{r.workflow_id}</td>
+                <td>{r.project_id ?? "—"}</td>
+                <td>
+                  <Badge tone={r.status}>{r.status}</Badge>
                 </td>
-                <td style={cell}>{r.current_node ?? "—"}</td>
-                <td style={cell}>{formatEpochSeconds(r.started_at)}</td>
-                <td style={cell}>{formatEpochSeconds(r.finished_at)}</td>
-                <td style={cell}>{formatDuration(r.duration)}</td>
-                <td style={cell}>
-                  <span className="hw-actions">
-                    <button type="button" className="hw-btn hw-btn--sm" onClick={() => onOpenRun(r.run_id)}>
-                      Open
-                    </button>
-                    <button type="button" className="hw-btn hw-btn--sm" onClick={() => handleCancel(r.run_id)}>
-                      Cancel
-                    </button>
-                    <button type="button" className="hw-btn hw-btn--sm" onClick={() => handleRetryNode(r)}>
-                      Retry node
-                    </button>
-                    <button type="button" className="hw-btn hw-btn--sm" onClick={() => handleRetryRun(r.run_id)}>
-                      Retry run
-                    </button>
-                    <button type="button" className="hw-btn hw-btn--sm" onClick={() => handleExport(r.run_id)}>
-                      Export
-                    </button>
-                  </span>
+                <td>{r.current_node ?? "—"}</td>
+                <td>{formatEpochSeconds(r.started_at)}</td>
+                <td>{formatEpochSeconds(r.finished_at)}</td>
+                <td>{formatDuration(r.duration)}</td>
+                <td>
+                  <Menu
+                    size="sm"
+                    align="end"
+                    label="Actions"
+                    items={[
+                      { key: "open", label: "Open", onSelect: () => onOpenRun(r.run_id) },
+                      { key: "cancel", label: "Cancel", onSelect: () => handleCancel(r.run_id) },
+                      { key: "retry-node", label: "Retry node", onSelect: () => handleRetryNode(r) },
+                      { key: "retry-run", label: "Retry run", onSelect: () => handleRetryRun(r.run_id) },
+                      { key: "export", label: "Export", onSelect: () => handleExport(r.run_id) },
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
@@ -197,14 +195,3 @@ export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactEleme
     </div>
   );
 }
-
-function StatusBadge({ status }: { status: RunStatus }): React.ReactElement {
-  return <span className={`hw-badge hw-badge--${status}`}>{status}</span>;
-}
-
-const cell: React.CSSProperties = {
-  textAlign: "left",
-  padding: "4px 12px 4px 0",
-  borderBottom: "1px solid var(--border, #2a2a2a)",
-  whiteSpace: "nowrap",
-};

@@ -5,6 +5,13 @@ import { TemplatesPage } from "../src/pages/TemplatesPage";
 import type { WorkflowsApi } from "../src/api/client";
 import type { CreateWorkflowBody, SpecDetail, WorkflowListItem } from "../src/api/types";
 
+/** Row actions live behind a per-row "Actions" dropdown: open the row's menu,
+ *  then click the named item. */
+async function clickRowAction(row: number, name: RegExp): Promise<void> {
+  await userEvent.click(screen.getAllByRole("button", { name: /^actions$/i })[row]!);
+  await userEvent.click(await screen.findByRole("menuitem", { name }));
+}
+
 function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
   const base = {
     listWorkflows: vi.fn(async () => [] as WorkflowListItem[]),
@@ -79,7 +86,18 @@ describe("TemplatesPage", () => {
     render(<TemplatesPage client={client} onOpen={onOpen} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /open/i })[0]!);
+    await clickRowAction(0, /open/i);
+
+    expect(onOpen).toHaveBeenCalledWith("deploy");
+  });
+
+  it("opens a workflow when its name link is clicked", async () => {
+    const onOpen = vi.fn();
+    const client = stubClient({ listWorkflows: vi.fn(async () => items) });
+    render(<TemplatesPage client={client} onOpen={onOpen} />);
+
+    await screen.findByText("Deploy");
+    await userEvent.click(screen.getByRole("link", { name: "Deploy" }));
 
     expect(onOpen).toHaveBeenCalledWith("deploy");
   });
@@ -90,7 +108,7 @@ describe("TemplatesPage", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /^run$/i })[0]!);
+    await clickRowAction(0, /^run$/i);
 
     await waitFor(() => expect(runWorkflow).toHaveBeenCalledWith("deploy"));
     expect(await screen.findByText(/deploy-12345678/)).toBeInTheDocument();
@@ -104,7 +122,7 @@ describe("TemplatesPage", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /^run$/i })[0]!);
+    await clickRowAction(0, /^run$/i);
 
     expect(await screen.findByText(/scripts_enabled is false/)).toBeInTheDocument();
   });
@@ -129,9 +147,11 @@ describe("TemplatesPage", () => {
 
     await screen.findByText("Nightly");
     // rows render in list order: [0]=deploy(enabled), [1]=nightly(disabled)
-    const runButtons = screen.getAllByRole("button", { name: /^run$/i });
-    expect(runButtons[0]).not.toBeDisabled();
-    expect(runButtons[1]).toBeDisabled();
+    await userEvent.click(screen.getAllByRole("button", { name: /^actions$/i })[0]!);
+    expect(screen.getByRole("menuitem", { name: /^run$/i })).not.toBeDisabled();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getAllByRole("button", { name: /^actions$/i })[1]!);
+    expect(screen.getByRole("menuitem", { name: /^run$/i })).toBeDisabled();
   });
 
   it("toggles a workflow off via the Disable action and refreshes", async () => {
@@ -145,7 +165,7 @@ describe("TemplatesPage", () => {
 
     await screen.findByText("Deploy");
     // deploy is enabled -> its toggle reads "Disable"
-    await userEvent.click(screen.getAllByRole("button", { name: /^disable$/i })[0]!);
+    await clickRowAction(0, /^disable$/i);
 
     await waitFor(() => expect(setWorkflowEnabled).toHaveBeenCalledWith("deploy", false));
     await waitFor(() => expect(listWorkflows).toHaveBeenCalledTimes(2));
@@ -160,7 +180,8 @@ describe("TemplatesPage", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Nightly");
-    await userEvent.click(screen.getByRole("button", { name: /^enable$/i }));
+    // nightly is row 1 (disabled) -> its toggle reads "Enable"
+    await clickRowAction(1, /^enable$/i);
 
     await waitFor(() => expect(setWorkflowEnabled).toHaveBeenCalledWith("nightly", true));
   });
@@ -198,7 +219,7 @@ describe("TemplatesPage — row lifecycle actions", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /duplicate/i })[0]!);
+    await clickRowAction(0, /duplicate/i);
 
     await waitFor(() => expect(createWorkflow).toHaveBeenCalledTimes(1));
     expect(getWorkflow).toHaveBeenCalledWith("deploy");
@@ -216,7 +237,7 @@ describe("TemplatesPage — row lifecycle actions", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /duplicate/i })[0]!);
+    await clickRowAction(0, /duplicate/i);
 
     expect(createWorkflow).not.toHaveBeenCalled();
     expect(await screen.findByText(/not a valid id/i)).toBeInTheDocument();
@@ -229,7 +250,7 @@ describe("TemplatesPage — row lifecycle actions", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /duplicate/i })[0]!);
+    await clickRowAction(0, /duplicate/i);
 
     expect(createWorkflow).not.toHaveBeenCalled();
   });
@@ -242,7 +263,7 @@ describe("TemplatesPage — row lifecycle actions", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /delete/i })[0]!);
+    await clickRowAction(0, /delete/i);
 
     await waitFor(() => expect(deleteWorkflow).toHaveBeenCalledWith("deploy"));
     await waitFor(() => expect(listWorkflows).toHaveBeenCalledTimes(2));
@@ -255,7 +276,7 @@ describe("TemplatesPage — row lifecycle actions", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /delete/i })[0]!);
+    await clickRowAction(0, /delete/i);
 
     expect(deleteWorkflow).not.toHaveBeenCalled();
   });
@@ -303,7 +324,7 @@ describe("TemplatesPage — row lifecycle actions", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getAllByRole("button", { name: /export/i })[0]!);
+    await clickRowAction(0, /export/i);
 
     await waitFor(() => expect(exportWorkflow).toHaveBeenCalledWith("deploy"));
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);

@@ -56,3 +56,29 @@ def test_o2b_status_route(client: TestClient) -> None:
     resp = client.get("/o2b-status")
     assert resp.status_code == 200
     assert isinstance(resp.json()["connected"], bool)
+
+
+def test_profiles_route(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Profile names come from the roster YAML, sorted; missing roster -> []."""
+    import hermes_workflows.config as wf_config
+
+    roster_dir = tmp_path / "agent-roster"
+    roster_dir.mkdir()
+    (roster_dir / "agents.yaml").write_text(
+        "agents:\n  writer: {}\n  coder: {}\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(wf_config, "hermes_home", lambda: tmp_path)
+    resp = client.get("/profiles")
+    assert resp.status_code == 200
+    assert resp.json()["profiles"] == ["coder", "writer"]
+
+
+def test_profiles_route_missing_roster(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import hermes_workflows.config as wf_config
+
+    monkeypatch.setattr(wf_config, "hermes_home", lambda: tmp_path)
+    resp = client.get("/profiles")
+    assert resp.status_code == 200
+    assert resp.json()["profiles"] == []

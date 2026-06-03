@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
 import { formatIso } from "../ui/format";
+import { Badge, Menu, PageHeader } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
 import type { ScheduleListItem } from "../api/types";
 
@@ -71,17 +72,15 @@ export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElemen
   );
 
   if (state.kind === "loading") {
-    return <p style={{ padding: 16 }}>Loading schedules…</p>;
+    return <p className="hw-page">Loading schedules…</p>;
   }
   if (state.kind === "error") {
-    return <p style={{ padding: 16 }}>Failed to load schedules.</p>;
+    return <p className="hw-page">Failed to load schedules.</p>;
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <h2 style={{ marginRight: "auto" }}>Schedules</h2>
-      </div>
+    <div className="hw-page">
+      <PageHeader title="Schedules" />
       {message !== null && (
         <p role="status" className="hw-status">
           {message}
@@ -90,71 +89,65 @@ export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElemen
       {state.items.length === 0 ? (
         <p>No schedules yet. Deploy a cron-triggered workflow to create one.</p>
       ) : (
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <table className="hw-table hw-table--nowrap">
           <thead>
             <tr>
-              <th style={cell}>Workflow</th>
-              <th style={cell}>Cron expression</th>
-              <th style={cell}>Timezone</th>
-              <th style={cell}>Enabled</th>
-              <th style={cell}>Last run</th>
-              <th style={cell}>Next run</th>
-              <th style={cell}>Hermes Cron ID</th>
-              <th style={cell}>Actions</th>
+              <th>Workflow</th>
+              <th>Cron expression</th>
+              <th>Timezone</th>
+              <th>Enabled</th>
+              <th>Last run</th>
+              <th>Next run</th>
+              <th>Hermes Cron ID</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {state.items.map((s) => (
               <tr key={s.hermes_cron_id}>
-                <td style={cell}>{s.workflow_id}</td>
-                <td style={cell}>
+                <td>{s.workflow_id}</td>
+                <td>
                   <code>{s.cron_expression ?? "—"}</code>
                 </td>
-                <td style={cell}>{s.timezone}</td>
-                <td style={cell}>
-                  <span className={`hw-badge hw-badge--${s.enabled ? "completed" : "cancelled"}`}>
+                <td>{s.timezone}</td>
+                <td>
+                  <Badge tone={s.enabled ? "completed" : "cancelled"}>
                     {s.enabled ? "on" : "paused"}
-                  </span>
+                  </Badge>
                 </td>
-                <td style={cell}>{formatIso(s.last_run)}</td>
-                <td style={cell}>{formatIso(s.next_run)}</td>
-                <td style={cell}>
+                <td>{formatIso(s.last_run)}</td>
+                <td>{formatIso(s.next_run)}</td>
+                <td>
                   <code>{s.hermes_cron_id}</code>
                 </td>
-                <td style={cell}>
-                  <span className="hw-actions">
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm"
-                      onClick={() => act("Pause", s.hermes_cron_id, () => api.pauseSchedule(s.hermes_cron_id))}
-                    >
-                      Pause
-                    </button>
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm"
-                      onClick={() => act("Resume", s.hermes_cron_id, () => api.resumeSchedule(s.hermes_cron_id))}
-                    >
-                      Resume
-                    </button>
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm"
-                      onClick={() => act("Run", s.hermes_cron_id, () => api.runScheduleNow(s.hermes_cron_id))}
-                    >
-                      Run now
-                    </button>
-                    <button type="button" className="hw-btn hw-btn--sm" onClick={() => handleEdit(s)}>
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm hw-btn--danger"
-                      onClick={() => handleDelete(s)}
-                    >
-                      Delete
-                    </button>
-                  </span>
+                <td>
+                  <Menu
+                    size="sm"
+                    align="end"
+                    label="Actions"
+                    items={[
+                      {
+                        key: "pause",
+                        label: "Pause",
+                        onSelect: () =>
+                          act("Pause", s.hermes_cron_id, () => api.pauseSchedule(s.hermes_cron_id)),
+                      },
+                      {
+                        key: "resume",
+                        label: "Resume",
+                        onSelect: () =>
+                          act("Resume", s.hermes_cron_id, () => api.resumeSchedule(s.hermes_cron_id)),
+                      },
+                      {
+                        key: "run",
+                        label: "Run now",
+                        onSelect: () =>
+                          act("Run", s.hermes_cron_id, () => api.runScheduleNow(s.hermes_cron_id)),
+                      },
+                      { key: "edit", label: "Edit", onSelect: () => handleEdit(s) },
+                      { key: "delete", label: "Delete", onSelect: () => handleDelete(s) },
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
@@ -164,10 +157,3 @@ export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElemen
     </div>
   );
 }
-
-const cell: React.CSSProperties = {
-  textAlign: "left",
-  padding: "4px 12px 4px 0",
-  borderBottom: "1px solid var(--border, #2a2a2a)",
-  whiteSpace: "nowrap",
-};

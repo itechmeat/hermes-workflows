@@ -137,6 +137,15 @@ export interface O2BStatus {
   connected: boolean;
 }
 
+/** Models offered by one authenticated provider, for the agent_task model
+ *  picker. `provider` is the slug used in `model@provider` values; `label` is
+ *  its display name. */
+export interface ModelGroup {
+  provider: string;
+  label: string;
+  models: string[];
+}
+
 /** A single settings value (the Settings page handles string / int / bool). */
 export type SettingsValue = string | number | boolean;
 

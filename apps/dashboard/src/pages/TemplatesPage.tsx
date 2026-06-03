@@ -4,6 +4,7 @@ import { downloadTextFile } from "../templates/download";
 import { NewWorkflowModal } from "../templates/NewWorkflowModal";
 import { isValidSlug } from "../templates/slug";
 import { formatEpochSeconds, formatIso, orDash } from "../ui/format";
+import { Badge, Button, Menu, PageHeader } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
 import type { Trigger, WorkflowListItem } from "../api/types";
 
@@ -161,20 +162,22 @@ export function TemplatesPage({
   );
 
   if (state.kind === "loading") {
-    return <p style={{ padding: 16 }}>Loading workflows…</p>;
+    return <p className="hw-page">Loading workflows…</p>;
   }
   if (state.kind === "error") {
-    return <p style={{ padding: 16 }}>Failed to load workflows.</p>;
+    return <p className="hw-page">Failed to load workflows.</p>;
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <h2 style={{ marginRight: "auto" }}>Workflows</h2>
-        <button type="button" className="hw-btn hw-btn--primary" onClick={() => setShowNew(true)}>
-          New workflow
-        </button>
-      </div>
+    <div className="hw-page">
+      <PageHeader
+        title="Workflows"
+        actions={
+          <Button variant="primary" onClick={() => setShowNew(true)}>
+            New workflow
+          </Button>
+        }
+      />
       {runMessage !== null && (
         <p role="status" className="hw-status">
           {runMessage}
@@ -190,77 +193,69 @@ export function TemplatesPage({
       {state.items.length === 0 ? (
         <p>No workflows yet.</p>
       ) : (
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <table className="hw-table">
           <thead>
             <tr>
-              <th style={cell}>Name</th>
-              <th style={cell}>Id</th>
-              <th style={cell}>Scope</th>
-              <th style={cell}>Trigger</th>
-              <th style={cell}>Status</th>
-              <th style={cell}>Last run</th>
-              <th style={cell}>Last status</th>
-              <th style={cell}>Next run</th>
-              <th style={cell}>Actions</th>
+              <th>Name</th>
+              <th>Id</th>
+              <th>Scope</th>
+              <th>Trigger</th>
+              <th>Status</th>
+              <th>Last run</th>
+              <th>Last status</th>
+              <th>Next run</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {state.items.map((item) => (
               <tr key={item.id} className={item.enabled ? undefined : "hw-row--disabled"}>
-                <td style={cell}>{item.name}</td>
-                <td style={cell}>{item.id}</td>
-                <td style={cell}>{item.scope}</td>
-                <td style={cell}>{describeTrigger(item.trigger)}</td>
-                <td style={cell}>
-                  <span className={`hw-badge hw-badge--${item.enabled ? "enabled" : "disabled"}`}>
-                    {item.enabled ? "Enabled" : "Disabled"}
-                  </span>
+                <td>
+                  <a
+                    className="hw-link"
+                    href={`#editor/${encodeURIComponent(item.id)}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onOpen(item.id);
+                    }}
+                  >
+                    {item.name}
+                  </a>
                 </td>
-                <td style={cell}>{formatEpochSeconds(item.last_run_at)}</td>
-                <td style={cell}>{orDash(item.last_status)}</td>
-                <td style={cell}>{formatIso(item.next_run_at)}</td>
-                <td style={cell}>
-                  <span className="hw-actions">
-                    <button type="button" className="hw-btn hw-btn--sm" onClick={() => onOpen(item.id)}>
-                      Open
-                    </button>
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm"
-                      disabled={!item.enabled}
-                      onClick={() => handleRun(item.id)}
-                    >
-                      Run
-                    </button>
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm"
-                      onClick={() => handleToggleEnabled(item)}
-                    >
-                      {item.enabled ? "Disable" : "Enable"}
-                    </button>
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm"
-                      onClick={() => handleDuplicate(item.id)}
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm"
-                      onClick={() => handleExport(item.id)}
-                    >
-                      Export
-                    </button>
-                    <button
-                      type="button"
-                      className="hw-btn hw-btn--sm hw-btn--danger"
-                      onClick={() => handleDelete(item.id)}
-                    >
-                      Delete
-                    </button>
-                  </span>
+                <td>{item.id}</td>
+                <td>{item.scope}</td>
+                <td>{describeTrigger(item.trigger)}</td>
+                <td>
+                  <Badge tone={item.enabled ? "enabled" : "disabled"}>
+                    {item.enabled ? "Enabled" : "Disabled"}
+                  </Badge>
+                </td>
+                <td>{formatEpochSeconds(item.last_run_at)}</td>
+                <td>{orDash(item.last_status)}</td>
+                <td>{formatIso(item.next_run_at)}</td>
+                <td>
+                  <Menu
+                    size="sm"
+                    align="end"
+                    label="Actions"
+                    items={[
+                      { key: "open", label: "Open", onSelect: () => onOpen(item.id) },
+                      {
+                        key: "run",
+                        label: "Run",
+                        disabled: !item.enabled,
+                        onSelect: () => handleRun(item.id),
+                      },
+                      {
+                        key: "toggle",
+                        label: item.enabled ? "Disable" : "Enable",
+                        onSelect: () => handleToggleEnabled(item),
+                      },
+                      { key: "duplicate", label: "Duplicate", onSelect: () => handleDuplicate(item.id) },
+                      { key: "export", label: "Export", onSelect: () => handleExport(item.id) },
+                      { key: "delete", label: "Delete", onSelect: () => handleDelete(item.id) },
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
@@ -270,9 +265,3 @@ export function TemplatesPage({
     </div>
   );
 }
-
-const cell: React.CSSProperties = {
-  textAlign: "left",
-  padding: "4px 12px 4px 0",
-  borderBottom: "1px solid var(--border, #2a2a2a)",
-};

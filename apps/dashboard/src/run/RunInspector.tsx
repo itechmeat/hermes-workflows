@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { getApiClient } from "../host";
@@ -7,6 +8,8 @@ import type { RunState, SpecDetail } from "../api/types";
 import { applyRunStatus, isTerminalRun } from "./runView";
 import { RunNodeView } from "./RunNodeView";
 import { WORKFLOW_NODE_TYPE } from "../editor/graphMapping";
+import { Badge, Button } from "../ui/components";
+import { useHeaderSlots } from "../ui/PluginHeader";
 
 export interface RunInspectorProps {
   runId: string;
@@ -23,6 +26,7 @@ export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const nodeTypes = useMemo(() => ({ [WORKFLOW_NODE_TYPE]: RunNodeView }), []);
+  const slots = useHeaderSlots();
 
   // Initial load: the run plus its workflow graph (static for the run's life).
   useEffect(() => {
@@ -76,27 +80,45 @@ export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps
     [api, runId],
   );
 
-  if (error !== null) return <p style={{ padding: 16 }}>{error}</p>;
-  if (run === null || detail === null) return <p style={{ padding: 16 }}>Loading run…</p>;
+  if (error !== null) return <p className="hw-page">{error}</p>;
+  if (run === null || detail === null) return <p className="hw-page">Loading run…</p>;
 
   const { nodes, edges } = applyRunStatus(detail, run);
   const selected = selectedNodeId === null ? undefined : run.nodes[selectedNodeId];
   const terminal = isTerminalRun(run.status);
 
+  const title = (
+    <>
+      <span className="hw-bar-title">{run.run_id}</span>
+      <Badge tone={run.status}>{run.status}</Badge>
+    </>
+  );
+  const actions = (
+    <>
+      <Button onClick={cancel} disabled={terminal}>
+        Cancel
+      </Button>
+      <Button onClick={() => retry()}>Retry run</Button>
+    </>
+  );
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 480 }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center", padding: 8 }}>
-        <strong>{run.run_id}</strong>
-        <span role="status">{run.status}</span>
-        <button type="button" onClick={cancel} disabled={terminal}>
-          Cancel
-        </button>
-        <button type="button" onClick={() => retry()}>
-          Retry run
-        </button>
-      </div>
-      <div style={{ display: "flex", flex: 1, minHeight: 400 }}>
-        <div style={{ flex: 1, minHeight: 400 }}>
+    <>
+      {slots ? (
+        <>
+          {slots.leftHost ? createPortal(title, slots.leftHost) : null}
+          {slots.actionsHost ? createPortal(actions, slots.actionsHost) : null}
+        </>
+      ) : (
+        <div className="hw-editor-toolbar">
+          {title}
+          {actions}
+        </div>
+      )}
+
+      <div className="hw-shell">
+      <div className="hw-editor-body">
+        <div className="hw-canvas">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -105,23 +127,20 @@ export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps
             nodesConnectable={false}
             onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
             fitView
+            proOptions={{ hideAttribution: true }}
           >
             <Background />
             <Controls />
           </ReactFlow>
         </div>
-        <div style={{ minWidth: 240, padding: 8 }}>
-          <div style={{ opacity: 0.6, fontSize: 11, textTransform: "uppercase" }}>Nodes</div>
-          <ul style={{ listStyle: "none", padding: 0, margin: "4px 0 12px" }}>
+        <div className="hw-run-rail">
+          <div className="hw-eyebrow">Nodes</div>
+          <ul className="hw-navlist">
             {Object.values(run.nodes).map((node) => (
               <li key={node.node_id}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedNodeId(node.node_id)}
-                  style={{ textAlign: "left", width: "100%" }}
-                >
+                <Button onClick={() => setSelectedNodeId(node.node_id)}>
                   {node.node_id} — {node.status}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -132,19 +151,16 @@ export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps
               </div>
               <p>Status: {selected.status}</p>
               {selected.outcome !== undefined && <p>Outcome: {selected.outcome}</p>}
-              {selected.output !== undefined && (
-                <pre style={{ whiteSpace: "pre-wrap" }}>{selected.output}</pre>
-              )}
-              {selected.error !== undefined && <p style={{ color: "#e06c6c" }}>{selected.error}</p>}
-              <button type="button" onClick={() => retry(selected.node_id)}>
-                Retry node
-              </button>
+              {selected.output !== undefined && <pre className="hw-output">{selected.output}</pre>}
+              {selected.error !== undefined && <p className="hw-error">{selected.error}</p>}
+              <Button onClick={() => retry(selected.node_id)}>Retry node</Button>
             </div>
           ) : (
-            <p style={{ opacity: 0.6 }}>Select a node for detail.</p>
+            <p className="hw-note">Select a node for detail.</p>
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

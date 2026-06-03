@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "../src/App";
@@ -41,33 +41,46 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
     getWorkflow: vi.fn(async () => detail),
     runWorkflow: vi.fn(async () => ({ run_id: "deploy-1", status: "running" as const })),
     getRun: vi.fn(async () => run),
+    listProfiles: vi.fn(async () => []),
+    listModels: vi.fn(async () => []),
     ...overrides,
   } as unknown as WorkflowsApi;
 }
 
 describe("App shell", () => {
-  it("shows the templates list and the O2B badge", async () => {
+  // View state is mirrored to the URL hash; jsdom keeps the hash between tests,
+  // so reset it to start each test on the templates view.
+  beforeEach(() => {
+    window.location.hash = "";
+  });
+
+  it("shows the templates list and the O2B indicator", async () => {
     render(<App client={stubClient()} />);
     expect(await screen.findByText("Deploy")).toBeInTheDocument();
-    expect(screen.getByText(/OpenSecondBrain: connected/i)).toBeInTheDocument();
+    // The status word is replaced by a colour dot; the full state lives on the
+    // indicator's accessible name.
+    expect(screen.getByLabelText(/OpenSecondBrain: connected/i)).toBeInTheDocument();
   });
 
   it("opens a workflow in the editor", async () => {
     render(<App client={stubClient()} />);
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getByRole("button", { name: /open/i }));
-    expect(await screen.findByText(/Editing deploy/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^actions$/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^open$/i }));
+    // editor chrome (the Add-node menu) confirms we are in the editor
+    expect(await screen.findByRole("button", { name: /add node/i })).toBeInTheDocument();
   });
 
   it("navigates back to templates from the editor", async () => {
     render(<App client={stubClient()} />);
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getByRole("button", { name: /open/i }));
-    await screen.findByText(/Editing deploy/i);
+    await userEvent.click(screen.getByRole("button", { name: /^actions$/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^open$/i }));
+    await screen.findByRole("button", { name: /add node/i });
     await userEvent.click(screen.getByRole("button", { name: /^workflows$/i }));
-    // back on templates: the per-row Open button reappears, editor chrome is gone
-    expect(await screen.findByRole("button", { name: /open/i })).toBeInTheDocument();
-    expect(screen.queryByText(/Editing deploy/i)).not.toBeInTheDocument();
+    // back on templates: the per-row Actions menu reappears, editor chrome is gone
+    expect(await screen.findByRole("button", { name: /^actions$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add node/i })).not.toBeInTheDocument();
   });
 
   it("creates a new workflow and lands in the editor for the generated id", async () => {
@@ -84,15 +97,17 @@ describe("App shell", () => {
     await waitFor(() => expect(getWorkflow).toHaveBeenCalled());
     const generatedId = getWorkflow.mock.calls[0]![0] as string;
     expect(generatedId).toMatch(/^[a-z]{6}$/);
-    expect(await screen.findByText(new RegExp(`Editing ${generatedId}`, "i"))).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /add node/i })).toBeInTheDocument();
   });
 
   it("starts a run from templates and opens the run inspector", async () => {
     const client = stubClient();
     render(<App client={client} />);
     await screen.findByText("Deploy");
-    await userEvent.click(screen.getByRole("button", { name: /^run$/i }));
-    expect(await screen.findByText(/Run deploy-1/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^actions$/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^run$/i }));
+    // the run id surfaces in the header bar's title slot
+    expect(await screen.findByText("deploy-1")).toBeInTheDocument();
     expect(client.getRun).toHaveBeenCalledWith("deploy-1");
   });
 });
