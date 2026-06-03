@@ -106,9 +106,13 @@ export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactEleme
     (id: string) => {
       api
         .exportRunLogs(id)
-        .then(({ filename, json }) =>
-          downloadTextFile(filename, JSON.stringify(json, null, 2), "application/json"),
-        )
+        .then(({ filename, json, trace, trace_filename }) => {
+          downloadTextFile(filename, JSON.stringify(json, null, 2), "application/json");
+          // A traced run ships its JSONL timeline as a second file.
+          if (trace !== undefined && trace_filename !== undefined) {
+            downloadTextFile(trace_filename, trace, "application/jsonl");
+          }
+        })
         .catch((err: unknown) =>
           setMessage(err instanceof Error ? err.message : `Failed to export ${id}`),
         );

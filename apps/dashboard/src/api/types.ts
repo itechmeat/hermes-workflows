@@ -89,11 +89,15 @@ export interface RunSummary {
 }
 
 /** Returned by `GET /runs/{id}/export` — the full run-load bundle wrapped in a
- *  JSON envelope so it travels over the host's JSON-only `fetchJSON`. */
+ *  JSON envelope so it travels over the host's JSON-only `fetchJSON`. A traced
+ *  run (observability.trace_enabled) additionally carries its JSONL timeline,
+ *  downloaded as a second file. */
 export interface ExportedRun {
   run_id: string;
   filename: string;
   json: RunState;
+  trace?: string;
+  trace_filename?: string;
 }
 
 /** One row of `GET /schedules` — a workflow's native Hermes cron schedule.

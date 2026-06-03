@@ -147,6 +147,25 @@ describe("RunsPage", () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
+  it("downloads the trace as a second file when the export carries one", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    const exportRunLogs = vi.fn(
+      async (id: string): Promise<ExportedRun> => ({
+        run_id: id,
+        filename: `${id}.run.json`,
+        json: { run_id: id, nodes: {} } as RunState,
+        trace_filename: `${id}.trace.jsonl`,
+        trace: '{"ts":1,"kind":"run_created"}\n',
+      }),
+    );
+    render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => runs), exportRunLogs })} onOpenRun={() => {}} />);
+
+    await screen.findByText("deploy-aaaa1111");
+    await clickRowAction(0, /export/i);
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
+  });
+
   it("surfaces a load error", async () => {
     const client = stubClient({
       listRuns: vi.fn(async () => {

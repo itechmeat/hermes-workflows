@@ -229,3 +229,26 @@ def test_list_runs_row_carries_total_tokens(client: TestClient) -> None:
     row = _find_run(client.get("/runs").json()["runs"], run_id)
     assert "total_tokens" in row  # null until telemetry lands
     assert row["total_tokens"] is None
+
+
+def test_export_includes_trace_when_present(client: TestClient) -> None:
+    """A traced run's export carries the JSONL timeline alongside the state
+    bundle; the Runs page downloads it as a second file."""
+    import os
+
+    run_id = _start_run(client)
+    traces = Path(os.environ["HERMES_HOME"]) / "workflows" / "traces"
+    traces.mkdir(parents=True, exist_ok=True)
+    line = json.dumps({"ts": 1.0, "run_id": run_id, "kind": "run_created"})
+    (traces / f"{run_id}.jsonl").write_text(line + "\n")
+
+    body = client.get(f"/runs/{run_id}/export").json()
+    assert body["filename"] == f"{run_id}.run.json"  # unchanged primary bundle
+    assert body["trace_filename"] == f"{run_id}.trace.jsonl"
+    assert body["trace"] == line + "\n"
+
+
+def test_export_without_trace_keeps_todays_envelope(client: TestClient) -> None:
+    run_id = _start_run(client)
+    body = client.get(f"/runs/{run_id}/export").json()
+    assert set(body) == {"run_id", "filename", "json"}
