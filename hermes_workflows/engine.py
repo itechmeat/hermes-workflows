@@ -50,6 +50,7 @@ class Engine:
         memory: Optional[dict] = None,
         default_mode: str = "durable",
         telemetry_dir: Optional[Path] = None,
+        trace: Optional[Any] = None,
     ) -> None:
         self.core_cli = list(core_cli)
         self.db_path = db_path
@@ -78,6 +79,10 @@ class Engine:
         # settle merge entirely (today's behaviour); the wired default is
         # config.telemetry_dir().
         self.telemetry_dir = telemetry_dir
+        # Per-run JSONL trace writer (trace.TraceWriter). None — the default —
+        # disables tracing entirely: no writer object, zero trace I/O on the
+        # tick path (observability.trace_enabled gates the wiring).
+        self.trace = trace
 
     # --- core CLI helpers -------------------------------------------------
 
@@ -109,7 +114,13 @@ class Engine:
             args += ["--project", project_id]
         if origin:
             args += ["--origin", origin]
-        self._core(args)
+        created = self._core(args)
+        self._trace_emit(
+            run_id,
+            "run_created",
+            workflow_id=(created or {}).get("workflow_id"),
+            project_id=project_id,
+        )
         return self.advance(spec_path, run_id)
 
     def status(self, run_id: str) -> dict:
@@ -132,6 +143,9 @@ class Engine:
         node["review_decision"] = decision
         node["seq"] = _max_seq(run) + 1
         self._save(run)
+        # The decision is recorded before the advance step loads its snapshot,
+        # so a prior-vs-post diff inside the tick cannot see it — emit here.
+        self._trace_emit(run_id, "review_decided", node_id=node_id, decision=decision)
         return self.advance(spec_path, run_id)
 
     def tick(
@@ -219,6 +233,9 @@ class Engine:
 
     def _advance_step(self, spec_path: str, run_id: str) -> tuple[dict, dict]:
         run = self.status(run_id)
+        # Trace snapshot: node statuses, run status, and emitted markers before
+        # this step mutates anything; _emit_trace derives the timeline by diff.
+        prior = _trace_snapshot(run) if self.trace is not None else None
         plan = self._core(["compile-preview", spec_path])
         task_params = {task["node"]: task for task in plan["kanban_tasks"]}
         # Script steps share the per-node params map; the composite executor
@@ -252,6 +269,8 @@ class Engine:
         run["status"] = decision["run_status"]
         self._emit_lifecycle(run, decision)
         self._emit_memory(run, spec_path)
+        if prior is not None:
+            self._emit_trace(prior, run)
         self._save(run)
         # The aggregates are persisted on the nodes now; consume the sidecars
         # (corrupt ones included) so the telemetry dir does not grow without
@@ -270,6 +289,57 @@ class Engine:
         data = telemetry.load_node_telemetry(self.telemetry_dir, node["hermes_task_id"])
         if data is not None:
             node["telemetry"] = data
+
+    # --- lifecycle effects (trace) -----------------------------------------
+
+    def _trace_emit(self, run_id: str, kind: str, **payload: Any) -> None:
+        """Append one trace event when tracing is on. Fail-open beyond the
+        writer's own guard, so even a broken injected writer cannot affect a
+        run."""
+        if self.trace is None:
+            return
+        try:
+            self.trace.emit(run_id, kind, **payload)
+        except Exception as exc:  # noqa: BLE001 - tracing never fails a run
+            print(f"hermes-workflows: trace emit failed: {exc}", file=sys.stderr)
+
+    def _emit_trace(self, prior: dict, run: dict) -> None:
+        """Derive this step's timeline by diffing the pre-step snapshot against
+        the post-decision run: settled work nodes (with outcome and seq), other
+        node status transitions, scheduling, the run-status change, and any new
+        lifecycle markers."""
+        run_id = run["run_id"]
+        for node_id, node in run["nodes"].items():
+            before = prior["statuses"].get(node_id)
+            after = node.get("status")
+            if before == after:
+                continue
+            if after == "completed" and before in ("scheduled", "running"):
+                self._trace_emit(
+                    run_id,
+                    "node_settled",
+                    node_id=node_id,
+                    outcome=node.get("outcome"),
+                    seq=node.get("seq"),
+                )
+            elif after == "scheduled":
+                self._trace_emit(
+                    run_id,
+                    "node_scheduled",
+                    node_id=node_id,
+                    handle=node.get("hermes_task_id"),
+                )
+            else:
+                self._trace_emit(
+                    run_id, "node_status", node_id=node_id, **{"from": before, "to": after}
+                )
+        if run.get("status") != prior["run_status"]:
+            self._trace_emit(
+                run_id, "run_status", **{"from": prior["run_status"], "to": run.get("status")}
+            )
+        for marker in run.get("notified") or []:
+            if marker not in prior["notified"]:
+                self._trace_emit(run_id, "marker", marker=marker)
 
     # --- lifecycle effects (notifications) --------------------------------
 
@@ -471,6 +541,16 @@ def _notice_text(run: dict, event: str, node_id: Optional[str]) -> str:
     if event == "waiting":
         return f"Workflow {workflow_id} run {run_id}: review needed ({node_id})."
     return f"Workflow {workflow_id} run {run_id}: {event}."
+
+
+def _trace_snapshot(run: dict) -> dict:
+    """What _emit_trace diffs against: per-node statuses, the run status, and
+    the already-emitted lifecycle markers."""
+    return {
+        "statuses": {node_id: node.get("status") for node_id, node in run["nodes"].items()},
+        "run_status": run.get("status"),
+        "notified": set(run.get("notified") or []),
+    }
 
 
 def _max_seq(run: dict) -> int:

@@ -69,7 +69,17 @@ def build_engine() -> Engine:
         default_mode=str(config.settings()["default_mode"]),
         # Worker-side telemetry sidecars, folded into nodes at settle time.
         telemetry_dir=config.telemetry_dir(),
+        # Per-run JSONL trace, opt-in: no writer object at all when disabled.
+        trace=_build_trace_writer(),
     )
+
+
+def _build_trace_writer():
+    if not config.trace_enabled():
+        return None
+    from .trace import TraceWriter
+
+    return TraceWriter(config.traces_dir())
 
 
 def workflow_has_scripts(engine: Engine, spec_path: str) -> bool:
