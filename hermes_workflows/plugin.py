@@ -63,6 +63,15 @@ def register(ctx: Any) -> None:
         except Exception:
             pass
 
+    # Per-node telemetry observers — active only inside kanban worker
+    # processes (gated on HERMES_KANBAN_TASK inside); fail-open.
+    try:
+        from .observer import register_observer_hooks
+
+        register_observer_hooks(ctx)
+    except Exception:
+        pass
+
     ctx.register_tool(
         name="workflow_list",
         toolset=TOOLSET,
