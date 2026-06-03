@@ -29,10 +29,15 @@ export function openRunsDatabase(path: string): Database {
  * is a no-op there.
  */
 function migrate(db: Database): void {
+  addMissingTextColumns(db, "workflow_runs", ["origin", "notified"]);
+  addMissingTextColumns(db, "workflow_node_runs", ["telemetry_json"]);
+}
+
+function addMissingTextColumns(db: Database, table: string, names: string[]): void {
   const columns = new Set(
-    (db.query("PRAGMA table_info(workflow_runs)").all() as { name: string }[]).map((c) => c.name),
+    (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name),
   );
-  for (const name of ["origin", "notified"]) {
-    if (!columns.has(name)) db.run(`ALTER TABLE workflow_runs ADD COLUMN ${name} TEXT`);
+  for (const name of names) {
+    if (!columns.has(name)) db.run(`ALTER TABLE ${table} ADD COLUMN ${name} TEXT`);
   }
 }

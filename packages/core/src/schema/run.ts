@@ -26,6 +26,52 @@ export type NodeStatus =
 /** Outcome of a node, mapped from the native Kanban task result by the bridge. */
 export type NodeOutcome = "success" | "failure";
 
+/**
+ * State of a dangerous-command approval observed inside the node's worker.
+ * `pending` means the worker is blocked on a human answer right now; the UI
+ * renders that only while the node is still active. A resolved `deny` or
+ * `timeout` choice persists so a subsequent node failure has context.
+ */
+export interface NodeTelemetryApproval {
+  state: "pending" | "resolved";
+  command?: string;
+  description?: string;
+  /** Where the prompt was shown: "cli" | "gateway" (opaque host value). */
+  surface?: string;
+  /** Opaque host session key, kept as debugging context only. */
+  session_key?: string;
+  /** once | session | always | deny | timeout (host values, opaque). */
+  choice?: string;
+  requested_at?: number;
+  resolved_at?: number;
+}
+
+/**
+ * Per-node agent telemetry aggregated from the host's observer hooks
+ * (hermes.observer.v1 and earlier) by the worker-side recorder. Additive and
+ * entirely optional: nodes executed without a kanban worker (DirectExecutor,
+ * script nodes) simply have no telemetry. All counters cover the most recent
+ * worker attempt.
+ */
+export interface NodeTelemetry {
+  /** Observed agent-activity window in ms (first to last observer event). */
+  duration_ms?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  /** Provider API attempts (successes and failures). */
+  api_calls?: number;
+  tool_calls?: number;
+  /** Tool calls that reported an error status (v1 hosts only). */
+  tool_errors?: number;
+  /** Delegated child agents that finished. */
+  subagents?: number;
+  /** Most recent structured error (provider or tool), when one occurred. */
+  error_type?: string;
+  error_message?: string;
+  approval?: NodeTelemetryApproval;
+}
+
 export interface NodeRunState {
   node_id: string;
   status: NodeStatus;
@@ -45,6 +91,8 @@ export interface NodeRunState {
    * pointing at an already-terminal node).
    */
   seq?: number;
+  /** Observer-derived agent telemetry, merged by the bridge at settle time. */
+  telemetry?: NodeTelemetry;
 }
 
 export interface RunState {

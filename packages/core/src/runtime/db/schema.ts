@@ -38,6 +38,10 @@ CREATE TABLE IF NOT EXISTS workflow_node_runs (
   seq             INTEGER,
   output_json     TEXT,
   error           TEXT,
+  -- Observer-derived agent telemetry (JSON NodeTelemetry), merged by the
+  -- bridge at settle time. Added after the initial schema, so connection.ts
+  -- ALTERs pre-existing databases.
+  telemetry_json  TEXT,
   FOREIGN KEY(run_id) REFERENCES workflow_runs(id)
 );
 

@@ -7,7 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 
-import type { RunState, RunStatus, NodeRunState } from "../../schema/run.ts";
+import type { RunState, RunStatus, NodeRunState, NodeTelemetry } from "../../schema/run.ts";
 import { ACTIVE_NODE_STATUSES, ACTIVE_RUN_STATUSES } from "../status.ts";
 
 /** Extra run-level fields persisted alongside the reconstructable RunState. */
@@ -34,6 +34,8 @@ export interface RunSummary {
   started_at?: number;
   finished_at?: number;
   error?: string;
+  /** Sum of per-node telemetry total_tokens; absent when no node has any. */
+  total_tokens?: number;
 }
 
 /** The most recent run for one workflow, for the Templates page run columns. */
@@ -85,6 +87,7 @@ interface NodeRow {
   seq: number | null;
   output_json: string | null;
   error: string | null;
+  telemetry_json: string | null;
 }
 
 export class RunRepository {
@@ -141,8 +144,8 @@ export class RunRepository {
     this.db
       .query(
         `INSERT INTO workflow_node_runs
-           (id, run_id, node_id, status, hermes_task_id, outcome, review_decision, seq, output_json, error)
-         VALUES ($id, $run, $node, $status, $task, $outcome, $review, $seq, $output, $error)
+           (id, run_id, node_id, status, hermes_task_id, outcome, review_decision, seq, output_json, error, telemetry_json)
+         VALUES ($id, $run, $node, $status, $task, $outcome, $review, $seq, $output, $error, $telemetry)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            hermes_task_id = excluded.hermes_task_id,
@@ -150,7 +153,8 @@ export class RunRepository {
            review_decision = excluded.review_decision,
            seq = excluded.seq,
            output_json = excluded.output_json,
-           error = excluded.error`,
+           error = excluded.error,
+           telemetry_json = excluded.telemetry_json`,
       )
       .run({
         $id: `${runId}:${node.node_id}`,
@@ -163,6 +167,7 @@ export class RunRepository {
         $seq: node.seq ?? null,
         $output: node.output ?? null,
         $error: node.error ?? null,
+        $telemetry: node.telemetry === undefined ? null : JSON.stringify(node.telemetry),
       });
   }
 
@@ -191,6 +196,9 @@ export class RunRepository {
       if (n.seq !== null) node.seq = n.seq;
       if (n.output_json !== null) node.output = n.output_json;
       if (n.error !== null) node.error = n.error;
+      if (n.telemetry_json !== null) {
+        node.telemetry = JSON.parse(n.telemetry_json) as NodeTelemetry;
+      }
       nodes[n.node_id] = node;
     }
 
@@ -301,7 +309,30 @@ export class RunRepository {
     if (row.error !== null) summary.error = row.error;
     const current = this.currentNode(row.id);
     if (current !== undefined) summary.current_node = current;
+    const tokens = this.totalTokens(row.id);
+    if (tokens !== undefined) summary.total_tokens = tokens;
     return summary;
+  }
+
+  /**
+   * Sum of `total_tokens` across the run's node telemetry, or undefined when
+   * no node carries a token count (so token-less runs show no zero).
+   */
+  private totalTokens(runId: string): number | undefined {
+    const rows = this.db
+      .query(
+        `SELECT telemetry_json FROM workflow_node_runs
+         WHERE run_id = $id AND telemetry_json IS NOT NULL`,
+      )
+      .all({ $id: runId }) as { telemetry_json: string }[];
+    let sum: number | undefined;
+    for (const row of rows) {
+      const telemetry = JSON.parse(row.telemetry_json) as NodeTelemetry;
+      if (typeof telemetry.total_tokens === "number") {
+        sum = (sum ?? 0) + telemetry.total_tokens;
+      }
+    }
+    return sum;
   }
 
   /**

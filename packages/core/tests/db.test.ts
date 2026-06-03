@@ -197,6 +197,95 @@ describe("RunRepository — run summaries", () => {
   });
 });
 
+describe("RunRepository — node telemetry", () => {
+  test("round-trips NodeRunState.telemetry and omits it when absent", () => {
+    const run = createRunState(workflow, "run-telemetry");
+    run.status = "running";
+    run.nodes["a"] = {
+      node_id: "a",
+      status: "completed",
+      outcome: "success",
+      seq: 1,
+      telemetry: {
+        duration_ms: 5500,
+        input_tokens: 17,
+        output_tokens: 8,
+        total_tokens: 25,
+        api_calls: 2,
+        tool_calls: 3,
+        error_type: "ToolError",
+        error_message: "exit 1",
+        approval: { state: "resolved", command: "rm -rf x", choice: "deny" },
+      },
+    };
+    repo.saveRun(run);
+
+    const loaded = repo.loadRun("run-telemetry");
+    expect(loaded?.nodes["a"]?.telemetry).toEqual({
+      duration_ms: 5500,
+      input_tokens: 17,
+      output_tokens: 8,
+      total_tokens: 25,
+      api_calls: 2,
+      tool_calls: 3,
+      error_type: "ToolError",
+      error_message: "exit 1",
+      approval: { state: "resolved", command: "rm -rf x", choice: "deny" },
+    });
+    expect(loaded?.nodes["done"]?.telemetry).toBeUndefined();
+  });
+
+  test("summaries sum node total_tokens into the run total", () => {
+    const run = createRunState(workflow, "run-tokens");
+    run.status = "completed";
+    run.nodes["a"] = {
+      node_id: "a",
+      status: "completed",
+      outcome: "success",
+      seq: 1,
+      telemetry: { total_tokens: 25 },
+    };
+    run.nodes["done"] = {
+      node_id: "done",
+      status: "completed",
+      seq: 2,
+      telemetry: { total_tokens: 5 },
+    };
+    repo.saveRun(run);
+
+    const summary = repo.listRunSummaries(false).find((s) => s.run_id === "run-tokens");
+    expect(summary?.total_tokens).toBe(30);
+
+    // A run with no telemetry anywhere has no total at all.
+    const bare = createRunState(workflow, "run-no-tokens");
+    repo.saveRun(bare);
+    const bareSummary = repo.listRunSummaries(false).find((s) => s.run_id === "run-no-tokens");
+    expect(bareSummary?.total_tokens).toBeUndefined();
+  });
+
+  test("migrates a pre-telemetry database in place", async () => {
+    const mdir = await mkdtemp(join(tmpdir(), "hw-migrate-"));
+    const path = join(mdir, "runs.db");
+    // A database created before the telemetry_json column existed.
+    const legacy = openRunsDatabase(path);
+    legacy.run("ALTER TABLE workflow_node_runs DROP COLUMN telemetry_json");
+    legacy.close();
+
+    const reopened = openRunsDatabase(path); // must ALTER it back, idempotently
+    const cols = (
+      reopened.query("PRAGMA table_info(workflow_node_runs)").all() as { name: string }[]
+    ).map((c) => c.name);
+    expect(cols).toContain("telemetry_json");
+    const mrepo = new RunRepository(reopened);
+    const run = createRunState(workflow, "migrated-run");
+    run.nodes["a"] = { node_id: "a", status: "completed", telemetry: { api_calls: 1 } };
+    mrepo.saveRun(run);
+    expect(mrepo.loadRun("migrated-run")?.nodes["a"]?.telemetry).toEqual({ api_calls: 1 });
+    reopened.close();
+    await rm(mdir, { recursive: true, force: true });
+  });
+});
+
 describe("RunRepository — latest run by workflow", () => {
   let ldir: string;
   let ldb: Database;
