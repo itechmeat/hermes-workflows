@@ -29,8 +29,9 @@ from typing import Any, Callable, Optional
 
 
 def _safe(task_id: str) -> str:
-    """Filesystem-safe sidecar name, same sanitization as CompletionStore."""
-    return task_id.replace("/", "_").replace(":", "_")
+    """Filesystem-safe sidecar name, same sanitization as CompletionStore plus
+    backslashes (harmless on this Linux-only deployment, cheap insurance)."""
+    return task_id.replace("/", "_").replace("\\", "_").replace(":", "_")
 
 
 def sidecar_path(root: Path, task_id: str) -> Path:
@@ -153,7 +154,9 @@ class NodeTelemetryRecorder:
     def record_approval_response(self, *, choice: Any = None, **_kwargs: Any) -> None:
         """The approval was answered or timed out (``post_approval_response``).
         Keeps command/description so a deny or timeout stays explainable after
-        the node settles."""
+        the node settles. A response with no recorded request (worker restart
+        between the two hooks) still lands as a bare resolved record — the UI
+        degrades gracefully when command/description are absent."""
         try:
             approval = dict(self._data.get("approval") or {})
             approval["state"] = "resolved"

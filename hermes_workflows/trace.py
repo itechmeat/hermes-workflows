@@ -42,7 +42,11 @@ class TraceWriter:
 
 def read_trace(root: Path, run_id: str) -> str | None:
     """The raw trace text for a run, or ``None`` when the run was not traced
-    (or the file is unreadable — fail-open, an export overlay concern)."""
+    (or the file is unreadable — fail-open, an export overlay concern). The
+    export route only reaches this for runs that exist in runs.db, but the
+    separator guard keeps the path safety local rather than call-order-derived."""
+    if "/" in run_id or "\\" in run_id:
+        return None
     try:
         return (Path(root) / f"{run_id}.jsonl").read_text(encoding="utf-8")
     except Exception:
