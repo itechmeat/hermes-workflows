@@ -192,7 +192,7 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
     },
     async listProfiles() {
       const r = await fetchJSON<{ profiles: string[] }>(`${BASE}/profiles`);
-      return r.profiles;
+      return r.profiles ?? [];
     },
     async listModels() {
       // The host gateway owns the authoritative model picker — every

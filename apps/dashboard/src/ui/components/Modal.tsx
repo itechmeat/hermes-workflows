@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { Button } from "./Button";
 
 // Reusable modal dialog: a dimmed overlay, a centred dialog box, a titled
@@ -36,6 +36,9 @@ export function Modal({
   }, [onClose]);
 
   const label = ariaLabel ?? (typeof title === "string" ? title : undefined);
+  // When the title is a non-string node and no ariaLabel is given, name the
+  // dialog via the visible heading instead, so it is never unannounced.
+  const titleId = useId();
 
   return (
     <div className="hw-modal-overlay" role="presentation" onClick={onClose}>
@@ -44,10 +47,11 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={label}
+        aria-labelledby={label === undefined ? titleId : undefined}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="hw-modal-header">
-          <h3>{title}</h3>
+          <h3 id={label === undefined ? titleId : undefined}>{title}</h3>
           <Button size="sm" aria-label="Close" onClick={onClose}>
             ✕
           </Button>

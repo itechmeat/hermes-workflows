@@ -39,12 +39,13 @@ export interface FlowEditorProps {
   onBack?: () => void;
 }
 
-const NODE_TYPES: { type: NodeType; label: string; icon: React.ReactNode }[] = [
-  { type: "agent_task", label: "Agent task", icon: <CpuIcon /> },
-  { type: "script", label: "Script", icon: <TerminalIcon /> },
-  { type: "condition", label: "Condition", icon: <BranchIcon /> },
-  { type: "human_review", label: "Human review", icon: <EyeIcon /> },
-  { type: "finish", label: "Finish", icon: <FlagIcon /> },
+// Labels come from the shared `nodeTypeLabel` mapping; only the icons live here.
+const NODE_TYPES: { type: NodeType; icon: React.ReactNode }[] = [
+  { type: "agent_task", icon: <CpuIcon /> },
+  { type: "script", icon: <TerminalIcon /> },
+  { type: "condition", icon: <BranchIcon /> },
+  { type: "human_review", icon: <EyeIcon /> },
+  { type: "finish", icon: <FlagIcon /> },
 ];
 
 /** Which header-tool panel is open in a modal, if any. */
@@ -140,9 +141,9 @@ export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps)
     setEditing(false);
   }, [ctrl]);
 
-  const addItems: MenuItem[] = NODE_TYPES.map(({ type, label, icon }) => ({
+  const addItems: MenuItem[] = NODE_TYPES.map(({ type, icon }) => ({
     key: type,
-    label,
+    label: nodeTypeLabel(type),
     icon,
     onSelect: () => handleAdd(type),
   }));
