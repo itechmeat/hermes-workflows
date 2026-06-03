@@ -83,6 +83,16 @@ def telemetry_dir() -> Path:
     return workflows_dir() / "telemetry"
 
 
+def traces_dir() -> Path:
+    """Per-run JSONL trace files (opt-in via ``observability.trace_enabled``)."""
+    return workflows_dir() / "traces"
+
+
+def trace_enabled() -> bool:
+    """Whether the per-run trace writer is on (default off)."""
+    return bool(_setting_value("trace_enabled"))
+
+
 def memory_settings() -> dict:
     """Open Second Brain write policy from the enforced settings, for the engine:
     mode + the write_* flags. Driven by the ``open_second_brain.*`` settings."""
@@ -185,6 +195,24 @@ SETTINGS_SCHEMA: dict = {
                     "type": "string",
                     "default": "hermes-workflows",
                     "env": "HERMES_WORKFLOWS_BOARD",
+                    "enforced": True,
+                },
+            ],
+        },
+        {
+            "key": "observability",
+            "label": "Observability",
+            "fields": [
+                # Enforced: when on, the engine appends one JSONL line per run
+                # event (status transitions, scheduling, completions, review
+                # decisions) to <workflows>/traces/<run_id>.jsonl, and the
+                # export-logs action returns the trace alongside the run state.
+                # Off (the default) means zero trace I/O on the tick path.
+                {
+                    "key": "trace_enabled",
+                    "type": "bool",
+                    "default": False,
+                    "env": "HERMES_WORKFLOWS_TRACE",
                     "enforced": True,
                 },
             ],
