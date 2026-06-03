@@ -77,6 +77,12 @@ def script_store_dir() -> Path:
     return workflows_dir() / "scripts"
 
 
+def telemetry_dir() -> Path:
+    """Per-task telemetry sidecars written by worker-side observers and read by
+    the engine (settle merge) and the dashboard (live overlay)."""
+    return workflows_dir() / "telemetry"
+
+
 def memory_settings() -> dict:
     """Open Second Brain write policy from the enforced settings, for the engine:
     mode + the write_* flags. Driven by the ``open_second_brain.*`` settings."""
