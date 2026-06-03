@@ -77,8 +77,13 @@ speaks the same vocabulary and can defer to it.
 ## Storage
 
 - `runs.db` (SQLite, WAL): `workflow_runs`, `workflow_node_runs` (one row per
-  node, current state), `workflow_schedules`. Source of truth for run state.
+  node, current state, including observer-derived `telemetry_json`),
+  `workflow_schedules`. Source of truth for run state.
 - Specs: `~/.hermes/workflows/{global,templates}` and
   `<project>/.hermes/workflows`.
 - Artifacts: `~/.hermes/workflows/runs/<run_id>/...`.
+- Telemetry sidecars: `~/.hermes/workflows/telemetry/<card_id>.json` — written
+  by worker-side observers, folded into the node at settle time and removed.
+- Traces: `~/.hermes/workflows/traces/<run_id>.jsonl` — opt-in per-run
+  timeline (`observability.trace_enabled`).
 - OpenSecondBrain is never runtime storage — only optional long-term memory.

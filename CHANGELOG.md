@@ -6,11 +6,31 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-A visual overhaul of the dashboard plugin on a shared component kit, plus richer
-`agent_task` editing backed by live host data.
+A visual overhaul of the dashboard plugin on a shared component kit, richer
+`agent_task` editing backed by live host data, and run observability built on
+the Hermes observer-hook contract: per-node agent telemetry, pending
+command-approval surfacing, and an opt-in per-run JSONL trace.
 
 ### Added
 
+- Per-node agent telemetry: observer hooks registered inside kanban worker
+  processes aggregate API attempts, token usage, tool calls, subagents, and
+  structured errors into a per-card sidecar; the engine folds it into
+  `NodeRunState.telemetry` (new `telemetry_json` column, migrated in place)
+  when the node settles, and `GET /runs/{id}` overlays the sidecar live while
+  the node is still running. The run inspector's node detail renders the
+  telemetry block; the Runs page gains a Tokens column from the per-run total.
+- Pending command-approval surfacing: while a node's worker is blocked on a
+  dangerous-command approval, the node card shows a waiting badge and the node
+  detail names the command; a deny or timeout stays visible after the node
+  settles so a subsequent failure has context. Observer-only — no change to
+  the approval flow itself.
+- Opt-in per-run JSONL trace (`observability.trace_enabled`, default off): the
+  engine appends one self-describing line per event — run created, node
+  scheduled/settled with outcome and seq, status transitions, review
+  decisions, lifecycle markers — to `traces/<run_id>.jsonl`, and the Runs
+  page export downloads the timeline as a second file when present. Disabled
+  means zero trace I/O on the tick path; a write failure never affects a run.
 - Plugin header with section navigation (Workflows / Runs / Schedules / Settings),
   an OpenSecondBrain connection indicator, and a portal slot the active view fills
   with its own title and actions.

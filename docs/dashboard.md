@@ -71,11 +71,17 @@ Execution control:
 
 - `POST /workflows/{id}/run` — start a run (same path as the CLI `run`); `404` if
   absent, `409` if the workflow is disabled.
-- `GET /runs/{id}` — full run state with per-node detail, for the run inspector; `404` if absent.
+- `GET /runs/{id}` — full run state with per-node detail, for the run inspector;
+  `404` if absent. Nodes the engine has not settled yet get their worker's
+  telemetry sidecar overlaid live (best-effort), so the inspector's poll shows
+  token/tool counts and pending command approvals while a node runs.
 - `POST /runs/{id}/cancel` — cancel a run; `404` if absent.
 - `POST /runs/{id}/retry` — retry a run, or one failed node via `{ "node_id": "..." }`.
 - `GET /runs/{id}/export` — the full run-load bundle in a JSON envelope
-  `{ run_id, filename, json }` for download; `404` if absent.
+  `{ run_id, filename, json }` for download; `404` if absent. A traced run
+  (`observability.trace_enabled`) additionally carries `trace` +
+  `trace_filename`, which the Runs page saves as a second
+  `<run_id>.trace.jsonl` file.
 
 Schedules (thin shells over the Hermes cron bridge — Hermes cron owns the
 schedules; these edit the live cron job, not the on-disk spec):

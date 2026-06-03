@@ -166,6 +166,46 @@ later in-process advance rather than silently lost.
 > delivering on the next in-process advance); the direct notice fires
 > immediately for tool-driven and inline runs.
 
+## Observability
+
+Three layers, all fail-open (an observability bug can suppress data, never
+affect a run) and all built on the host's observer-hook contract
+(`hermes.observer.v1`; the consumer also runs on earlier hosts, which simply
+emit fewer fields).
+
+**Per-node telemetry.** The plugin's `register(ctx)` registers observer
+callbacks (`post_api_request`, `api_request_error`, `post_tool_call`,
+`subagent_stop`, and the approval pair below) — but only inside kanban worker
+processes: the dispatcher injects `HERMES_KANBAN_TASK=<card id>` into each
+worker's environment, and that env var both gates registration (gateway and
+interactive CLI sessions register nothing) and provides the node join — it
+equals `NodeRunState.hermes_task_id`. The `task_id` kwarg the host passes to
+hooks is a per-conversation UUID and is treated as opaque. The callbacks
+aggregate counts (API attempts, tokens from `usage`, tool calls and errors,
+subagents, the most recent structured error) into one atomic JSON sidecar per
+card under `<hermes_home>/workflows/telemetry/`. The engine folds the sidecar
+into `node["telemetry"]` when the node settles and consumes the file after the
+save; the dashboard overlays the same file onto active nodes so the inspector's
+poll shows live counts. Nodes executed without a kanban worker (DirectExecutor,
+script nodes) have no join and simply carry no telemetry.
+
+**Approval surfacing.** `pre_approval_request` marks the card's sidecar with a
+pending approval (command, description, surface); `post_approval_response`
+resolves it with the user's choice. The inspector shows a waiting badge and the
+command text only while the node is active; a `deny` / `timeout` choice stays
+in the baked telemetry so a subsequent node failure is explainable.
+Observer-only by contract — the approval flow itself is untouched.
+
+**Per-run JSONL trace.** Opt-in via `observability.trace_enabled` (default
+off; `HERMES_WORKFLOWS_TRACE` env override). When on, the engine appends one
+self-describing line per event (`{ts, run_id, kind, node_id?, …}`) to
+`<hermes_home>/workflows/traces/<run_id>.jsonl`: `run_created`,
+`node_scheduled` (with the executor handle), `node_settled` (with outcome and
+`seq`), other node status transitions, `review_decided`, `run_status`, and
+lifecycle `marker` events. When off there is no writer object at all — zero
+trace I/O on the tick path. The Runs-view export returns the trace as a second
+`<run_id>.trace.jsonl` download when present.
+
 ## Open Second Brain writes
 
 On lifecycle transitions the engine writes long-term memory through the core

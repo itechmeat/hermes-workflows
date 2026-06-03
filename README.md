@@ -25,6 +25,14 @@ status, cancel, and retry. It also has a **Runs** view (every run, with open / c
 export-logs), a **Schedules** view over Hermes cron (pause / resume / run-now / edit / delete), and
 a **Settings** view backed by the Hermes config. See [docs/dashboard.md](docs/dashboard.md).
 
+Runs are observable through the Hermes observer-hook contract: each `agent_task` node executed by
+a kanban worker reports per-node telemetry (duration, token usage, API and tool calls, subagents,
+structured errors) live in the run inspector and persisted with the run; a node whose worker is
+blocked on a dangerous-command approval shows a waiting annotation with the command text; and an
+opt-in per-run JSONL trace (`observability.trace_enabled`) records the full timeline of every run
+for export from the Runs view. See the Observability section in
+[docs/execution.md](docs/execution.md).
+
 ## Node types
 
 - `trigger` — `manual` or `cron`
