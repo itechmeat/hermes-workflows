@@ -38,6 +38,7 @@ const runs: RunSummary[] = [
     started_at: 1_700_000_000,
     finished_at: null,
     duration: null,
+    total_tokens: null,
   },
   {
     run_id: "nightly-bbbb2222",
@@ -48,6 +49,7 @@ const runs: RunSummary[] = [
     started_at: 1_700_000_000,
     finished_at: 1_700_000_042,
     duration: 42,
+    total_tokens: 25_000,
   },
 ];
 
@@ -64,6 +66,7 @@ describe("RunsPage", () => {
     expect(screen.getByText("running")).toBeInTheDocument();
     expect(screen.getByText("build")).toBeInTheDocument(); // current node
     expect(screen.getByText("acme")).toBeInTheDocument(); // project
+    expect(screen.getByText("25,000")).toBeInTheDocument(); // token total
   });
 
   it("loads all runs by default", async () => {

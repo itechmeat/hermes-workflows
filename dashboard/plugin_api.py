@@ -75,9 +75,31 @@ def _workflow_detail(workflow_id: str) -> dict | None:
 def _run_state(run_id: str) -> dict | None:
     from hermes_workflows import cli_bridge, config
 
-    return cli_bridge.invoke(
+    run = cli_bridge.invoke(
         [*config.core_cli(), "run-load", "--db", str(config.runs_db_path()), "--id", run_id]
     )
+    return None if run is None else _overlay_live_telemetry(run)
+
+
+def _overlay_live_telemetry(run: dict) -> dict:
+    """Attach worker telemetry sidecars to nodes the engine has not baked yet,
+    so the inspector's poll shows live counts (and pending approvals) while a
+    node is still running. Best-effort: any failure leaves the run untouched —
+    telemetry is an overlay, never a reason for a 500."""
+    try:
+        from hermes_workflows import config, telemetry
+
+        root = config.telemetry_dir()
+        for node in run.get("nodes", {}).values():
+            task_id = node.get("hermes_task_id")
+            if not task_id or node.get("telemetry") is not None:
+                continue
+            data = telemetry.load_node_telemetry(root, task_id)
+            if data is not None:
+                node["telemetry"] = data
+    except Exception:
+        pass
+    return run
 
 
 @router.get("/workflows")
@@ -249,6 +271,9 @@ def _run_row(summary: dict) -> dict:
         "started_at": started,
         "finished_at": finished,
         "duration": duration,
+        # Sum of per-node telemetry tokens (core RunSummary); null until any
+        # node has baked telemetry.
+        "total_tokens": summary.get("total_tokens"),
     }
 
 

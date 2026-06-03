@@ -456,6 +456,22 @@
   margin: 8px 0;
 }
 
+/* Agent-telemetry block in the run inspector's node detail. */
+.hw-telemetry {
+  margin: 8px 0;
+  display: grid;
+  gap: 2px;
+}
+.hw-telemetry-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9em;
+}
+.hw-telemetry-label {
+  color: var(--color-muted-foreground, #9a9a9a);
+}
+
 /* === Editor =================================================================
  * The flow editor and run inspector share the shell; these name the regions
  * inside them. */

@@ -197,3 +197,35 @@ def test_script_workflow_runs_once_scripts_enabled(client: TestClient) -> None:
     resp = client.post("/workflows/scripts-only/run")
     assert resp.status_code == 200, resp.text
     assert resp.json()["run_id"].startswith("scripts-only-")
+
+
+def test_get_run_overlays_live_telemetry(client: TestClient) -> None:
+    """Active nodes show worker telemetry from the sidecar before the engine
+    bakes it at settle time (the inspector polls this route every 2s)."""
+    import os
+
+    from hermes_workflows import telemetry
+
+    run_id = _start_run(client)
+    body = client.get(f"/runs/{run_id}").json()
+    task_id = body["nodes"]["plan"]["hermes_task_id"]
+
+    root = Path(os.environ["HERMES_HOME"]) / "workflows" / "telemetry"
+    root.mkdir(parents=True, exist_ok=True)
+    telemetry.sidecar_path(root, task_id).write_text(
+        json.dumps({"api_calls": 2, "total_tokens": 50, "tool_calls": 1})
+    )
+
+    body = client.get(f"/runs/{run_id}").json()
+    assert body["nodes"]["plan"]["telemetry"]["total_tokens"] == 50
+    # A corrupt sidecar degrades to absent telemetry, never a 500.
+    telemetry.sidecar_path(root, task_id).write_text("{broken")
+    body = client.get(f"/runs/{run_id}").json()
+    assert "telemetry" not in body["nodes"]["plan"]
+
+
+def test_list_runs_row_carries_total_tokens(client: TestClient) -> None:
+    run_id = _start_run(client)
+    row = _find_run(client.get("/runs").json()["runs"], run_id)
+    assert "total_tokens" in row  # null until telemetry lands
+    assert row["total_tokens"] is None

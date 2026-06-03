@@ -157,6 +157,7 @@ export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactEleme
               <th>Started</th>
               <th>Finished</th>
               <th>Duration</th>
+              <th>Tokens</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -173,6 +174,7 @@ export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactEleme
                 <td>{formatEpochSeconds(r.started_at)}</td>
                 <td>{formatEpochSeconds(r.finished_at)}</td>
                 <td>{formatDuration(r.duration)}</td>
+                <td>{r.total_tokens === null ? "—" : r.total_tokens.toLocaleString("en-US")}</td>
                 <td>
                   <Menu
                     size="sm"

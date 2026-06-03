@@ -76,6 +76,40 @@ describe("RunInspector", () => {
     expect(retryRun).toHaveBeenCalledWith("deploy-1", "build");
   });
 
+  it("shows the telemetry block for a node that has it", async () => {
+    const state = runState("running");
+    state.nodes["build"]!.telemetry = {
+      duration_ms: 65_000,
+      input_tokens: 17,
+      output_tokens: 8,
+      total_tokens: 25,
+      api_calls: 2,
+      tool_calls: 3,
+      tool_errors: 1,
+      subagents: 1,
+      error_type: "ToolError",
+      error_message: "exit 1",
+    };
+    const getRun = vi.fn(async () => state);
+    render(<RunInspector runId="deploy-1" client={stubClient({ getRun })} pollMs={10_000} />);
+    await screen.findByText("deploy-1");
+    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+
+    expect(screen.getByText(/agent telemetry/i)).toBeInTheDocument();
+    expect(screen.getByText("1m 5s")).toBeInTheDocument(); // duration
+    expect(screen.getByText("25 (17 in / 8 out)")).toBeInTheDocument(); // tokens
+    expect(screen.getByText("2")).toBeInTheDocument(); // API calls
+    expect(screen.getByText("3 (1 failed)")).toBeInTheDocument(); // tool calls
+    expect(screen.getByText("ToolError: exit 1")).toBeInTheDocument();
+  });
+
+  it("renders no telemetry block when a node has none", async () => {
+    render(<RunInspector runId="deploy-1" client={stubClient()} pollMs={10_000} />);
+    await screen.findByText("deploy-1");
+    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+    expect(screen.queryByText(/agent telemetry/i)).toBeNull();
+  });
+
   it("stops polling once the run is terminal", async () => {
     const getRun = vi.fn(async () => runState("completed"));
     render(<RunInspector runId="deploy-1" client={stubClient({ getRun })} pollMs={20} />);

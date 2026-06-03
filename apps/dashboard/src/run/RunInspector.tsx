@@ -7,6 +7,7 @@ import type { WorkflowsApi } from "../api/client";
 import type { RunState, SpecDetail } from "../api/types";
 import { applyRunStatus, isTerminalRun } from "./runView";
 import { RunNodeView } from "./RunNodeView";
+import { TelemetryDetail } from "./TelemetryDetail";
 import { WORKFLOW_NODE_TYPE } from "../editor/graphMapping";
 import { Badge, Button } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
@@ -153,6 +154,7 @@ export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps
               {selected.outcome !== undefined && <p>Outcome: {selected.outcome}</p>}
               {selected.output !== undefined && <pre className="hw-output">{selected.output}</pre>}
               {selected.error !== undefined && <p className="hw-error">{selected.error}</p>}
+              {selected.telemetry !== undefined && <TelemetryDetail telemetry={selected.telemetry} />}
               <Button onClick={() => retry(selected.node_id)}>Retry node</Button>
             </div>
           ) : (
