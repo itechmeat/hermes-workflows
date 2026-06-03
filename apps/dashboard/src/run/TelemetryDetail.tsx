@@ -1,12 +1,18 @@
-import type { NodeTelemetry } from "../api/types";
+import type { NodeTelemetry, NodeTelemetryApproval } from "../api/types";
 
 // Read-only telemetry block for the run inspector's node detail: the
 // observer-derived aggregates the worker recorded (duration, tokens, API and
-// tool calls, subagents, structured error). Rows render only when the
-// underlying counter exists, so a sparse aggregate stays compact.
+// tool calls, subagents, structured error), plus the command-approval state —
+// "waiting" while the node's worker is blocked on a human answer, and the
+// deny/timeout context after the fact. Rows render only when the underlying
+// counter exists, so a sparse aggregate stays compact.
 
 export interface TelemetryDetailProps {
   telemetry: NodeTelemetry;
+  /** Whether the node is still active (scheduled/running): a pending approval
+   *  is announced only then — on a settled node it just means the worker died
+   *  mid-prompt. */
+  nodeActive?: boolean;
 }
 
 function formatDurationMs(ms: number): string {
@@ -30,7 +36,41 @@ function formatToolCalls(t: NodeTelemetry): string {
     : calls;
 }
 
-export function TelemetryDetail({ telemetry: t }: TelemetryDetailProps): React.ReactElement {
+function ApprovalNote({
+  approval,
+  nodeActive,
+}: {
+  approval: NodeTelemetryApproval;
+  nodeActive: boolean;
+}): React.ReactElement | null {
+  if (approval.state === "pending" && nodeActive) {
+    return (
+      <div className="hw-approval">
+        <p className="hw-approval__pending">
+          Waiting for command approval — answer it on the worker's chat/CLI surface.
+        </p>
+        {approval.command !== undefined && <pre className="hw-output">{approval.command}</pre>}
+        {approval.description !== undefined && <p className="hw-note">{approval.description}</p>}
+      </div>
+    );
+  }
+  if (approval.state === "resolved" && (approval.choice === "deny" || approval.choice === "timeout")) {
+    return (
+      <div className="hw-approval">
+        <p className="hw-error">
+          {approval.choice === "deny" ? "Command approval denied" : "Command approval timed out"}
+        </p>
+        {approval.command !== undefined && <pre className="hw-output">{approval.command}</pre>}
+      </div>
+    );
+  }
+  return null;
+}
+
+export function TelemetryDetail({
+  telemetry: t,
+  nodeActive = false,
+}: TelemetryDetailProps): React.ReactElement {
   const rows: [string, string][] = [];
   if (t.duration_ms !== undefined) rows.push(["Duration", formatDurationMs(t.duration_ms)]);
   if (t.total_tokens !== undefined) rows.push(["Tokens", formatTokens(t)]);
@@ -52,6 +92,7 @@ export function TelemetryDetail({ telemetry: t }: TelemetryDetailProps): React.R
           {t.error_message !== undefined ? `${t.error_type}: ${t.error_message}` : t.error_type}
         </p>
       )}
+      {t.approval !== undefined && <ApprovalNote approval={t.approval} nodeActive={nodeActive} />}
     </div>
   );
 }

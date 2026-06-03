@@ -15,6 +15,7 @@ import type { WorkflowNode, NodeType, ReviewOption } from "@hermes-workflows/cor
 import type {
   RunState,
   RunStatus,
+  NodeRunState,
   NodeStatus,
   NodeTelemetry,
   NodeTelemetryApproval,
@@ -38,6 +39,7 @@ export type {
   UiLayout,
   RunState,
   RunStatus,
+  NodeRunState,
   NodeStatus,
   NodeTelemetry,
   NodeTelemetryApproval,

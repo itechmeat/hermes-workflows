@@ -103,6 +103,67 @@ describe("RunInspector", () => {
     expect(screen.getByText("ToolError: exit 1")).toBeInTheDocument();
   });
 
+  it("surfaces a pending command approval on an active node", async () => {
+    const state = runState("running");
+    state.nodes["build"]!.telemetry = {
+      tool_calls: 1,
+      approval: {
+        state: "pending",
+        command: "rm -rf /tmp/x",
+        description: "Delete files",
+        requested_at: 100,
+      },
+    };
+    const getRun = vi.fn(async () => state);
+    const { container } = render(
+      <RunInspector runId="deploy-1" client={stubClient({ getRun })} pollMs={10_000} />,
+    );
+    await screen.findByText("deploy-1");
+    // The node card carries the waiting badge.
+    await waitFor(() =>
+      expect(container.querySelector('[data-approval="pending"]')).not.toBeNull(),
+    );
+    // The node detail names the command awaiting approval.
+    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+    expect(screen.getByText(/waiting for command approval/i)).toBeInTheDocument();
+    expect(screen.getByText("rm -rf /tmp/x")).toBeInTheDocument();
+  });
+
+  it("clears the pending annotation once the approval resolves", async () => {
+    const state = runState("running");
+    state.nodes["build"]!.telemetry = {
+      approval: { state: "resolved", command: "rm -rf /tmp/x", choice: "once" },
+    };
+    const { container } = render(
+      <RunInspector runId="deploy-1" client={stubClient({ getRun: vi.fn(async () => state) })} pollMs={10_000} />,
+    );
+    await screen.findByText("deploy-1");
+    expect(container.querySelector('[data-approval="pending"]')).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+    expect(screen.queryByText(/waiting for command approval/i)).toBeNull();
+    // An uneventful resolution (once/session/always) leaves no note either.
+    expect(screen.queryByText(/rm -rf/)).toBeNull();
+  });
+
+  it("keeps deny visible on a settled node for failure context", async () => {
+    const state = runState("running");
+    state.nodes["build"] = {
+      node_id: "build",
+      status: "failed",
+      outcome: "failure",
+      telemetry: {
+        approval: { state: "resolved", command: "rm -rf /tmp/x", choice: "deny" },
+      },
+    };
+    render(
+      <RunInspector runId="deploy-1" client={stubClient({ getRun: vi.fn(async () => state) })} pollMs={10_000} />,
+    );
+    await screen.findByText("deploy-1");
+    await userEvent.click(screen.getByRole("button", { name: /build — failed/i }));
+    expect(screen.getByText(/command approval denied/i)).toBeInTheDocument();
+    expect(screen.getByText("rm -rf /tmp/x")).toBeInTheDocument();
+  });
+
   it("renders no telemetry block when a node has none", async () => {
     render(<RunInspector runId="deploy-1" client={stubClient()} pollMs={10_000} />);
     await screen.findByText("deploy-1");

@@ -472,6 +472,15 @@
   color: var(--color-muted-foreground, #9a9a9a);
 }
 
+/* Command-approval note inside the telemetry block. */
+.hw-approval {
+  margin-top: 6px;
+}
+.hw-approval__pending {
+  margin: 0;
+  color: var(--color-warning, #d6b25e);
+}
+
 /* === Editor =================================================================
  * The flow editor and run inspector share the shell; these name the regions
  * inside them. */

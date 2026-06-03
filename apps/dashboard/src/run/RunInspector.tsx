@@ -154,7 +154,12 @@ export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps
               {selected.outcome !== undefined && <p>Outcome: {selected.outcome}</p>}
               {selected.output !== undefined && <pre className="hw-output">{selected.output}</pre>}
               {selected.error !== undefined && <p className="hw-error">{selected.error}</p>}
-              {selected.telemetry !== undefined && <TelemetryDetail telemetry={selected.telemetry} />}
+              {selected.telemetry !== undefined && (
+                <TelemetryDetail
+                  telemetry={selected.telemetry}
+                  nodeActive={selected.status === "scheduled" || selected.status === "running"}
+                />
+              )}
               <Button onClick={() => retry(selected.node_id)}>Retry node</Button>
             </div>
           ) : (
