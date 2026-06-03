@@ -67,6 +67,8 @@ def build_engine() -> Engine:
         # Enforced execution mode: durable (one step per tick) vs direct/auto
         # (drain inline-eligible script steps synchronously).
         default_mode=str(config.settings()["default_mode"]),
+        # Worker-side telemetry sidecars, folded into nodes at settle time.
+        telemetry_dir=config.telemetry_dir(),
     )
 
 

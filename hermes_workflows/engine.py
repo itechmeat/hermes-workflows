@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
-from . import cli_bridge, notifications
+from . import cli_bridge, notifications, telemetry
 from .executor import CompositeExecutor, NodeExecutor
 
 _ACTIVE_STATUSES = frozenset({"created", "running", "waiting"})
@@ -49,6 +49,7 @@ class Engine:
         notifier_profile: Optional[str] = None,
         memory: Optional[dict] = None,
         default_mode: str = "durable",
+        telemetry_dir: Optional[Path] = None,
     ) -> None:
         self.core_cli = list(core_cli)
         self.db_path = db_path
@@ -73,6 +74,10 @@ class Engine:
         # Enforced execution.default_mode: 'durable' (one step per tick) or
         # 'direct' / 'auto' (drain inline-eligible script steps synchronously).
         self.default_mode = default_mode
+        # Worker-side telemetry sidecars (per kanban card). None disables the
+        # settle merge entirely (today's behaviour); the wired default is
+        # config.telemetry_dir().
+        self.telemetry_dir = telemetry_dir
 
     # --- core CLI helpers -------------------------------------------------
 
@@ -223,6 +228,7 @@ class Engine:
         executor = self._executor_for(plan["scope"], run)
 
         seq = _max_seq(run)
+        settled_cards: list[str] = []
         for node in run["nodes"].values():
             if node.get("status") in ("scheduled", "running") and node.get("hermes_task_id"):
                 completion = executor.poll(node["hermes_task_id"])
@@ -233,6 +239,8 @@ class Engine:
                     node["seq"] = seq
                     if completion.output is not None:
                         node["output"] = completion.output
+                    self._merge_telemetry(node)
+                    settled_cards.append(node["hermes_task_id"])
 
         decision = self._advance_decision(spec_path, run)
         for node_id, status in decision["node_updates"].items():
@@ -245,7 +253,23 @@ class Engine:
         self._emit_lifecycle(run, decision)
         self._emit_memory(run, spec_path)
         self._save(run)
+        # The aggregates are persisted on the nodes now; consume the sidecars
+        # (corrupt ones included) so the telemetry dir does not grow without
+        # bound. After the save, so an engine crash in between just re-merges
+        # on the next tick (idempotent — last write wins).
+        if self.telemetry_dir is not None:
+            for task_id in settled_cards:
+                telemetry.clear_node_telemetry(self.telemetry_dir, task_id)
         return run, decision
+
+    def _merge_telemetry(self, node: dict) -> None:
+        """Fold the worker's telemetry sidecar into a just-settled node.
+        Fail-open: a missing or corrupt sidecar leaves telemetry absent."""
+        if self.telemetry_dir is None:
+            return
+        data = telemetry.load_node_telemetry(self.telemetry_dir, node["hermes_task_id"])
+        if data is not None:
+            node["telemetry"] = data
 
     # --- lifecycle effects (notifications) --------------------------------
 
