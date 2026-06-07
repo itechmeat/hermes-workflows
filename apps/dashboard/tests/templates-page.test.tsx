@@ -438,6 +438,19 @@ describe("TemplatesPage — JSON import", () => {
     expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
   });
 
+  it("surfaces the server detail when the imported graph is invalid (400)", async () => {
+    const createWorkflow = vi.fn(async () => {
+      throw new Error("edge 'a -> ghost' points to an unknown node");
+    });
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), createWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await pickImportFile(importFile(JSON.stringify(importedBody)));
+
+    expect(await screen.findByText(/unknown node/i)).toBeInTheDocument();
+  });
+
   it("rejects a non-workflow JSON file without calling the API", async () => {
     const createWorkflow = vi.fn();
     const client = stubClient({ listWorkflows: vi.fn(async () => items), createWorkflow });

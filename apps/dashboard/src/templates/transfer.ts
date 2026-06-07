@@ -46,7 +46,9 @@ export function parseWorkflowJsonFile(text: string): CreateWorkflowBody {
 }
 
 /** The minimal shape that distinguishes a workflow export from arbitrary JSON:
- *  a `workflow` object with a string id. */
+ *  a `workflow` object with a string id. Deliberately nothing more — `ui` and
+ *  the graph itself are NOT checked client-side; core validation (spec-create)
+ *  is the single authority and its 400 detail reaches the operator verbatim. */
 function isWorkflowExport(value: unknown): value is CreateWorkflowBody {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const workflow = (value as { workflow?: unknown }).workflow;
