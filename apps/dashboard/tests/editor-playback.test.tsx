@@ -280,7 +280,7 @@ describe("FlowEditor playback", () => {
     );
 
     // No Play click: the mount check finds the active run and enters playback.
-    expect(listRuns).toHaveBeenCalledWith("active", "deploy");
+    await waitFor(() => expect(listRuns).toHaveBeenCalledWith("active", "deploy"));
     await waitFor(() => expect(container.querySelector('[data-status="running"]')).not.toBeNull());
     expect(playButton()).toBeDisabled();
     expect(playButton().textContent).toMatch(/running…/i);
