@@ -15,6 +15,19 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+def sibling_spec(tmp_path: Path, spec: Path, suffix: str = "b") -> Path:
+    """A copy of ``spec`` under a distinct workflow id, for tests that need two
+    concurrently-active runs: single-flight forbids two active runs of one
+    workflow, so each concurrent run gets its own workflow."""
+    text = spec.read_text()
+    source_id = next(
+        line.removeprefix("id: ") for line in text.splitlines() if line.startswith("id: ")
+    )
+    path = tmp_path / f"{source_id}-{suffix}.workflow.yaml"
+    path.write_text(text.replace(f"id: {source_id}", f"id: {source_id}-{suffix}", 1))
+    return path
+
+
 def _ensure_hermes_importable() -> None:
     try:
         import hermes_cli  # noqa: F401

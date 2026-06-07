@@ -18,7 +18,7 @@ import sys
 import uuid
 from typing import Any, Optional, Sequence
 
-from . import config
+from . import cli_bridge, config
 from .engine import ACTIVE_RUN_STATUSES, Engine
 
 
@@ -147,7 +147,14 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
             raise SystemExit(str(exc)) from exc
         project_id = _default_project(engine, spec, args.project)
         run_id = f"{args.workflow_id}-{uuid.uuid4().hex[:8]}"
-        run = engine.run(spec, run_id, project_id=project_id, origin=args.origin)
+        try:
+            run = engine.run(spec, run_id, project_id=project_id, origin=args.origin)
+        except cli_bridge.CoreBridgeError as exc:
+            # Single-flight refusal is an expected operator-facing outcome:
+            # exit with the core's message, not a traceback.
+            if exc.kind == "ActiveRunExistsError":
+                raise SystemExit(exc.detail) from exc
+            raise
         # A run that survived its first advance still needs future advances;
         # arm the singleton tick or a multi-node run stalls right here (the
         # tick keeps itself alive afterwards and tears down once idle). Never

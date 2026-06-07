@@ -14,6 +14,8 @@ kb = pytest.importorskip("hermes_cli.kanban_db")
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import KanbanExecutor
 
+from conftest import sibling_spec
+
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
 SPEC = ROOT / "examples" / "feature-development.workflow.yaml"
@@ -41,12 +43,14 @@ def _complete(board: sqlite3.Connection, task_id: str) -> None:
     board.commit()
 
 
-def test_advance_all_advances_every_active_run(engine: Engine) -> None:
+def test_advance_all_advances_every_active_run(engine: Engine, tmp_path: Path) -> None:
+    # Two concurrently-active runs need two workflows (single-flight allows at
+    # most one active run per workflow).
     a = engine.run(str(SPEC), "run-a")
-    engine.run(str(SPEC), "run-b")
+    engine.run(str(sibling_spec(tmp_path, SPEC)), "run-b")
     _complete(engine.kanban.board_conn, a["nodes"]["plan"]["hermes_task_id"])
 
-    advanced = engine.advance_all(ROOTS)
+    advanced = engine.advance_all([*ROOTS, str(tmp_path)])
 
     assert {r["run_id"] for r in advanced} == {"run-a", "run-b"}
     # run-a's plan was completed, so it moved on; run-b is untouched at plan.
@@ -70,11 +74,12 @@ def test_advance_all_survives_one_run_raising(engine: Engine) -> None:
 
 
 def test_advance_all_skips_terminal_runs(engine: Engine) -> None:
-    engine.run(str(SPEC), "run-active")
+    # The first run settles before the next may start (single-flight).
     engine.run(str(SPEC), "run-old")
     old = engine.status("run-old")
     old["status"] = "completed"
     engine._save(old)
+    engine.run(str(SPEC), "run-active")
 
     advanced = engine.advance_all(ROOTS)
 

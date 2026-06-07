@@ -69,6 +69,18 @@ def test_wrapper_script_is_executable() -> None:
     assert "hermes_workflows.cli" in wrapper.read_text()
 
 
+def test_run_refuses_a_second_active_run_cleanly(home: Path, capsys) -> None:
+    """Single-flight: a second `run` of the same workflow exits with the core's
+    message (a clean SystemExit naming the active run, not a traceback)."""
+    first = _invoke(capsys, "run", "feature-development")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["run", "feature-development"])
+    message = str(exc_info.value)
+    assert first["run_id"] in message
+    assert "active run" in message
+
+
 def test_run_arms_the_tick_for_an_active_run(home: Path, capsys) -> None:
     """A CLI-started run must leave the advance tick armed — without it a
     multi-node run stalls after the first step (nothing else calls advance)."""

@@ -242,16 +242,20 @@ async def export_workflow(workflow_id: str) -> dict:
 
 
 @router.get("/runs")
-async def list_runs(scope: str = "active") -> dict:
+async def list_runs(scope: str = "active", workflow_id: str | None = None) -> dict:
     """List runs for the Runs page. ``scope=active`` (default) keeps the
     historical behaviour — only in-flight runs; ``scope=all`` adds finished
-    runs. Each row carries the TZ columns, shaped from the core run summary
-    (``run-list-summary``); ``duration`` is derived from the timing meta."""
+    runs; ``workflow_id`` narrows to one workflow (the editor's attach lookup,
+    newest first). Each row carries the TZ columns, shaped from the core run
+    summary (``run-list-summary``); ``duration`` is derived from the timing
+    meta."""
     from hermes_workflows import cli_bridge, config
 
     argv = [*config.core_cli(), "run-list-summary", "--db", str(config.runs_db_path())]
     if scope != "all":
         argv.append("--active")
+    if workflow_id is not None:
+        argv += ["--workflow", workflow_id]
     runs = cli_bridge.invoke(argv) or []
     return {"runs": [_run_row(r) for r in runs]}
 
@@ -361,7 +365,7 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
     polls ``GET /runs/{id}`` for progress."""
     import uuid
 
-    from hermes_workflows import config, tools
+    from hermes_workflows import cli_bridge, config, tools
     from hermes_workflows.bridge import cron
     from hermes_workflows.cli import (
         ScriptsDisabledError,
@@ -384,18 +388,26 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     project_id = _default_project(engine, spec, payload.get("project_id"))
     run_id = f"{workflow_id}-{uuid.uuid4().hex[:8]}"
-    return tools.start_workflow(
-        workflow_id,
-        engine=engine,
-        # Fresh engine per advance thread: this engine's SQLite connections are
-        # bound to the request thread and must not cross thread boundaries.
-        engine_factory=build_engine,
-        roots=config.spec_roots(),
-        core_cli=config.core_cli(),
-        run_id=run_id,
-        project_id=project_id,
-        ensure_tick=cron.ensure_workflow_tick,
-    )
+    try:
+        return tools.start_workflow(
+            workflow_id,
+            engine=engine,
+            # Fresh engine per advance thread: this engine's SQLite connections
+            # are bound to the request thread and must not cross thread
+            # boundaries.
+            engine_factory=build_engine,
+            roots=config.spec_roots(),
+            core_cli=config.core_cli(),
+            run_id=run_id,
+            project_id=project_id,
+            ensure_tick=cron.ensure_workflow_tick,
+        )
+    except cli_bridge.CoreBridgeError as exc:
+        # Single-flight: the core refuses a second active run per workflow.
+        # The detail names the blocking run so the operator can open/cancel it.
+        if exc.kind == "ActiveRunExistsError":
+            raise HTTPException(status_code=409, detail=exc.detail) from exc
+        raise
 
 
 @router.get("/runs/{run_id}")
@@ -468,6 +480,9 @@ async def retry_run(run_id: str, payload: dict = Body(default={})) -> dict:
             raise HTTPException(status_code=404, detail=exc.detail) from exc
         if exc.kind == "RetryError":
             raise HTTPException(status_code=400, detail=exc.detail) from exc
+        # Single-flight: reviving this run would sit next to an active sibling.
+        if exc.kind == "ActiveRunExistsError":
+            raise HTTPException(status_code=409, detail=exc.detail) from exc
         raise HTTPException(status_code=500, detail="failed to retry run") from exc
 
 

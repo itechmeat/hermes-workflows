@@ -16,6 +16,8 @@ from hermes_workflows.bridge import kanban
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import KanbanExecutor
 
+from conftest import sibling_spec
+
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
 SPEC = ROOT / "examples" / "feature-development.workflow.yaml"
@@ -55,13 +57,15 @@ def test_dispatch_board_invokes_native_cli() -> None:
     assert calls == [["hermes", "kanban", "--board", "proj-acme", "dispatch", "--json"]]
 
 
-def test_tick_dispatches_active_boards_and_keeps_tick(engine: Engine) -> None:
+def test_tick_dispatches_active_boards_and_keeps_tick(engine: Engine, tmp_path: Path) -> None:
+    # Two concurrently-active runs need two workflows (single-flight allows at
+    # most one active run per workflow); both resolve to the same board here.
     engine.run(str(SPEC), "run-a")
-    engine.run(str(SPEC), "run-b")
+    engine.run(str(sibling_spec(tmp_path, SPEC)), "run-b")
     rec = _Recorder()
 
     result = engine.tick(
-        ROOTS,
+        [*ROOTS, str(tmp_path)],
         dispatch=rec.dispatch,
         sync_tick=rec.sync_tick,
         tick_script="hermes-workflows advance-all",

@@ -210,6 +210,43 @@ def test_script_workflow_runs_once_scripts_enabled(client: TestClient) -> None:
     assert resp.json()["run_id"].startswith("scripts-only-")
 
 
+def test_second_start_is_409_naming_the_active_run(client: TestClient) -> None:
+    """Single-flight: one workflow may have at most one active run. The refusal
+    is explicit — 409 with the blocking run's id in the detail."""
+    run_id = _start_run(client)
+    resp = client.post("/workflows/feature-development/run")
+    assert resp.status_code == 409, resp.text
+    assert run_id in resp.json()["detail"]
+
+
+def test_start_is_allowed_again_after_the_active_run_settles(client: TestClient) -> None:
+    run_id = _start_run(client)
+    client.post(f"/runs/{run_id}/cancel")
+    resp = client.post("/workflows/feature-development/run")
+    assert resp.status_code == 200, resp.text
+
+
+def test_retry_is_409_while_a_sibling_run_is_active(client: TestClient) -> None:
+    """Retry revives a run — it must not slip past the single-flight guard."""
+    first = _start_run(client)
+    client.post(f"/runs/{first}/cancel")
+    second = _start_run(client)
+
+    resp = client.post(f"/runs/{first}/retry")
+    assert resp.status_code == 409, resp.text
+    assert second in resp.json()["detail"]
+
+
+def test_list_runs_filters_by_workflow_id(client: TestClient) -> None:
+    """The editor-attach lookup: only the named workflow's runs come back."""
+    run_id = _start_run(client)
+    rows = client.get("/runs?scope=all&workflow_id=feature-development").json()["runs"]
+    assert rows, "expected at least the run just started"
+    assert all(r["workflow_id"] == "feature-development" for r in rows)
+    assert run_id in [r["run_id"] for r in rows]
+    assert client.get("/runs?scope=all&workflow_id=ghost").json()["runs"] == []
+
+
 def test_get_run_overlays_live_telemetry(client: TestClient) -> None:
     """Active nodes show worker telemetry from the sidecar before the engine
     bakes it at settle time (the inspector polls this route every 2s)."""
