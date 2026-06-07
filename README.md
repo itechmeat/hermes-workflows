@@ -20,7 +20,9 @@ graph and opened in the editor), enable/disable, duplicate, export YAML, or dele
 template showing its last run and next scheduled run. Author the graph in a
 visual `@xyflow/react` editor — edit the full node field set (including agent_task workdir,
 workspace, retries, timeout, and input mapping), duplicate or auto-layout nodes, validate, preview
-the compiled Hermes plan, and save (layout included) — alongside a live run inspector with per-node
+the compiled Hermes plan, save (layout included), and press Play to run the workflow in place:
+the canvas shows live per-node progress while editing is locked, then hands off to the run
+inspector once the run settles — alongside that live run inspector with per-node
 status, cancel, and retry. It also has a **Runs** view (every run, with open / cancel / retry /
 export-logs), a **Schedules** view over Hermes cron (pause / resume / run-now / edit / delete), and
 a **Settings** view backed by the Hermes config. See [docs/dashboard.md](docs/dashboard.md).

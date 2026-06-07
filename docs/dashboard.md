@@ -149,7 +149,13 @@ registers the root component via
   **Auto-layout** (arrange the graph by a dependency-free layered layout) write
   through the same save path. Layout round-trips losslessly through the spec's
   `ui.xyflow` block; Save sends `{ workflow, ui }` via `PUT` (the server rejects
-  an invalid graph).
+  an invalid graph). **Play** runs the workflow being edited: a dirty graph is
+  saved first (a failed save aborts the start), the canvas then switches to the
+  read-only run pipeline showing live per-node status at the editor's own node
+  positions while editing stays locked, and once the run settles — or parks in
+  `waiting` for a human review, which only the inspector can answer — the view
+  hands off to the run inspector. A rejected start or a failed poll surfaces as
+  a visible alert next to the toolbar status.
 - **Run inspector** — renders the run graph with per-node status colours, polls
   `GET /runs/{id}` while the run is active (stopping once terminal), and offers
   whole-run cancel/retry plus per-node retry.
