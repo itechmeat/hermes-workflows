@@ -40,12 +40,14 @@ export function isApprovalPending(state: NodeRunState | undefined): boolean {
   );
 }
 
+// Kept in sync with the `--hw-status-*` variables in ui/theme.css — running is
+// always blue and completed always green (operator-confirmed semantics).
 const STATUS_COLORS: Record<NodeStatus, string> = {
   pending: "#6b7280",
   scheduled: "#7aa7d6",
   running: "#3b82f6",
   waiting_for_review: "#d6b25e",
-  completed: "#4a8f4a",
+  completed: "#2ea44f",
   failed: "#c0392b",
   skipped: "#4b5563",
   cancelled: "#374151",

@@ -697,16 +697,18 @@
   }
 }
 
-/* Run-status palette mapped onto Hermes design-system tokens so it follows
-   theme switches (success/warning/destructive are real DS semantic tokens;
-   ring is the theme accent; muted-foreground/border carry the dim states).
-   Hex values are fallbacks only. */
+/* Run-status palette. The dim states (pending/skipped/cancelled) and the
+   semantic warning/destructive states follow Hermes design-system tokens so
+   they track theme switches. Running and completed are fixed hex on purpose:
+   the host theme's ring token renders near-white, which read as "no status"
+   on the canvas — operator-confirmed semantics are running = blue,
+   completed = green (2026-06-07). */
 .hw-root {
   --hw-status-pending: var(--color-border, #6b7280);
   --hw-status-scheduled: var(--color-muted-foreground, #7aa7d6);
-  --hw-status-running: var(--color-ring, #3b82f6);
+  --hw-status-running: #3b82f6;
   --hw-status-waiting_for_review: var(--color-warning, #d6b25e);
-  --hw-status-completed: var(--color-success, #4a8f4a);
+  --hw-status-completed: #2ea44f;
   --hw-status-failed: var(--color-destructive, #c0392b);
   --hw-status-skipped: var(--color-border, #4b5563);
   --hw-status-cancelled: var(--color-muted-foreground, #374151);
