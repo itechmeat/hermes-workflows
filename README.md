@@ -23,7 +23,9 @@ workspace, retries, timeout, and input mapping), duplicate or auto-layout nodes,
 the compiled Hermes plan, save (layout included), and press Play to run the workflow in place:
 the canvas shows live per-node progress while editing is locked, then hands off to the run
 inspector once the run settles — alongside that live run inspector with per-node
-status, cancel, and retry. It also has a **Runs** view (every run, with open / cancel / retry /
+status, cancel, and retry. Runs are single-flight: a workflow can have at most one active run
+(a second start is refused with the blocking run named), and re-opening the editor while a run
+is in flight attaches to it instead of pretending the workflow is idle. It also has a **Runs** view (every run, with open / cancel / retry /
 export-logs), a **Schedules** view over Hermes cron (pause / resume / run-now / edit / delete), and
 a **Settings** view backed by the Hermes config. See [docs/dashboard.md](docs/dashboard.md).
 

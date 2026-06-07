@@ -41,10 +41,11 @@ Listing and status:
   (the workflow's most recent run) and `next_run_at` (its cron schedule, `null`
   when it has none). The columns are overlays — listing never fails if the run
   store is empty or the cron module is unavailable.
-- `GET /runs?scope=active|all` — runs from `runs.db`, each shaped to the Runs-page
-  row (run id, workflow, project, status, current node, started/finished,
-  duration). `scope=active` (the default) keeps the historical active-only
-  behaviour; `scope=all` adds finished runs.
+- `GET /runs?scope=active|all&workflow_id=...` — runs from `runs.db`, each shaped
+  to the Runs-page row (run id, workflow, project, status, current node,
+  started/finished, duration), newest first. `scope=active` (the default) keeps
+  the historical active-only behaviour; `scope=all` adds finished runs;
+  `workflow_id` narrows to one workflow's runs (the editor's attach lookup).
 - `GET /o2b-status` — `{ "connected": bool }`, best-effort and never raising.
 
 Authoring (for the editor):
@@ -70,13 +71,20 @@ Authoring (for the editor):
 Execution control:
 
 - `POST /workflows/{id}/run` — start a run (same path as the CLI `run`); `404` if
-  absent, `409` if the workflow is disabled.
+  absent, `409` if the workflow is disabled. Runs are **single-flight**: one
+  workflow may have at most one active run (`created`/`running`/`waiting`), so a
+  second start is a `409` whose detail names the blocking run — cancel it or
+  wait for it to finish. The guard lives in the core at `run-create`, so the
+  CLI and cron-scheduled starts are refused the same way.
 - `GET /runs/{id}` — full run state with per-node detail, for the run inspector;
   `404` if absent. Nodes the engine has not settled yet get their worker's
   telemetry sidecar overlaid live (best-effort), so the inspector's poll shows
   token/tool counts and pending command approvals while a node runs.
 - `POST /runs/{id}/cancel` — cancel a run; `404` if absent.
 - `POST /runs/{id}/retry` — retry a run, or one failed node via `{ "node_id": "..." }`.
+  Retry revives the run, so the single-flight guard applies here too: reviving
+  next to a *different* active run of the same workflow is a `409` (retrying
+  the active run itself is fine).
 - `GET /runs/{id}/export` — the full run-load bundle in a JSON envelope
   `{ run_id, filename, json }` for download; `404` if absent. A traced run
   (`observability.trace_enabled`) additionally carries `trace` +
@@ -155,7 +163,14 @@ registers the root component via
   positions while editing stays locked, and once the run settles — or parks in
   `waiting` for a human review, which only the inspector can answer — the view
   hands off to the run inspector. A rejected start or a failed poll surfaces as
-  a visible alert next to the toolbar status.
+  a visible alert next to the toolbar status. Opening the editor while the
+  workflow already has an active run **attaches** to it: the mount checks
+  `GET /runs?scope=active&workflow_id=...` (Play is held until the check
+  lands), the canvas enters the same read-only playback, and a run parked in
+  `waiting` hands off to the inspector immediately. A start refused by the
+  single-flight guard re-checks once and adopts the concurrent run while
+  keeping the refusal visible; a failed attach check is reported, never
+  silently treated as idle.
 - **Run inspector** — renders the run graph with per-node status colours, polls
   `GET /runs/{id}` while the run is active (stopping once terminal), and offers
   whole-run cancel/retry plus per-node retry.

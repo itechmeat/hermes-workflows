@@ -42,6 +42,16 @@ export function useRunPlayback(options: {
   // Ref, not state: the hand-off must fire exactly once even if a poll result
   // lands between the navigation call and the editor unmounting.
   const handedOff = useRef(false);
+  // The play() failure continuation resolves outside any effect; this ref lets
+  // it skip setState after the editor unmounted (same guard the mount attach
+  // effect gets from its own `disposed` flag).
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
 
   const { run, pollError } = useRunPolling(api, phase === "playing" ? runId : null, pollMs);
 
@@ -131,6 +141,7 @@ export function useRunPlayback(options: {
         // real state alongside the refusal.
         findActiveRun()
           .then((active) => {
+            if (!mounted.current) return;
             if (active === undefined) {
               setPhase("idle");
               return;
@@ -138,6 +149,7 @@ export function useRunPlayback(options: {
             adopt(active);
           })
           .catch((checkError: unknown) => {
+            if (!mounted.current) return;
             setPhase("idle");
             setStartError(
               `${startMessage}; active-run check also failed: ${errorMessage(checkError)}`,

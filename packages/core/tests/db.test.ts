@@ -293,6 +293,17 @@ describe("RunRepository — node telemetry", () => {
   });
 });
 
+describe("active run statuses", () => {
+  test("are safe to interpolate as SQL literals (no quotes or backslashes)", async () => {
+    // The repository inlines ACTIVE_RUN_STATUSES into IN (...) lists; that is
+    // sound only while every value stays a plain lowercase token.
+    const { ACTIVE_RUN_STATUSES } = await import("../src/runtime/status.ts");
+    for (const status of ACTIVE_RUN_STATUSES) {
+      expect(status).toMatch(/^[a-z_]+$/);
+    }
+  });
+});
+
 describe("RunRepository — single-flight create", () => {
   let sdir: string;
   let sdb: Database;
