@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -6,12 +6,14 @@ import { getApiClient } from "../host";
 import type { WorkflowsApi } from "../api/client";
 import type { ModelGroup, NodeType, SpecDetail, WorkflowNode } from "../api/types";
 import { useFlowEditor, type SaveStatus } from "./useFlowEditor";
-import { WorkflowNodeView } from "./nodes/WorkflowNodeView";
+import { useRunPlayback, type PlaybackPhase } from "./useRunPlayback";
 import { NodeInspector } from "./NodeInspector";
 import { ValidationPanel } from "./ValidationPanel";
 import { CompilePreview } from "./CompilePreview";
-import { WORKFLOW_NODE_TYPE, nodeTypeLabel, type FlowNode } from "./graphMapping";
+import { nodeTypeLabel, type FlowNode } from "./graphMapping";
 import { NodeOpenProvider } from "./nodeOpenContext";
+import { CANVAS_NODE_TYPES } from "../run/canvasNodeTypes";
+import { overlayRunStatus } from "../run/runView";
 import { Button, Menu, Modal, type MenuItem } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
 import {
@@ -23,6 +25,7 @@ import {
   FileIcon,
   FlagIcon,
   LayoutIcon,
+  PlayIcon,
   PlusIcon,
   SaveIcon,
   ShieldCheckIcon,
@@ -37,6 +40,10 @@ export interface FlowEditorProps {
   onSaved?: (saved: SpecDetail) => void;
   /** Navigate back to the workflows list (wired by the app shell). */
   onBack?: () => void;
+  /** Navigate to the run inspector; enables the Play button when wired. */
+  onOpenRun?: (runId: string) => void;
+  /** Playback poll cadence override (tests). */
+  pollMs?: number;
 }
 
 // Labels come from the shared `nodeTypeLabel` mapping; only the icons live here.
@@ -59,10 +66,22 @@ function statusLabel(status: SaveStatus, dirty: boolean): string {
   return "No changes";
 }
 
-export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps): React.ReactElement {
+const PLAY_LABEL: Record<PlaybackPhase, string> = {
+  idle: "Play",
+  starting: "Starting…",
+  playing: "Running…",
+};
+
+export function FlowEditor({
+  detail,
+  client,
+  onSaved,
+  onBack,
+  onOpenRun,
+  pollMs,
+}: FlowEditorProps): React.ReactElement {
   const api = client ?? getApiClient();
   const ctrl = useFlowEditor(detail, api);
-  const nodeTypes = useMemo(() => ({ [WORKFLOW_NODE_TYPE]: WorkflowNodeView }), []);
   const slots = useHeaderSlots();
   // Editing a node (the inspector modal) is separate from merely selecting it:
   // a single click selects (enables Duplicate, highlights), a double click or a
@@ -93,6 +112,26 @@ export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps)
     };
   }, [api]);
 
+  const handOff = useCallback(
+    (runId: string) => {
+      if (onOpenRun === undefined) {
+        // Play is only rendered when navigation is wired; reaching this without
+        // it is a wiring bug that must fail loudly, not strand the operator.
+        throw new Error("FlowEditor playback requires the onOpenRun prop");
+      }
+      onOpenRun(runId);
+    },
+    [onOpenRun],
+  );
+
+  const playback = useRunPlayback({
+    api,
+    workflowId: detail.workflow.id,
+    onHandOff: handOff,
+    pollMs,
+  });
+  const playing = playback.phase !== "idle";
+
   const openNode = useCallback(
     (id: string) => {
       ctrl.selectNode(id);
@@ -105,6 +144,17 @@ export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps)
     const saved = await ctrl.save();
     if (saved) onSaved?.(saved);
   }, [ctrl, onSaved]);
+
+  const handlePlay = useCallback(async () => {
+    // Run what the operator sees: a dirty graph is saved first, and a failed
+    // save (already shown in the status label) aborts the start.
+    if (ctrl.dirty) {
+      const saved = await ctrl.save();
+      if (saved === null) return;
+      onSaved?.(saved);
+    }
+    playback.play();
+  }, [ctrl, playback, onSaved]);
 
   const handleInspectorChange = useCallback(
     (patch: Partial<WorkflowNode>) => {
@@ -141,6 +191,11 @@ export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps)
     setEditing(false);
   }, [ctrl]);
 
+  // While a run plays the canvas renders the run pipeline: the same nodes at
+  // their live positions, retyped for RunNodeView and tagged with run status.
+  const canvasNodes =
+    playing && playback.run !== null ? overlayRunStatus(ctrl.nodes, playback.run) : ctrl.nodes;
+
   const addItems: MenuItem[] = NODE_TYPES.map(({ type, icon }) => ({
     key: type,
     label: nodeTypeLabel(type),
@@ -164,6 +219,12 @@ export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps)
   );
   const actions = (
     <>
+      {onOpenRun !== undefined && (
+        <Button variant="primary" disabled={playing} onClick={handlePlay}>
+          <PlayIcon />
+          {PLAY_LABEL[playback.phase]}
+        </Button>
+      )}
       <Menu
         label={
           <>
@@ -172,16 +233,20 @@ export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps)
           </>
         }
         items={addItems}
+        disabled={playing}
       />
-      <Button disabled={!ctrl.dirty || ctrl.status.kind === "saving"} onClick={handleSave}>
+      <Button
+        disabled={playing || !ctrl.dirty || ctrl.status.kind === "saving"}
+        onClick={handleSave}
+      >
         <SaveIcon />
         Save
       </Button>
-      <Button disabled={ctrl.selectedNode === null} onClick={handleDuplicate}>
+      <Button disabled={playing || ctrl.selectedNode === null} onClick={handleDuplicate}>
         <CopyIcon />
         Duplicate node
       </Button>
-      <Button onClick={ctrl.applyLayout}>
+      <Button disabled={playing} onClick={ctrl.applyLayout}>
         <LayoutIcon />
         Auto-layout
       </Button>
@@ -193,7 +258,13 @@ export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps)
           </>
         }
         items={toolItems}
+        disabled={playing}
       />
+      {playback.error !== null && (
+        <span role="alert" className="hw-bar-status hw-error">
+          {playback.error}
+        </span>
+      )}
       <span role="status" className="hw-bar-status">
         {statusLabel(ctrl.status, ctrl.dirty)}
       </span>
@@ -219,19 +290,22 @@ export function FlowEditor({ detail, client, onSaved, onBack }: FlowEditorProps)
           <div className="hw-canvas">
             <NodeOpenProvider value={openNode}>
               <ReactFlow
-                nodes={ctrl.nodes}
+                nodes={canvasNodes}
                 edges={ctrl.edges}
-                nodeTypes={nodeTypes}
+                nodeTypes={CANVAS_NODE_TYPES}
+                nodesDraggable={!playing}
+                nodesConnectable={!playing}
+                elementsSelectable={!playing}
                 onNodesChange={ctrl.onNodesChange}
                 onEdgesChange={ctrl.onEdgesChange}
-                onConnect={ctrl.onConnect}
+                onConnect={playing ? undefined : ctrl.onConnect}
                 onMoveEnd={ctrl.onMoveEnd}
-                onNodeClick={onNodeClick}
-                onNodeDoubleClick={onNodeDoubleClick}
-                onPaneClick={onPaneClick}
+                onNodeClick={playing ? undefined : onNodeClick}
+                onNodeDoubleClick={playing ? undefined : onNodeDoubleClick}
+                onPaneClick={playing ? undefined : onPaneClick}
                 defaultViewport={ctrl.viewport}
                 fitView={ctrl.viewport === undefined}
-                deleteKeyCode={["Backspace", "Delete"]}
+                deleteKeyCode={playing ? null : ["Backspace", "Delete"]}
                 proOptions={{ hideAttribution: true }}
               >
                 <Background />

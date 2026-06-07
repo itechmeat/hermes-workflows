@@ -24,6 +24,8 @@ export interface MenuProps {
    *  trigger; "end" anchors to the trigger's right edge and opens to the left
    *  (use for triggers near the right edge, e.g. table-row action menus). */
   align?: "start" | "end";
+  /** Disables the trigger button (e.g. while editor playback locks editing). */
+  disabled?: boolean;
 }
 
 export function Menu({
@@ -32,6 +34,7 @@ export function Menu({
   variant = "default",
   size = "md",
   align = "start",
+  disabled,
 }: MenuProps): React.ReactElement {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -59,6 +62,7 @@ export function Menu({
         size={size}
         aria-haspopup="menu"
         aria-expanded={open}
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
         {label}

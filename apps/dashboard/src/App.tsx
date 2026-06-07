@@ -140,7 +140,12 @@ export function App({ client }: AppProps): React.ReactElement {
           {view.name === "schedules" && <SchedulesPage client={api} />}
           {view.name === "settings" && <SettingsPage client={api} />}
           {view.name === "editor" && (
-            <EditorLoader id={view.id} client={api} onBack={() => go({ name: "templates" })} />
+            <EditorLoader
+              id={view.id}
+              client={api}
+              onBack={() => go({ name: "templates" })}
+              onOpenRun={(runId) => go({ name: "inspector", runId })}
+            />
           )}
           {view.name === "inspector" && <RunInspector runId={view.runId} client={api} />}
         </HeaderSlotsProvider>
@@ -154,10 +159,12 @@ function EditorLoader({
   id,
   client,
   onBack,
+  onOpenRun,
 }: {
   id: string;
   client: WorkflowsApi;
   onBack: () => void;
+  onOpenRun: (runId: string) => void;
 }): React.ReactElement {
   const [detail, setDetail] = useState<SpecDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -181,5 +188,5 @@ function EditorLoader({
 
   if (error !== null) return <p className="hw-page">{error}</p>;
   if (detail === null) return <p className="hw-page">Loading workflow…</p>;
-  return <FlowEditor detail={detail} client={client} onBack={onBack} />;
+  return <FlowEditor detail={detail} client={client} onBack={onBack} onOpenRun={onOpenRun} />;
 }
