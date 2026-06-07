@@ -33,7 +33,12 @@ export class ArtifactStore {
     return this.readIfExists(join(this.runDir(runId), name));
   }
 
-  async writeNodeFile(runId: string, nodeId: string, name: string, content: string): Promise<string> {
+  async writeNodeFile(
+    runId: string,
+    nodeId: string,
+    name: string,
+    content: string,
+  ): Promise<string> {
     const dir = this.nodeDir(runId, nodeId);
     await mkdir(dir, { recursive: true });
     const path = join(dir, name);

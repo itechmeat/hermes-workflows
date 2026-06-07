@@ -107,7 +107,11 @@ export class SpecStore {
    * invalid spec is ever persisted. Removes any other same-id file across the
    * read roots so there is exactly one spec per id.
    */
-  async saveWorkflow(workflow: Workflow, ui: UiLayout | undefined, destRoot: string): Promise<string> {
+  async saveWorkflow(
+    workflow: Workflow,
+    ui: UiLayout | undefined,
+    destRoot: string,
+  ): Promise<string> {
     const result = validateWorkflow(workflow);
     if (!result.valid) throw new SpecValidationError(result.errors);
 
@@ -121,7 +125,11 @@ export class SpecStore {
   }
 
   /** Like {@link saveWorkflow} but refuses to overwrite an existing id. */
-  async createWorkflow(workflow: Workflow, ui: UiLayout | undefined, destRoot: string): Promise<string> {
+  async createWorkflow(
+    workflow: Workflow,
+    ui: UiLayout | undefined,
+    destRoot: string,
+  ): Promise<string> {
     if ((await this.pathsFor(workflow.id)).length > 0) {
       throw new SpecExistsError(workflow.id);
     }

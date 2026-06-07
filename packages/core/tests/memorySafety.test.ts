@@ -67,7 +67,10 @@ describe("FailOpenMemoryProvider", () => {
   test("redacts secrets before delegating writes", async () => {
     const inner = new CapturingProvider();
     const provider = new FailOpenMemoryProvider(inner);
-    await provider.writeRetrospective({ title: "Run", markdown: "token: ghp_ABCDEFGHIJKLMNOPQRSTU" });
+    await provider.writeRetrospective({
+      title: "Run",
+      markdown: "token: ghp_ABCDEFGHIJKLMNOPQRSTU",
+    });
     expect(inner.last?.markdown).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTU");
     expect(inner.last?.markdown).toContain("[REDACTED]");
   });

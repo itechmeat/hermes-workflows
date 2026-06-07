@@ -33,7 +33,10 @@ describe("serializeWorkflow", () => {
     const { workflow } = await loadExample("feature-development.workflow.yaml");
     const ui: UiLayout = {
       xyflow: {
-        nodes: [{ id: "plan", x: 100, y: 50 }, { id: "done", x: 400, y: 50 }],
+        nodes: [
+          { id: "plan", x: 100, y: 50 },
+          { id: "done", x: 400, y: 50 },
+        ],
         viewport: { x: 0, y: 0, zoom: 1.25 },
       },
     };

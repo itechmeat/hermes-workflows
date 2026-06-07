@@ -30,7 +30,10 @@ export interface Point {
 const RANK_GAP = 220;
 const ROW_GAP = 110;
 
-export function layout(nodes: readonly LayoutNode[], edges: readonly LayoutEdge[]): Record<string, Point> {
+export function layout(
+  nodes: readonly LayoutNode[],
+  edges: readonly LayoutEdge[],
+): Record<string, Point> {
   const ids = nodes.map((n) => n.id);
   const idSet = new Set(ids);
   const order = new Map(ids.map((id, i) => [id, i] as const));

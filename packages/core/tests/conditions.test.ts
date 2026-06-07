@@ -15,19 +15,27 @@ describe("evaluateCondition — node_status", () => {
   });
 
   test("matches a success outcome", () => {
-    expect(evaluateCondition({ type: "node_status", node: "a", equals: "success" }, state, "a")).toBe(true);
+    expect(
+      evaluateCondition({ type: "node_status", node: "a", equals: "success" }, state, "a"),
+    ).toBe(true);
   });
 
   test("does not match the wrong outcome", () => {
-    expect(evaluateCondition({ type: "node_status", node: "b", equals: "success" }, state, "b")).toBe(false);
+    expect(
+      evaluateCondition({ type: "node_status", node: "b", equals: "success" }, state, "b"),
+    ).toBe(false);
   });
 
   test("is false when the node has no outcome yet", () => {
-    expect(evaluateCondition({ type: "node_status", node: "c", equals: "success" }, state, "c")).toBe(false);
+    expect(
+      evaluateCondition({ type: "node_status", node: "c", equals: "success" }, state, "c"),
+    ).toBe(false);
   });
 
   test("is false for an unknown node", () => {
-    expect(evaluateCondition({ type: "node_status", node: "missing", equals: "success" }, state, "x")).toBe(false);
+    expect(
+      evaluateCondition({ type: "node_status", node: "missing", equals: "success" }, state, "x"),
+    ).toBe(false);
   });
 });
 
@@ -38,14 +46,20 @@ describe("evaluateCondition — review_status", () => {
   });
 
   test("matches the recorded decision at the source node", () => {
-    expect(evaluateCondition({ type: "review_status", equals: "approved" }, state, "review")).toBe(true);
+    expect(evaluateCondition({ type: "review_status", equals: "approved" }, state, "review")).toBe(
+      true,
+    );
   });
 
   test("does not match a different decision", () => {
-    expect(evaluateCondition({ type: "review_status", equals: "rejected" }, state, "review")).toBe(false);
+    expect(evaluateCondition({ type: "review_status", equals: "rejected" }, state, "review")).toBe(
+      false,
+    );
   });
 
   test("is false when no decision was recorded", () => {
-    expect(evaluateCondition({ type: "review_status", equals: "approved" }, state, "pending")).toBe(false);
+    expect(evaluateCondition({ type: "review_status", equals: "approved" }, state, "pending")).toBe(
+      false,
+    );
   });
 });

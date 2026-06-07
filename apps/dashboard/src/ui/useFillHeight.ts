@@ -26,8 +26,7 @@ export function useFillHeight(bottomGap = 8): React.RefObject<HTMLDivElement | n
     apply();
     window.addEventListener("resize", apply);
     // ResizeObserver is absent in jsdom; guard so unit tests don't throw.
-    const ro =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
     ro?.observe(document.documentElement);
     return () => {
       window.removeEventListener("resize", apply);

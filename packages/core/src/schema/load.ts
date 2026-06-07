@@ -119,7 +119,8 @@ function parseTrigger(value: unknown): Trigger {
   if (type === "manual") return { type: "manual" };
   if (type === "cron") {
     const trigger: Trigger = { type: "cron", schedule: str(value["schedule"], "trigger.schedule") };
-    if (value["timezone"] !== undefined) trigger.timezone = str(value["timezone"], "trigger.timezone");
+    if (value["timezone"] !== undefined)
+      trigger.timezone = str(value["timezone"], "trigger.timezone");
     return trigger;
   }
   fail("trigger.type must be 'manual' or 'cron'");
@@ -147,7 +148,8 @@ function parseDefaults(value: unknown): Defaults | undefined {
       defaults.memory.provider = provider as MemoryProviderKind;
     }
     if (mem["fail_open"] !== undefined) {
-      if (typeof mem["fail_open"] !== "boolean") fail("defaults.memory.fail_open must be a boolean");
+      if (typeof mem["fail_open"] !== "boolean")
+        fail("defaults.memory.fail_open must be a boolean");
       defaults.memory.fail_open = mem["fail_open"];
     }
   }
@@ -223,7 +225,8 @@ function parseAgentTask(value: Rec, base: { id: string }, id: string): AgentTask
     node.max_retries = value["max_retries"];
   }
   if (value["timeout_seconds"] !== undefined) {
-    if (typeof value["timeout_seconds"] !== "number") fail(`node '${id}'.timeout_seconds must be a number`);
+    if (typeof value["timeout_seconds"] !== "number")
+      fail(`node '${id}'.timeout_seconds must be a number`);
     node.timeout_seconds = value["timeout_seconds"];
   }
   return node;
@@ -237,7 +240,8 @@ function parseScript(value: Rec, base: { id: string }, id: string): ScriptNode {
   };
   if (value["workdir"] !== undefined) node.workdir = str(value["workdir"], `node '${id}'.workdir`);
   if (value["timeout_seconds"] !== undefined) {
-    if (typeof value["timeout_seconds"] !== "number") fail(`node '${id}'.timeout_seconds must be a number`);
+    if (typeof value["timeout_seconds"] !== "number")
+      fail(`node '${id}'.timeout_seconds must be a number`);
     node.timeout_seconds = value["timeout_seconds"];
   }
   if (value["env"] !== undefined) {
@@ -253,7 +257,8 @@ function parseHumanReview(value: Rec, base: { id: string }, id: string): HumanRe
     if (!Array.isArray(value["options"])) fail(`node '${id}'.options must be a list`);
     node.options = value["options"].map((opt, i) => {
       const text = str(opt, `node '${id}'.options[${i}]`);
-      if (!REVIEW_OPTIONS.has(text)) fail(`node '${id}'.options[${i}] is not a valid review option`);
+      if (!REVIEW_OPTIONS.has(text))
+        fail(`node '${id}'.options[${i}] is not a valid review option`);
       return text as ReviewOption;
     });
   }
@@ -299,7 +304,11 @@ function parseCondition(value: unknown, index: number): EdgeCondition {
     if (equals !== "success" && equals !== "failure") {
       fail(`edges[${index}].condition.equals must be 'success' or 'failure'`);
     }
-    return { type: "node_status", node: str(value["node"], `edges[${index}].condition.node`), equals };
+    return {
+      type: "node_status",
+      node: str(value["node"], `edges[${index}].condition.node`),
+      equals,
+    };
   }
   if (type === "review_status") {
     const equals = str(value["equals"], `edges[${index}].condition.equals`);

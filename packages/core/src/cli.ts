@@ -99,7 +99,10 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
     case "explain":
       return cmdExplain(requireSpec(spec));
     case "advance":
-      return cmdAdvance(requireSpec(spec), await readRunFile(required(str(flags, "run-file"), "--run-file")));
+      return cmdAdvance(
+        requireSpec(spec),
+        await readRunFile(required(str(flags, "run-file"), "--run-file")),
+      );
     case "memory-event":
       return cmdMemoryEvent(
         requireSpec(spec),
@@ -112,7 +115,11 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
       // builder in one place) or take pre-built markdown from --markdown-file.
       const runFile = str(flags, "run-file");
       if (runFile !== undefined) {
-        return cmdMemoryRetroFromRun(requireSpec(spec), await readRunFile(runFile), str(flags, "title"));
+        return cmdMemoryRetroFromRun(
+          requireSpec(spec),
+          await readRunFile(runFile),
+          str(flags, "title"),
+        );
       }
       return cmdMemoryRetro(
         requireSpec(spec),
@@ -121,11 +128,20 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
       );
     }
     case "run-create":
-      return cmdRunCreate(required(db, "--db"), requireSpec(spec), required(str(flags, "id"), "--id"), str(flags, "project"), str(flags, "origin"));
+      return cmdRunCreate(
+        required(db, "--db"),
+        requireSpec(spec),
+        required(str(flags, "id"), "--id"),
+        str(flags, "project"),
+        str(flags, "origin"),
+      );
     case "run-load":
       return cmdRunLoad(required(db, "--db"), required(str(flags, "id"), "--id"));
     case "run-save":
-      cmdRunSave(required(db, "--db"), await readRunFile(required(str(flags, "run-file"), "--run-file")));
+      cmdRunSave(
+        required(db, "--db"),
+        await readRunFile(required(str(flags, "run-file"), "--run-file")),
+      );
       return { ok: true };
     case "run-list":
       return cmdRunList(required(db, "--db"), flags["active"] === true);
@@ -136,15 +152,27 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
     case "spec-get":
       return cmdSpecGet(rootsOf(flags), required(str(flags, "id"), "--id"));
     case "spec-save":
-      return cmdSpecSave(rootsOf(flags), await readJsonFile(required(str(flags, "spec-file"), "--spec-file")), writeRootsOf(flags));
+      return cmdSpecSave(
+        rootsOf(flags),
+        await readJsonFile(required(str(flags, "spec-file"), "--spec-file")),
+        writeRootsOf(flags),
+      );
     case "spec-create":
-      return cmdSpecCreate(rootsOf(flags), await readJsonFile(required(str(flags, "spec-file"), "--spec-file")), writeRootsOf(flags));
+      return cmdSpecCreate(
+        rootsOf(flags),
+        await readJsonFile(required(str(flags, "spec-file"), "--spec-file")),
+        writeRootsOf(flags),
+      );
     case "spec-delete":
       return cmdSpecDelete(rootsOf(flags), required(str(flags, "id"), "--id"));
     case "run-cancel":
       return cmdRunCancel(required(db, "--db"), required(str(flags, "id"), "--id"));
     case "run-retry":
-      return cmdRunRetry(required(db, "--db"), required(str(flags, "id"), "--id"), str(flags, "node"));
+      return cmdRunRetry(
+        required(db, "--db"),
+        required(str(flags, "id"), "--id"),
+        str(flags, "node"),
+      );
     default:
       throw new Error(`unknown command: ${command ?? "(none)"}`);
   }

@@ -288,7 +288,10 @@ describe("workflows API client", () => {
 
   it("saves settings via PUT, forwarding the values map", async () => {
     const h = harness();
-    h.reply({ values: { internal_board: "b2" }, schema: { namespace: "plugins.workflows", groups: [] } });
+    h.reply({
+      values: { internal_board: "b2" },
+      schema: { namespace: "plugins.workflows", groups: [] },
+    });
 
     await h.client.saveSettings({ internal_board: "b2", fail_open: false });
 

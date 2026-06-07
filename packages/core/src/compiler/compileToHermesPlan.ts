@@ -101,7 +101,9 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
       ? [
           {
             schedule: workflow.trigger.schedule,
-            ...(workflow.trigger.timezone !== undefined ? { timezone: workflow.trigger.timezone } : {}),
+            ...(workflow.trigger.timezone !== undefined
+              ? { timezone: workflow.trigger.timezone }
+              : {}),
             command: `hermes-workflows run ${workflow.id}`,
           },
         ]

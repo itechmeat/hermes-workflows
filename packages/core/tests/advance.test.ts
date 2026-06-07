@@ -113,7 +113,9 @@ describe("advance — dead end", () => {
       { id: "a", type: "agent_task", prompt: "x" },
       { id: "done", type: "finish" },
     ],
-    edges: [{ from: "a", to: "done", condition: { type: "node_status", node: "a", equals: "success" } }],
+    edges: [
+      { from: "a", to: "done", condition: { type: "node_status", node: "a", equals: "success" } },
+    ],
   }).workflow;
 
   test("a failure with no matching edge fails the run", () => {
@@ -139,8 +141,16 @@ describe("advance — script nodes", () => {
     ],
     edges: [
       { from: "build", to: "gate" },
-      { from: "gate", to: "ok", condition: { type: "node_status", node: "build", equals: "success" } },
-      { from: "gate", to: "bad", condition: { type: "node_status", node: "build", equals: "failure" } },
+      {
+        from: "gate",
+        to: "ok",
+        condition: { type: "node_status", node: "build", equals: "success" },
+      },
+      {
+        from: "gate",
+        to: "bad",
+        condition: { type: "node_status", node: "build", equals: "failure" },
+      },
     ],
   }).workflow;
 

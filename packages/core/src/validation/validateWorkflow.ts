@@ -34,7 +34,8 @@ function isValidCron(expr: string): boolean {
 export function validateWorkflow(workflow: Workflow): ValidationResult {
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
-  const err = (code: string, message: string): void => void errors.push({ level: "error", code, message });
+  const err = (code: string, message: string): void =>
+    void errors.push({ level: "error", code, message });
   const warn = (code: string, message: string): void =>
     void warnings.push({ level: "warning", code, message });
 
@@ -56,7 +57,10 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
   // agent_task profile presence.
   for (const node of workflow.nodes) {
     if (node.type === "agent_task" && !node.profile && !defaultProfile) {
-      err("missing_profile", `agent_task '${node.id}' has no profile and defaults.profile is unset`);
+      err(
+        "missing_profile",
+        `agent_task '${node.id}' has no profile and defaults.profile is unset`,
+      );
     }
   }
 
@@ -75,14 +79,18 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
 
   // Edge endpoints and condition references.
   for (const [i, edge] of workflow.edges.entries()) {
-    if (!nodes.has(edge.from)) err("unknown_edge_node", `edges[${i}].from '${edge.from}' does not exist`);
+    if (!nodes.has(edge.from))
+      err("unknown_edge_node", `edges[${i}].from '${edge.from}' does not exist`);
     if (!nodes.has(edge.to)) err("unknown_edge_node", `edges[${i}].to '${edge.to}' does not exist`);
     const cond = edge.condition;
     if (cond?.type === "node_status" && !nodes.has(cond.node)) {
       err("unknown_condition_node", `edges[${i}] condition references unknown node '${cond.node}'`);
     }
     if (cond?.type === "review_status" && nodes.get(edge.from)?.type !== "human_review") {
-      err("review_condition_source", `edges[${i}] review_status condition must originate from a human_review node`);
+      err(
+        "review_condition_source",
+        `edges[${i}] review_status condition must originate from a human_review node`,
+      );
     }
   }
 
@@ -95,17 +103,23 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
 
   // Exactly one entry node; at least one finish; reachability.
   const entries = entryNodes(workflow);
-  if (entries.length === 0) err("no_entry", "workflow has no entry node (check for a cycle with no start)");
+  if (entries.length === 0)
+    err("no_entry", "workflow has no entry node (check for a cycle with no start)");
   if (entries.length > 1) {
-    err("multiple_entries", `workflow has multiple entry nodes: ${entries.map((n) => n.id).join(", ")}`);
+    err(
+      "multiple_entries",
+      `workflow has multiple entry nodes: ${entries.map((n) => n.id).join(", ")}`,
+    );
   }
-  if (!workflow.nodes.some((n) => n.type === "finish")) err("no_finish", "workflow has no finish node");
+  if (!workflow.nodes.some((n) => n.type === "finish"))
+    err("no_finish", "workflow has no finish node");
 
   const entry = entries[0];
   if (entry) {
     const reachable = reachableFrom(workflow, entry.id);
     for (const node of workflow.nodes) {
-      if (!reachable.has(node.id)) err("unreachable_node", `node '${node.id}' is unreachable from the entry node`);
+      if (!reachable.has(node.id))
+        err("unreachable_node", `node '${node.id}' is unreachable from the entry node`);
     }
   }
 

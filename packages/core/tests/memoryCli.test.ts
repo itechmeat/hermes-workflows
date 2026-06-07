@@ -58,8 +58,15 @@ describe("resolveMemoryProvider", () => {
 
   test("redacts secrets even when fail_open is false (redaction is unconditional)", async () => {
     const { run, calls } = recordingRunner();
-    const provider = resolveMemoryProvider({ provider: "open_second_brain", fail_open: false }, run);
-    await provider.writeEvent({ kind: "node_failed", title: "t", body: "token: ghp_ABCDEFGHIJKLMNOPQRSTU" });
+    const provider = resolveMemoryProvider(
+      { provider: "open_second_brain", fail_open: false },
+      run,
+    );
+    await provider.writeEvent({
+      kind: "node_failed",
+      title: "t",
+      body: "token: ghp_ABCDEFGHIJKLMNOPQRSTU",
+    });
     const text = calls[0]?.[3] ?? ""; // positional note text
     expect(text).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTU");
     expect(text).toContain("[REDACTED]");
@@ -119,8 +126,16 @@ describe("memory CLI commands", () => {
 
   test("memory-retro from a run file builds the retrospective and writes it", async () => {
     const { run, calls } = recordingRunner();
-    const { workflow } = fromObject({ ...specObject("open_second_brain"), id: "retro-run", name: "Retro Run" });
-    const path = await spec("retro-run", { ...specObject("open_second_brain"), id: "retro-run", name: "Retro Run" });
+    const { workflow } = fromObject({
+      ...specObject("open_second_brain"),
+      id: "retro-run",
+      name: "Retro Run",
+    });
+    const path = await spec("retro-run", {
+      ...specObject("open_second_brain"),
+      id: "retro-run",
+      name: "Retro Run",
+    });
     const runState = createRunState(workflow, "rr-1");
     runState.status = "completed";
     runState.nodes["done"] = { node_id: "done", status: "completed", seq: 1 };

@@ -86,7 +86,9 @@ describe("validateWorkflow — rules", () => {
   test("review_status condition from a non-human_review node", () => {
     const w = wf(
       base({
-        edges: [{ from: "a", to: "done", condition: { type: "review_status", equals: "approved" } }],
+        edges: [
+          { from: "a", to: "done", condition: { type: "review_status", equals: "approved" } },
+        ],
       }),
     );
     expect(codes(w)).toContain("review_condition_source");
@@ -115,9 +117,7 @@ describe("validateWorkflow — rules", () => {
   });
 
   test("no finish node", () => {
-    const w = wf(
-      base({ nodes: [{ id: "a", type: "agent_task", prompt: "x" }], edges: [] }),
-    );
+    const w = wf(base({ nodes: [{ id: "a", type: "agent_task", prompt: "x" }], edges: [] }));
     expect(codes(w)).toContain("no_finish");
   });
 
@@ -224,8 +224,16 @@ describe("validateWorkflow — script nodes", () => {
         ],
         edges: [
           { from: "test", to: "gate" },
-          { from: "gate", to: "ok", condition: { type: "node_status", node: "test", equals: "success" } },
-          { from: "gate", to: "done", condition: { type: "node_status", node: "test", equals: "failure" } },
+          {
+            from: "gate",
+            to: "ok",
+            condition: { type: "node_status", node: "test", equals: "success" },
+          },
+          {
+            from: "gate",
+            to: "done",
+            condition: { type: "node_status", node: "test", equals: "failure" },
+          },
         ],
       }),
     );

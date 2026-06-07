@@ -93,7 +93,9 @@ describe("cli.ts dispatcher", () => {
     expect(created.code).toBe(0);
     const { code, json } = await run(["run-latest", "--db", db]);
     expect(code).toBe(0);
-    expect((json as Record<string, { run_id: string }>)["feature-development"]?.run_id).toBe("rl-1");
+    expect((json as Record<string, { run_id: string }>)["feature-development"]?.run_id).toBe(
+      "rl-1",
+    );
     await rm(base, { recursive: true, force: true });
   });
 });
@@ -140,6 +142,8 @@ describe("cli.ts dispatcher — spec write round trip", () => {
 
     const got = await run(["spec-get", "--roots", globalRoot, "--id", "argv-made"]);
     expect((got.json as { workflow: { name: string } }).workflow.name).toBe("Argv Made");
-    expect((got.json as { ui: unknown }).ui).toEqual({ xyflow: { viewport: { x: 0, y: 0, zoom: 1 } } });
+    expect((got.json as { ui: unknown }).ui).toEqual({
+      xyflow: { viewport: { x: 0, y: 0, zoom: 1 } },
+    });
   });
 });

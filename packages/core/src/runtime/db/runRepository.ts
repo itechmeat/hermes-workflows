@@ -127,10 +127,7 @@ export class RunRepository {
           $finished: meta.finished_at ?? null,
           $error: meta.error ?? null,
           $origin: run.origin ?? null,
-          $notified:
-            run.notified && run.notified.length > 0
-              ? JSON.stringify(run.notified)
-              : null,
+          $notified: run.notified && run.notified.length > 0 ? JSON.stringify(run.notified) : null,
         });
 
       for (const node of Object.values(run.nodes)) {
@@ -188,11 +185,9 @@ export class RunRepository {
         status: n.status as NodeRunState["status"],
       };
       if (n.hermes_task_id !== null) node.hermes_task_id = n.hermes_task_id;
-      if (n.outcome !== null)
-        node.outcome = n.outcome as NodeRunState["outcome"];
+      if (n.outcome !== null) node.outcome = n.outcome as NodeRunState["outcome"];
       if (n.review_decision !== null)
-        node.review_decision =
-          n.review_decision as NodeRunState["review_decision"];
+        node.review_decision = n.review_decision as NodeRunState["review_decision"];
       if (n.seq !== null) node.seq = n.seq;
       if (n.output_json !== null) node.output = n.output_json;
       if (n.error !== null) node.error = n.error;
@@ -235,9 +230,7 @@ export class RunRepository {
   }
 
   private hydrate(ids: { id: string }[]): RunState[] {
-    return ids
-      .map((r) => this.loadRun(r.id))
-      .filter((r): r is RunState => r !== null);
+    return ids.map((r) => this.loadRun(r.id)).filter((r): r is RunState => r !== null);
   }
 
   /**
@@ -266,13 +259,8 @@ export class RunRepository {
    */
   latestRunByWorkflow(): Record<string, LatestRun> {
     const rows = this.db
-      .query(
-        `SELECT id, workflow_id, status, started_at, finished_at FROM workflow_runs`,
-      )
-      .all() as Pick<
-      RunRow,
-      "id" | "workflow_id" | "status" | "started_at" | "finished_at"
-    >[];
+      .query(`SELECT id, workflow_id, status, started_at, finished_at FROM workflow_runs`)
+      .all() as Pick<RunRow, "id" | "workflow_id" | "status" | "started_at" | "finished_at">[];
     const latest: Record<string, LatestRun> = {};
     const sortKey: Record<string, number> = {};
     for (const row of rows) {
@@ -342,9 +330,7 @@ export class RunRepository {
    */
   private currentNode(runId: string): string | undefined {
     const nodes = this.db
-      .query(
-        `SELECT node_id, status, seq FROM workflow_node_runs WHERE run_id = $id`,
-      )
+      .query(`SELECT node_id, status, seq FROM workflow_node_runs WHERE run_id = $id`)
       .all({ $id: runId }) as {
       node_id: string;
       status: string;

@@ -32,9 +32,26 @@ function run(status: RunState["status"]): RunState {
 describe("buildRetrospective", () => {
   test("a completed run renders the result and per-node outcomes", () => {
     const r = run("completed");
-    r.nodes["build"] = { node_id: "build", status: "completed", outcome: "success", seq: 1, output: "built ok" };
-    r.nodes["review"] = { node_id: "review", status: "completed", review_decision: "approved", seq: 2 };
-    r.nodes["ship"] = { node_id: "ship", status: "completed", outcome: "success", seq: 3, output: "deployed" };
+    r.nodes["build"] = {
+      node_id: "build",
+      status: "completed",
+      outcome: "success",
+      seq: 1,
+      output: "built ok",
+    };
+    r.nodes["review"] = {
+      node_id: "review",
+      status: "completed",
+      review_decision: "approved",
+      seq: 2,
+    };
+    r.nodes["ship"] = {
+      node_id: "ship",
+      status: "completed",
+      outcome: "success",
+      seq: 3,
+      output: "deployed",
+    };
     r.nodes["done"] = { node_id: "done", status: "completed", seq: 4 };
 
     const retro = buildRetrospective(workflow, r);

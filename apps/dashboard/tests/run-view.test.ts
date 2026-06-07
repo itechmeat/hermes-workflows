@@ -14,7 +14,14 @@ const workflow: Workflow = {
   ],
   edges: [{ from: "build", to: "done" }],
 };
-const ui: UiLayout = { xyflow: { nodes: [{ id: "build", x: 0, y: 0 }, { id: "done", x: 200, y: 0 }] } };
+const ui: UiLayout = {
+  xyflow: {
+    nodes: [
+      { id: "build", x: 0, y: 0 },
+      { id: "done", x: 200, y: 0 },
+    ],
+  },
+};
 const detail: SpecDetail = { workflow, ui, path: "/x/deploy.workflow.yaml" };
 
 const run: RunState = {
@@ -55,7 +62,10 @@ describe("run view helpers", () => {
   });
 
   it("leaves status undefined for nodes the run has not reached", () => {
-    const partial: RunState = { ...run, nodes: { build: { node_id: "build", status: "completed" } } };
+    const partial: RunState = {
+      ...run,
+      nodes: { build: { node_id: "build", status: "completed" } },
+    };
     const { nodes } = applyRunStatus(detail, partial);
     expect(nodes.find((n) => n.id === "done")?.data.status).toBeUndefined();
   });

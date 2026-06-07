@@ -221,7 +221,14 @@ describe("useFlowEditor", () => {
       }),
     });
     const { result } = renderHook(() => useFlowEditor(detail, client));
-    act(() => result.current.onConnect({ source: "done", target: "build", sourceHandle: null, targetHandle: null }));
+    act(() =>
+      result.current.onConnect({
+        source: "done",
+        target: "build",
+        sourceHandle: null,
+        targetHandle: null,
+      }),
+    );
 
     await act(async () => {
       await result.current.save();

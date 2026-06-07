@@ -211,7 +211,11 @@ export async function cmdSpecCreate(
 ): Promise<SpecDetail> {
   const { workflow, ui } = fromObject(spec);
   const store = new SpecStore(roots);
-  const path = await store.createWorkflow(workflow, ui, chooseWriteRoot(workflow.scope, writeRoots));
+  const path = await store.createWorkflow(
+    workflow,
+    ui,
+    chooseWriteRoot(workflow.scope, writeRoots),
+  );
   return ui === undefined ? { workflow, path } : { workflow, ui, path };
 }
 

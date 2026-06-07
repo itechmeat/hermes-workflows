@@ -76,7 +76,9 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
 
   return {
     async listWorkflows() {
-      const { workflows } = await fetchJSON<{ workflows?: WorkflowListItem[] }>(`${BASE}/workflows`);
+      const { workflows } = await fetchJSON<{ workflows?: WorkflowListItem[] }>(
+        `${BASE}/workflows`,
+      );
       return workflows ?? [];
     },
 
@@ -147,7 +149,9 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
     },
 
     async listSchedules() {
-      const { schedules } = await fetchJSON<{ schedules?: ScheduleListItem[] }>(`${BASE}/schedules`);
+      const { schedules } = await fetchJSON<{ schedules?: ScheduleListItem[] }>(
+        `${BASE}/schedules`,
+      );
       return schedules ?? [];
     },
 

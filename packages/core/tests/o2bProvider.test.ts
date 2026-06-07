@@ -46,7 +46,11 @@ describe("O2BCLIProvider", () => {
 
   test("writeEvent composes a one-line note carrying kind, title and body", async () => {
     const { run, calls } = recordingRunner();
-    await new O2BCLIProvider(run).writeEvent({ kind: "node_failed", title: "build failed", body: "boom" });
+    await new O2BCLIProvider(run).writeEvent({
+      kind: "node_failed",
+      title: "build failed",
+      body: "boom",
+    });
     const argv = calls[0] as string[];
     expect(argv.slice(0, 3)).toEqual(["o2b", "brain", "note"]);
     // No unsupported flags reach the CLI.
@@ -59,7 +63,11 @@ describe("O2BCLIProvider", () => {
 
   test("writeEvent omits the dash when the body is empty", async () => {
     const { run, calls } = recordingRunner();
-    await new O2BCLIProvider(run).writeEvent({ kind: "run_started", title: "wf run x started", body: "" });
+    await new O2BCLIProvider(run).writeEvent({
+      kind: "run_started",
+      title: "wf run x started",
+      body: "",
+    });
     expect((calls[0] as string[])[3]).toBe("[workflow:run_started] wf run x started");
   });
 });

@@ -153,7 +153,10 @@ describe("parseWorkflow", () => {
 describe("script node", () => {
   const withScript = (script: Record<string, unknown>) => ({
     ...MINIMAL,
-    nodes: [{ id: "lint", type: "script", ...script }, { id: "done", type: "finish" }],
+    nodes: [
+      { id: "lint", type: "script", ...script },
+      { id: "done", type: "finish" },
+    ],
     edges: [{ from: "lint", to: "done" }],
   });
 
@@ -192,7 +195,9 @@ describe("script node", () => {
   });
 
   test("rejects a non-list env", () => {
-    expect(() => fromObject(withScript({ command: "ls", env: "PATH" }))).toThrow(WorkflowParseError);
+    expect(() => fromObject(withScript({ command: "ls", env: "PATH" }))).toThrow(
+      WorkflowParseError,
+    );
   });
 
   test("rejects a non-string env entry", () => {

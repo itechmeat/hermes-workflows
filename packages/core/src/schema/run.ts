@@ -5,13 +5,7 @@
 
 import type { ReviewOption } from "./nodes.ts";
 
-export type RunStatus =
-  | "created"
-  | "running"
-  | "waiting"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type RunStatus = "created" | "running" | "waiting" | "completed" | "failed" | "cancelled";
 
 export type NodeStatus =
   | "pending"

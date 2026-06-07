@@ -80,7 +80,9 @@ describe("graph mapping", () => {
 
   it("reflects a moved node back into the ui layout", () => {
     const flow = workflowToFlow(workflow, ui);
-    const moved = flow.nodes.map((n) => (n.id === "ship" ? { ...n, position: { x: 999, y: 1 } } : n));
+    const moved = flow.nodes.map((n) =>
+      n.id === "ship" ? { ...n, position: { x: 999, y: 1 } } : n,
+    );
     const back = flowToWorkflow(workflow, moved, flow.edges, flow.viewport);
     expect(back.ui?.xyflow?.nodes).toContainEqual({ id: "ship", x: 999, y: 1 });
   });
