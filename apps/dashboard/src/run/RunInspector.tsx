@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { getApiClient } from "../host";
 import type { WorkflowsApi } from "../api/client";
-import type { RunState, SpecDetail } from "../api/types";
+import type { SpecDetail } from "../api/types";
 import { applyRunStatus, isTerminalRun } from "./runView";
-import { RunNodeView } from "./RunNodeView";
+import { CANVAS_NODE_TYPES } from "./canvasNodeTypes";
+import { errorMessage, RUN_POLL_MS, useRunPolling } from "./useRunPolling";
 import { TelemetryDetail } from "./TelemetryDetail";
-import { WORKFLOW_NODE_TYPE } from "../editor/graphMapping";
 import { Badge, Button } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
 
@@ -20,69 +20,77 @@ export interface RunInspectorProps {
   pollMs?: number;
 }
 
-export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps): React.ReactElement {
+export function RunInspector({
+  runId,
+  client,
+  pollMs = RUN_POLL_MS,
+}: RunInspectorProps): React.ReactElement {
   const api = client ?? getApiClient();
-  const [run, setRun] = useState<RunState | null>(null);
+  const { run, pollError, replaceRun } = useRunPolling(api, runId, pollMs);
   const [detail, setDetail] = useState<SpecDetail | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  // Cancel/retry failure; cleared by the next attempt, shown next to the title.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const nodeTypes = useMemo(() => ({ [WORKFLOW_NODE_TYPE]: RunNodeView }), []);
   const slots = useHeaderSlots();
 
-  // Initial load: the run plus its workflow graph (static for the run's life).
+  // The workflow graph is static for the run's life: load it once the run
+  // reveals its workflow id.
+  const workflowId = run?.workflow_id;
   useEffect(() => {
-    let active = true;
-    setRun(null);
     setDetail(null);
-    setError(null);
+    setDetailError(null);
+    if (workflowId === undefined) return undefined;
+    let active = true;
     api
-      .getRun(runId)
-      .then(async (loaded) => {
-        if (!active) return;
-        setRun(loaded);
-        const workflow = await api.getWorkflow(loaded.workflow_id);
+      .getWorkflow(workflowId)
+      .then((workflow) => {
         if (active) setDetail(workflow);
       })
-      .catch(() => {
-        if (active) setError("Failed to load run.");
+      .catch((error: unknown) => {
+        if (active) setDetailError(errorMessage(error));
       });
     return () => {
       active = false;
     };
-  }, [api, runId]);
-
-  // Poll only while the run is active; stop once it reaches a terminal state.
-  const status = run?.status;
-  useEffect(() => {
-    if (status === undefined || isTerminalRun(status)) return undefined;
-    const handle = setInterval(() => {
-      api
-        .getRun(runId)
-        .then(setRun)
-        .catch(() => {});
-    }, pollMs);
-    return () => clearInterval(handle);
-  }, [api, runId, status, pollMs]);
+  }, [api, workflowId]);
 
   const cancel = useCallback(() => {
+    setActionError(null);
     api
       .cancelRun(runId)
-      .then(setRun)
-      .catch(() => {});
-  }, [api, runId]);
+      .then(replaceRun)
+      .catch((error: unknown) => setActionError(`Cancel failed: ${errorMessage(error)}`));
+  }, [api, runId, replaceRun]);
 
   const retry = useCallback(
     (node?: string) => {
+      setActionError(null);
       api
         .retryRun(runId, node)
-        .then(setRun)
-        .catch(() => {});
+        .then(replaceRun)
+        .catch((error: unknown) => setActionError(`Retry failed: ${errorMessage(error)}`));
     },
-    [api, runId],
+    [api, runId, replaceRun],
   );
 
-  if (error !== null) return <p className="hw-page">{error}</p>;
+  if (run === null && pollError !== null) {
+    return (
+      <p className="hw-page" role="alert">
+        Failed to load run: {pollError}
+      </p>
+    );
+  }
+  if (detailError !== null) {
+    return (
+      <p className="hw-page" role="alert">
+        Failed to load workflow: {detailError}
+      </p>
+    );
+  }
   if (run === null || detail === null) return <p className="hw-page">Loading run…</p>;
+
+  const inspectorError = pollError ?? actionError;
 
   const { nodes, edges } = applyRunStatus(detail, run);
   const selected = selectedNodeId === null ? undefined : run.nodes[selectedNodeId];
@@ -92,6 +100,11 @@ export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps
     <>
       <span className="hw-bar-title">{run.run_id}</span>
       <Badge tone={run.status}>{run.status}</Badge>
+      {inspectorError !== null && (
+        <span role="alert" className="hw-bar-status hw-error">
+          {inspectorError}
+        </span>
+      )}
     </>
   );
   const actions = (
@@ -123,7 +136,7 @@ export function RunInspector({ runId, client, pollMs = 2000 }: RunInspectorProps
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            nodeTypes={nodeTypes}
+            nodeTypes={CANVAS_NODE_TYPES}
             nodesDraggable={false}
             nodesConnectable={false}
             onNodeClick={(_event, node) => setSelectedNodeId(node.id)}

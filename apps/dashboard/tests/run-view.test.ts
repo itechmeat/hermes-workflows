@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isTerminalRun, statusColor, applyRunStatus } from "../src/run/runView";
+import {
+  isTerminalRun,
+  statusColor,
+  applyRunStatus,
+  overlayRunStatus,
+  shouldHandOff,
+  RUN_NODE_TYPE,
+} from "../src/run/runView";
+import { workflowToFlow } from "../src/editor/graphMapping";
 import type { RunState, SpecDetail, Workflow, UiLayout } from "../src/api/types";
 
 const workflow: Workflow = {
@@ -59,6 +67,35 @@ describe("run view helpers", () => {
     expect(done?.data.status).toBe("pending");
     // the workflow node is still carried for the detail view
     expect(build?.data.node.id).toBe("build");
+  });
+
+  it("tags run-view nodes with the run node type for the shared registry", () => {
+    const { nodes } = applyRunStatus(detail, run);
+    expect(nodes.every((n) => n.type === RUN_NODE_TYPE)).toBe(true);
+  });
+
+  it("overlays run status onto already-mapped flow nodes, keeping positions", () => {
+    const flow = workflowToFlow(workflow, ui);
+    const moved = flow.nodes.map((n) =>
+      n.id === "build" ? { ...n, position: { x: 999, y: 7 } } : n,
+    );
+    const overlaid = overlayRunStatus(moved, run);
+    const build = overlaid.find((n) => n.id === "build");
+    expect(build?.type).toBe(RUN_NODE_TYPE);
+    expect(build?.position).toEqual({ x: 999, y: 7 });
+    expect(build?.data.status).toBe("running");
+    expect(overlaid.find((n) => n.id === "done")?.data.status).toBe("pending");
+  });
+
+  it("hands off to the run inspector on terminal and waiting statuses only", () => {
+    expect(shouldHandOff("completed")).toBe(true);
+    expect(shouldHandOff("failed")).toBe(true);
+    expect(shouldHandOff("cancelled")).toBe(true);
+    // human_review parks the run in `waiting`; the editor has no review
+    // controls, so playback hands over instead of stalling forever.
+    expect(shouldHandOff("waiting")).toBe(true);
+    expect(shouldHandOff("created")).toBe(false);
+    expect(shouldHandOff("running")).toBe(false);
   });
 
   it("leaves status undefined for nodes the run has not reached", () => {
