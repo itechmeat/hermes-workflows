@@ -141,11 +141,16 @@ registers the root component via
   (enabled/disabled) and run/schedule columns (Last run, Last status, Next run),
   and is the authoring surface. **New workflow** opens a modal (name, scope,
   trigger; the id is generated, not user-entered) that seeds a minimal valid graph
-  and drops straight into the editor. Per row: Open (editor), Run (starts a run,
-  opens the inspector; disabled for a disabled workflow), Enable/Disable (toggles
-  the spec's `enabled` flag and syncs any cron job), Duplicate (copy under a new
-  id), Export (download the canonical YAML), and Delete (with confirmation). A
-  disabled row is dimmed.
+  and drops straight into the editor. **Import** reads a workflow JSON file (the
+  `{ workflow, ui? }` authoring shape, as Export JSON produces) and creates that
+  workflow through the normal validation path — a clashing id (409) or invalid
+  graph (400) is reported verbatim, never silently overwritten or renamed. Per
+  row: Open (editor), Run (starts a run, opens the inspector; disabled for a
+  disabled workflow), Enable/Disable (toggles the spec's `enabled` flag and syncs
+  any cron job), Duplicate (copy under a new id), Export YAML (download the
+  canonical on-disk YAML), Export JSON (download `<id>.workflow.json` — graph
+  plus layout, importable here and readable by the spec store), and Delete (with
+  confirmation). A disabled row is dimmed.
 - **Editor** — the `@xyflow/react` canvas with a node palette, a per-type node
   inspector, and bottom panels for server-side validation and compile preview.
   The inspector edits `description` on every node type and, for `agent_task`,

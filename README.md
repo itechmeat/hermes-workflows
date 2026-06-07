@@ -16,8 +16,9 @@ OpenSecondBrain is an optional long-term memory layer.
 The engine is headless-first and runs autonomously. A workflow advances on a self-terminating
 Cron tick with no human in the loop except an explicit `human_review` node. The dashboard tab
 manages the full authoring lifecycle: create a workflow from a modal (seeded with a minimal valid
-graph and opened in the editor), enable/disable, duplicate, export YAML, or delete it, with each
-template showing its last run and next scheduled run. Author the graph in a
+graph and opened in the editor), enable/disable, duplicate, export as YAML or JSON, import a
+workflow from a JSON export (validated server-side; an id clash is an explicit error), or delete
+it, with each template showing its last run and next scheduled run. Author the graph in a
 visual `@xyflow/react` editor — edit the full node field set (including agent_task workdir,
 workspace, retries, timeout, and input mapping), duplicate or auto-layout nodes, validate, preview
 the compiled Hermes plan, save (layout included), and press Play to run the workflow in place:

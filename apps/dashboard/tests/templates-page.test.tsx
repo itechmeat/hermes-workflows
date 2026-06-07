@@ -12,6 +12,16 @@ async function clickRowAction(row: number, name: RegExp): Promise<void> {
   await userEvent.click(await screen.findByRole("menuitem", { name }));
 }
 
+/** jsdom Blobs lack `.text()`; FileReader works in both jsdom and browsers. */
+function blobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+
 function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
   const base = {
     listWorkflows: vi.fn(async () => [] as WorkflowListItem[]),
@@ -324,9 +334,147 @@ describe("TemplatesPage — row lifecycle actions", () => {
     render(<TemplatesPage client={client} onOpen={() => {}} />);
 
     await screen.findByText("Deploy");
-    await clickRowAction(0, /export/i);
+    await clickRowAction(0, /export yaml/i);
 
     await waitFor(() => expect(exportWorkflow).toHaveBeenCalledWith("deploy"));
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it("exports a workflow as a JSON download of the authoring shape", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    let downloaded: Blob | undefined;
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      downloaded = blob;
+      return "blob:x";
+    });
+    const getWorkflow = vi.fn(
+      async (id: string): Promise<SpecDetail> => ({
+        workflow: { id, name: "Deploy" } as never,
+        ui: { xyflow: { viewport: { x: 0, y: 0, zoom: 1 } } },
+        path: `/x/${id}.workflow.yaml`,
+      }),
+    );
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), getWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await clickRowAction(0, /export json/i);
+
+    await waitFor(() => expect(getWorkflow).toHaveBeenCalledWith("deploy"));
+    expect(downloaded).toBeDefined();
+    expect(downloaded?.type).toBe("application/json");
+    const parsed = JSON.parse(await blobText(downloaded!));
+    expect(parsed).toEqual({
+      workflow: { id: "deploy", name: "Deploy" },
+      ui: { xyflow: { viewport: { x: 0, y: 0, zoom: 1 } } },
+    });
+  });
+
+  it("surfaces a JSON export failure in the status line", async () => {
+    const getWorkflow = vi.fn(async () => {
+      throw new Error("spec store offline");
+    });
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), getWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await clickRowAction(0, /export json/i);
+
+    expect(await screen.findByText(/spec store offline/i)).toBeInTheDocument();
+  });
+});
+
+describe("TemplatesPage — JSON import", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const importedBody = {
+    workflow: { id: "imported", name: "Imported" },
+    ui: { xyflow: { viewport: { x: 0, y: 0, zoom: 1 } } },
+  };
+
+  function importFile(content: string, name = "imported.workflow.json"): File {
+    return new File([content], name, { type: "application/json" });
+  }
+
+  /** The Import button drives a hidden file input (label wiring). */
+  async function pickImportFile(file: File): Promise<void> {
+    const input = screen.getByLabelText(/import workflow json/i);
+    await userEvent.upload(input, file);
+  }
+
+  it("imports a workflow JSON file, reports the id, and refreshes", async () => {
+    const createWorkflow = vi.fn(
+      async (_body: CreateWorkflowBody): Promise<SpecDetail> => ({
+        workflow: { id: "imported" } as never,
+        path: "",
+      }),
+    );
+    const listWorkflows = vi.fn(async () => items);
+    const client = stubClient({ listWorkflows, createWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await pickImportFile(importFile(JSON.stringify(importedBody)));
+
+    await waitFor(() => expect(createWorkflow).toHaveBeenCalledTimes(1));
+    expect(createWorkflow.mock.calls[0]![0]).toEqual(importedBody);
+    expect(await screen.findByText(/imported "imported"/i)).toBeInTheDocument();
+    await waitFor(() => expect(listWorkflows).toHaveBeenCalledTimes(2));
+  });
+
+  it("surfaces the server detail when the imported id clashes (409)", async () => {
+    const createWorkflow = vi.fn(async () => {
+      throw new Error("workflow 'imported' already exists");
+    });
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), createWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await pickImportFile(importFile(JSON.stringify(importedBody)));
+
+    expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
+  });
+
+  it("rejects a non-workflow JSON file without calling the API", async () => {
+    const createWorkflow = vi.fn();
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), createWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await pickImportFile(importFile(JSON.stringify({ runs: [] }), "runs.json"));
+
+    expect(await screen.findByText(/not a workflow JSON export/i)).toBeInTheDocument();
+    expect(createWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed JSON with the parse reason", async () => {
+    const createWorkflow = vi.fn();
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), createWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await pickImportFile(importFile("{broken", "broken.json"));
+
+    expect(await screen.findByText(/not valid JSON/i)).toBeInTheDocument();
+    expect(createWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("allows picking the same file again after a failure", async () => {
+    const createWorkflow = vi.fn(async () => {
+      throw new Error("workflow 'imported' already exists");
+    });
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), createWorkflow });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    const file = importFile(JSON.stringify(importedBody));
+    await pickImportFile(file);
+    await screen.findByText(/already exists/i);
+    await pickImportFile(file);
+
+    await waitFor(() => expect(createWorkflow).toHaveBeenCalledTimes(2));
   });
 });

@@ -86,8 +86,10 @@ second serializer, YAML export contract untouched.
 
 ## Risks and open questions
 
-- **jsdom `File.text()`** — used by the import handler; available in the
-  project's jsdom version (verified in tests via `userEvent.upload`).
+- **jsdom file reading** — jsdom does not implement `Blob.text()`, so both the
+  import handler and the tests read files via `FileReader`
+  (`readTextFile` in `templates/download.ts`), which works in jsdom and
+  browsers alike. (Risk hit during TDD and resolved this way.)
 - **`JSON.stringify` determinism** — key order follows the parsed object from
   the core (insertion order), which is stable for a given spec; good enough
   for the round-trip guarantee stated above.

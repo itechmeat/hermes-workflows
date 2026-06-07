@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiClient } from "../host";
-import { downloadTextFile } from "../templates/download";
+import { downloadTextFile, readTextFile } from "../templates/download";
 import { NewWorkflowModal } from "../templates/NewWorkflowModal";
 import { isValidSlug } from "../templates/slug";
+import { parseWorkflowJsonFile, workflowJsonFile } from "../templates/transfer";
 import { formatEpochSeconds, formatIso, orDash } from "../ui/format";
 import { Badge, Button, Menu, PageHeader } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
@@ -40,6 +41,9 @@ export function TemplatesPage({
   const [runMessage, setRunMessage] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [showNew, setShowNew] = useState(false);
+  // The visible Import button proxies a hidden file input (no native file
+  // button styling); the input keeps an accessible label for tests/AT.
+  const importInput = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -144,6 +148,40 @@ export function TemplatesPage({
     [api],
   );
 
+  const handleExportJson = useCallback(
+    (id: string) => {
+      api
+        .getWorkflow(id)
+        .then((detail) => {
+          const { filename, content } = workflowJsonFile(detail);
+          downloadTextFile(filename, content, "application/json");
+        })
+        .catch((err: unknown) =>
+          setRunMessage(err instanceof Error ? err.message : `Failed to export ${id}`),
+        );
+    },
+    [api],
+  );
+
+  const handleImportFile = useCallback(
+    (file: File) => {
+      setRunMessage(`Importing ${file.name}…`);
+      readTextFile(file)
+        // parseWorkflowJsonFile throws the human-readable reason (bad JSON /
+        // not a workflow export); everything semantic is core validation via
+        // createWorkflow, whose 409/400 detail lands in the same status line.
+        .then((text) => api.createWorkflow(parseWorkflowJsonFile(text)))
+        .then((created) => {
+          setRunMessage(`Imported "${created.workflow.id}"`);
+          reload();
+        })
+        .catch((err: unknown) =>
+          setRunMessage(err instanceof Error ? err.message : `Failed to import ${file.name}`),
+        );
+    },
+    [api, reload],
+  );
+
   const handleToggleEnabled = useCallback(
     (item: WorkflowListItem) => {
       const next = !item.enabled;
@@ -173,9 +211,26 @@ export function TemplatesPage({
       <PageHeader
         title="Workflows"
         actions={
-          <Button variant="primary" onClick={() => setShowNew(true)}>
-            New workflow
-          </Button>
+          <>
+            <Button onClick={() => importInput.current?.click()}>Import</Button>
+            <input
+              ref={importInput}
+              type="file"
+              accept=".json,application/json"
+              aria-label="Import workflow JSON"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // Reset so picking the same file again (e.g. after resolving
+                // an id clash) fires a fresh change event.
+                event.target.value = "";
+                if (file !== undefined) handleImportFile(file);
+              }}
+            />
+            <Button variant="primary" onClick={() => setShowNew(true)}>
+              New workflow
+            </Button>
+          </>
         }
       />
       {runMessage !== null && (
@@ -252,7 +307,12 @@ export function TemplatesPage({
                         onSelect: () => handleToggleEnabled(item),
                       },
                       { key: "duplicate", label: "Duplicate", onSelect: () => handleDuplicate(item.id) },
-                      { key: "export", label: "Export", onSelect: () => handleExport(item.id) },
+                      { key: "export", label: "Export YAML", onSelect: () => handleExport(item.id) },
+                      {
+                        key: "export-json",
+                        label: "Export JSON",
+                        onSelect: () => handleExportJson(item.id),
+                      },
                       { key: "delete", label: "Delete", onSelect: () => handleDelete(item.id) },
                     ]}
                   />
