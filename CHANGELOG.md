@@ -25,6 +25,20 @@ playback: run the workflow you are editing and watch it play on the canvas.
   poll instead of killing playback. Both run surfaces now share one polling
   hook and one canvas node-type registry, and the run inspector reports poll
   and cancel/retry failures inline instead of swallowing them.
+- Non-blocking run start: `POST /workflows/{id}/run` records the run, arms the
+  advance tick, and drives the run from a background loop (advance every 2 s
+  until it settles or parks for review), returning the created state
+  immediately. Previously the route executed the first advance synchronously —
+  for a global-scope `agent_task` that held the request open for the whole
+  first node. The CLI `run` command and the dashboard route now both ensure
+  the singleton tick cron while the run is active, so a multi-node run keeps
+  advancing even with no schedule and no dashboard process alive.
+- Truthful `running` status for global nodes: the Direct executor starts the
+  profile runner in a background thread, marks the handle started, and the
+  engine flips the node from `scheduled` to `running` while the agent works
+  (the started marker also prevents a concurrent tick from double-starting
+  the node). Running renders fixed blue and completed fixed green on the
+  canvas — the theme's ring token rendered near-white, reading as no status.
 - Per-node agent telemetry: observer hooks registered inside kanban worker
   processes aggregate API attempts, token usage, tool calls, subagents, and
   structured errors into a per-card sidecar; the engine folds it into
