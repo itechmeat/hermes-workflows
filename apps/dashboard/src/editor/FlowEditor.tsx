@@ -220,7 +220,13 @@ export function FlowEditor({
   const actions = (
     <>
       {onOpenRun !== undefined && (
-        <Button variant="primary" disabled={playing} onClick={handlePlay}>
+        <Button
+          variant="primary"
+          // Also disabled while the pre-play save is in flight, so a rapid
+          // double-click cannot queue a second save.
+          disabled={playing || ctrl.status.kind === "saving"}
+          onClick={handlePlay}
+        >
           <PlayIcon />
           {PLAY_LABEL[playback.phase]}
         </Button>

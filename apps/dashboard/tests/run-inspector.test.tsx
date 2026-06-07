@@ -188,4 +188,31 @@ describe("RunInspector", () => {
     await waitFor(() => expect(getRun.mock.calls.length).toBeGreaterThan(1), { timeout: 1000 });
     unmount();
   });
+
+  it("surfaces a poll failure inline once the run is loaded, and recovers", async () => {
+    let polls = 0;
+    const getRun = vi.fn(async () => {
+      polls += 1;
+      if (polls === 2) throw new Error("network down");
+      return runState("running");
+    });
+    render(<RunInspector runId="deploy-1" client={stubClient({ getRun })} pollMs={20} />);
+    // The run stays on screen while the failed poll reports next to the title…
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/network down/i);
+    expect(screen.getByText("deploy-1")).toBeInTheDocument();
+    // …and the next successful poll clears it.
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument(), {
+      timeout: 1000,
+    });
+  });
+
+  it("shows an explicit page error when the run never loads", async () => {
+    const getRun = vi.fn(async () => {
+      throw new Error("boom");
+    });
+    render(<RunInspector runId="deploy-1" client={stubClient({ getRun })} pollMs={10_000} />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/failed to load run: boom/i);
+  });
 });
