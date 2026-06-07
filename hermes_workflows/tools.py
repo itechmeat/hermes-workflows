@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sys
 import threading
-import traceback
+import time
 from typing import Any, Callable, Optional, Sequence
 
 from . import cli_bridge
@@ -44,6 +44,16 @@ def explain_workflow(workflow_id: str, *, roots: Sequence[str], core_cli: Sequen
     return cli_bridge.invoke([*core_cli, "explain", path])
 
 
+# The drive loop keeps advancing only these statuses. `waiting` is excluded on
+# purpose: a parked review needs a human, and decide_review runs its own advance.
+_DRIVEABLE_STATUSES = frozenset({"created", "running"})
+
+# Pause between background advances: snappy enough that a settled node is
+# ingested and the next node starts within seconds, gentle enough that a
+# long kanban-backed run does not hammer the core CLI.
+DRIVE_INTERVAL_SECONDS = 2.0
+
+
 def start_workflow(
     workflow_id: str,
     *,
@@ -55,37 +65,45 @@ def start_workflow(
     project_id: Optional[str] = None,
     origin: Optional[str] = None,
     ensure_tick: Optional[Callable[[], Any]] = None,
+    drive_interval_seconds: float = DRIVE_INTERVAL_SECONDS,
 ) -> dict:
     """Non-blocking start, for the dashboard run route: record the run, arm the
-    advance tick (so the run survives this process dying), then kick the first
-    advance in a background thread and return immediately.
+    advance tick (so the run survives this process dying), then drive the run
+    in a background thread and return immediately.
 
-    Blocking here is not hypothetical: a global-scope ``agent_task`` node runs
-    synchronously inside ``advance`` via the Direct executor — through
-    :func:`run_workflow` an HTTP caller would wait for the whole first node
-    (minutes), which is exactly the hang this entrypoint exists to avoid.
+    Blocking here is not hypothetical: through :func:`run_workflow` an HTTP
+    caller waits for the first advance — minutes when the entry node is a
+    global-scope ``agent_task``. The background drive loop advances the run
+    every ``drive_interval_seconds`` until it settles or parks for review, so
+    node transitions land in the run state seconds after they happen instead
+    of waiting for the cron tick. One advance failure ends the drive (logged,
+    not swallowed); the armed tick remains the durable backstop either way.
 
     ``engine_factory`` builds a fresh engine inside the background thread: the
     caller's engine holds SQLite connections bound to the calling thread
-    (``check_same_thread``), so it must not cross into the advance thread."""
+    (``check_same_thread``), so it must not cross into the drive thread."""
     path = _resolve_spec_path(workflow_id, roots, core_cli)
     created = engine.create(path, run_id, project_id, origin=origin)
     if ensure_tick is not None:
         ensure_tick()
 
-    def _advance() -> None:
+    def _drive() -> None:
         try:
-            engine_factory().advance(path, run_id)
-        except Exception:
-            # Surfaced in the service log; the armed tick retries the advance,
-            # so the run is delayed, not stranded.
+            background_engine = engine_factory()
+            while True:
+                run = background_engine.advance(path, run_id)
+                if run.get("status") not in _DRIVEABLE_STATUSES:
+                    return
+                time.sleep(drive_interval_seconds)
+        except Exception as exc:
+            # Surfaced in the service log; the armed tick keeps advancing the
+            # run, so it is delayed, not stranded.
             print(
-                f"hermes-workflows: background advance failed for run {run_id}:",
+                f"hermes-workflows: background drive failed for run {run_id}: {exc}",
                 file=sys.stderr,
             )
-            traceback.print_exc()
 
-    threading.Thread(target=_advance, name=f"hw-advance-{run_id}", daemon=True).start()
+    threading.Thread(target=_drive, name=f"hw-drive-{run_id}", daemon=True).start()
     return {"run_id": run_id, "status": created["status"]}
 
 

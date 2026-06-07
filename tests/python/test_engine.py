@@ -125,17 +125,52 @@ def test_global_workflow_runs_via_direct_executor(tmp_path: Path) -> None:
     # No Kanban card: the handle is a direct run:node:iteration token, not a t_ id.
     assert _node(run, "fetch")["hermes_task_id"] == "g-1:fetch:0"
 
-    # The profile runner settles each node synchronously, so a bare advance per
-    # step ingests it and schedules the next: fetch -> summarize -> draft.
-    for _ in range(3):
-        run = eng.advance(str(GLOBAL_SPEC), "g-1")
-    assert run["status"] == "waiting"
+    # The runner threads settle each node asynchronously; keep advancing until
+    # the chain (fetch -> summarize -> draft) parks at the review gate.
+    run = _advance_until(eng, str(GLOBAL_SPEC), "g-1", lambda r: r["status"] == "waiting")
     assert _node(run, "review")["status"] == "waiting_for_review"
 
-    run = eng.decide_review(str(GLOBAL_SPEC), "g-1", "review", "approved")
-    run = eng.advance(str(GLOBAL_SPEC), "g-1")
-    assert run["status"] == "completed"
+    eng.decide_review(str(GLOBAL_SPEC), "g-1", "review", "approved")
+    run = _advance_until(eng, str(GLOBAL_SPEC), "g-1", lambda r: r["status"] == "completed")
     assert _node(run, "publish")["outcome"] == "success"
+
+
+def _advance_until(eng: Engine, spec: str, run_id: str, predicate, deadline_s: float = 30.0):
+    import time
+
+    deadline = time.monotonic() + deadline_s
+    while time.monotonic() < deadline:
+        run = eng.advance(spec, run_id)
+        if predicate(run):
+            return run
+        time.sleep(0.05)
+    raise AssertionError(f"run {run_id} never reached the expected state: {run['status']}")
+
+
+def test_direct_node_reports_running_while_the_runner_works(tmp_path: Path) -> None:
+    """A long agent node must show `running`, not a stale `scheduled`, while
+    its runner works — the editor playback and the run inspector both render
+    this status live."""
+    runner_dir = tmp_path / "runners"
+    runner_dir.mkdir(parents=True)
+    slow = runner_dir / "researcher"
+    slow.write_text('#!/usr/bin/env bash\nsleep 3\necho "ok"\n')
+    slow.chmod(0o755)
+    eng = Engine(
+        core_cli=["bun", "run", str(CLI)],
+        db_path=str(tmp_path / "runs.db"),
+        direct=DirectExecutor(
+            runner_dir=runner_dir, store_dir=tmp_path / "store", timeout_seconds=30
+        ),
+    )
+
+    run = eng.run(str(GLOBAL_SPEC), "g-r1")
+    assert _node(run, "fetch")["status"] == "scheduled"
+
+    # The next advance observes the started marker and flips the node.
+    run = eng.advance(str(GLOBAL_SPEC), "g-r1")
+    assert _node(run, "fetch")["status"] == "running"
+    assert run["status"] == "running"
 
 
 _MIXED_SPEC = {

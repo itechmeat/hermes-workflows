@@ -274,6 +274,11 @@ class Engine:
                         node["output"] = completion.output
                     self._merge_telemetry(node)
                     settled_cards.append(node["hermes_task_id"])
+                elif completion.started and node["status"] == "scheduled":
+                    # The executor reports the work has visibly begun (e.g. the
+                    # Direct runner thread is live) — show a truthful "running"
+                    # instead of a stale "scheduled" while the node executes.
+                    node["status"] = "running"
 
         decision = self._advance_decision(spec_path, run)
         for node_id, status in decision["node_updates"].items():

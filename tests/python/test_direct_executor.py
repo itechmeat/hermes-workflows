@@ -32,6 +32,18 @@ def _executor(dirs, timeout: float = 10.0) -> DirectExecutor:
     return DirectExecutor(runner_dir=runner_dir, store_dir=store_dir, timeout_seconds=timeout)
 
 
+def _wait_settled(ex: DirectExecutor, handle: str, deadline_s: float = 10.0) -> Completion:
+    import time
+
+    deadline = time.monotonic() + deadline_s
+    while time.monotonic() < deadline:
+        completion = ex.poll(handle)
+        if completion.settled:
+            return completion
+        time.sleep(0.02)
+    raise AssertionError(f"handle {handle} never settled")
+
+
 def test_success_runner_settles_with_stdout(dirs) -> None:
     runner_dir, _ = dirs
     _runner(runner_dir, "researcher", 'echo "done: $1"')
@@ -42,7 +54,7 @@ def test_success_runner_settles_with_stdout(dirs) -> None:
         workflow_id="wf",
         params={"assignee": "researcher", "prompt": "go"},
     )
-    completion = ex.poll(handle)
+    completion = _wait_settled(ex, handle)
     assert isinstance(completion, Completion)
     assert completion.settled is True
     assert completion.outcome == "success"
@@ -56,8 +68,7 @@ def test_nonzero_runner_settles_failure(dirs) -> None:
     handle = ex.schedule(
         run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"}
     )
-    completion = ex.poll(handle)
-    assert completion.settled is True
+    completion = _wait_settled(ex, handle)
     assert completion.outcome == "failure"
     assert "boom" in (completion.output or "")
 
@@ -77,8 +88,7 @@ def test_runner_timeout_settles_failure(dirs) -> None:
     handle = ex.schedule(
         run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "slow"}
     )
-    completion = ex.poll(handle)
-    assert completion.settled is True
+    completion = _wait_settled(ex, handle)
     assert completion.outcome == "failure"
 
 
@@ -117,6 +127,7 @@ def test_settled_handle_is_not_re_executed(dirs) -> None:
     ex = _executor(dirs)
     params = {"assignee": "researcher"}
     first = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
+    _wait_settled(ex, first)
     again = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
     assert first == again
     assert counter.read_text().count("x") == 1
@@ -125,9 +136,11 @@ def test_settled_handle_is_not_re_executed(dirs) -> None:
 def test_persisted_completion_survives_a_fresh_executor(dirs) -> None:
     runner_dir, _ = dirs
     _runner(runner_dir, "researcher", 'echo "persisted"')
-    handle = _executor(dirs).schedule(
+    first = _executor(dirs)
+    handle = first.schedule(
         run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"}
     )
+    _wait_settled(first, handle)
     # A later tick is a fresh process / executor reading the same store dir.
     reopened = _executor(dirs).poll(handle)
     assert reopened.settled is True
@@ -143,3 +156,36 @@ def test_store_dir_is_created_on_demand(dirs) -> None:
         run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"}
     )
     assert os.path.isdir(store_dir)
+
+
+def test_schedule_returns_before_the_runner_finishes(dirs) -> None:
+    """schedule() is non-blocking: the engine persists the scheduled state
+    right after, so a long node is visible in the run state while it works
+    (and a concurrent tick cannot double-start it)."""
+    import time
+
+    runner_dir, _ = dirs
+    _runner(runner_dir, "slow", 'sleep 3; echo "done"')
+    ex = _executor(dirs)
+    t0 = time.monotonic()
+    handle = ex.schedule(
+        run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "slow"}
+    )
+    assert time.monotonic() - t0 < 1.0
+    assert ex.poll(handle).settled is False
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "success"
+    assert completion.output == "done"
+
+
+def test_inflight_handle_is_not_double_spawned(dirs) -> None:
+    runner_dir, store_dir = dirs
+    counter = store_dir.parent / "count"
+    _runner(runner_dir, "slow", f'echo "x" >> {counter}; sleep 1')
+    ex = _executor(dirs)
+    params = {"assignee": "slow"}
+    first = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
+    again = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
+    assert first == again
+    _wait_settled(ex, first)
+    assert counter.read_text().count("x") == 1

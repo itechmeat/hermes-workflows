@@ -13,6 +13,10 @@ class Completion:
     settled: bool
     outcome: Optional[str] = None  # "success" | "failure" | None (still running)
     output: Optional[str] = None
+    # The work has visibly begun (worker spawned / runner invoked). Lets the
+    # engine show a truthful "running" instead of a stale "scheduled" while a
+    # long node executes. False on backends that cannot tell.
+    started: bool = False
 
 
 @runtime_checkable

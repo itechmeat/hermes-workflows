@@ -28,6 +28,7 @@ class CompletionStore:
             settled=bool(data.get("settled")),
             outcome=data.get("outcome"),
             output=data.get("output"),
+            started=bool(data.get("started")),
         )
 
     def write(self, handle: str, completion: Completion) -> None:
@@ -40,6 +41,7 @@ class CompletionStore:
                     "settled": completion.settled,
                     "outcome": completion.outcome,
                     "output": completion.output,
+                    "started": completion.started,
                 }
             )
         )

@@ -12,6 +12,7 @@ Kanban backend is durable through the board DB.
 from __future__ import annotations
 
 import subprocess
+import threading
 from pathlib import Path
 
 from .base import Completion
@@ -47,21 +48,51 @@ class DirectExecutor:
         params: dict,
         iteration: int = 0,
     ) -> str:
+        """Start the node's runner and return immediately. Non-blocking by
+        contract: the engine persists the scheduled state right after this
+        call, so a long agent node stays visible in the run state while it
+        works and a concurrent tick (which sees the started marker below)
+        cannot double-start it. Runner resolution still fails fast on the
+        caller's thread — a missing profile is the operator's error to see."""
         handle = _handle(run_id, node_id, iteration)
-        if self.poll(handle).settled:
+        current = self.poll(handle)
+        if current.settled or current.started:
             return handle
         profile = params.get("assignee") or params.get("profile") or ""
         runner = self.runner_dir / profile
         if not profile or not runner.is_file():
             raise RunnerNotFound(f"no profile runner at {runner}")
-        completion = self._invoke(runner, params.get("prompt", ""))
-        self.store.write(handle, completion)
+        # The started marker lands before the thread spawns, so any other
+        # process polling this handle sees in-flight work. (Two processes
+        # racing through this method in the same few ms could still double-
+        # spawn; the completion store is idempotent — last write wins.)
+        self.store.write(handle, Completion(settled=False, started=True))
+        threading.Thread(
+            target=self._run_to_completion,
+            args=(handle, runner, params.get("prompt", "")),
+            name=f"hw-direct-{handle}",
+            daemon=True,
+        ).start()
         return handle
 
     def poll(self, handle: str) -> Completion:
         return self.store.read(handle)
 
     # --- internals --------------------------------------------------------
+
+    def _run_to_completion(self, handle: str, runner: Path, prompt: str) -> None:
+        """Runner thread body: always settles the handle, even on a crash in
+        the invocation plumbing — an unsettled handle would strand the node."""
+        try:
+            completion = self._invoke(runner, prompt)
+        except Exception as exc:  # noqa: BLE001 - must settle, never strand
+            completion = Completion(
+                settled=True,
+                outcome="failure",
+                output=f"runner invocation crashed: {exc}",
+            )
+        completion.started = True
+        self.store.write(handle, completion)
 
     def _invoke(self, runner: Path, prompt: str) -> Completion:
         try:
