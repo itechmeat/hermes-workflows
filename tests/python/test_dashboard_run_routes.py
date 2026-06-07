@@ -57,9 +57,20 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def _start_run(client: TestClient) -> str:
+    """Start a run and wait for its background first advance, restoring the
+    post-start invariant the assertions below rely on (entry node scheduled)."""
+    import time
+
     resp = client.post("/workflows/feature-development/run")
     assert resp.status_code == 200, resp.text
-    return resp.json()["run_id"]
+    run_id = resp.json()["run_id"]
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        run = client.get(f"/runs/{run_id}").json()
+        if run["status"] != "created":
+            return run_id
+        time.sleep(0.05)
+    raise AssertionError(f"first advance never happened for {run_id}: {run['status']}")
 
 
 def test_run_then_inspect(client: TestClient) -> None:
@@ -252,3 +263,37 @@ def test_export_without_trace_keeps_todays_envelope(client: TestClient) -> None:
     run_id = _start_run(client)
     body = client.get(f"/runs/{run_id}/export").json()
     assert set(body) == {"run_id", "filename", "json"}
+
+
+def test_run_start_is_non_blocking_and_arms_the_tick(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The start response carries the freshly-created state immediately (the
+    first advance happens in the background) and the advance tick cron is armed
+    so the run keeps progressing even if this process dies."""
+    import time
+
+    cj = pytest.importorskip("cron.jobs")
+    cron_dir = tmp_path / "cron"
+    cron_dir.mkdir()
+    monkeypatch.setattr(cj, "CRON_DIR", cron_dir)
+    monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
+    monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
+
+    resp = client.post("/workflows/feature-development/run")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "created"
+
+    from hermes_workflows.bridge import cron as cron_bridge
+
+    assert cron_bridge.find_by_name(cron_bridge.TICK_NAME) is not None
+
+    # The background advance schedules the entry node shortly after.
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        run = client.get(f"/runs/{body['run_id']}").json()
+        if run["nodes"]["plan"]["status"] == "scheduled":
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"entry node never scheduled: {run['nodes']['plan']}")

@@ -182,3 +182,19 @@ def test_mixed_run_routes_agent_to_kanban_and_script_to_script_executor(tmp_path
     assert "linted" in (_node(run, "lint").get("output") or "")
     assert run["status"] == "completed"
     board.close()
+
+
+def test_create_records_the_run_without_advancing(engine: Engine) -> None:
+    created = engine.create(str(SPEC), "run-c1")
+    assert created["status"] == "created"
+    # Nothing scheduled: create is the non-blocking half of run().
+    persisted = engine.status("run-c1")
+    assert persisted["status"] == "created"
+    assert all(node["status"] == "pending" for node in persisted["nodes"].values())
+
+
+def test_run_after_create_advances_the_same_run(engine: Engine) -> None:
+    engine.create(str(SPEC), "run-c2")
+    advanced = engine.advance(str(SPEC), "run-c2")
+    assert advanced["status"] == "running"
+    assert _node(advanced, "plan")["status"] == "scheduled"

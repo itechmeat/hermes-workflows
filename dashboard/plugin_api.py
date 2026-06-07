@@ -353,10 +353,16 @@ async def compile_preview(workflow_id: str) -> dict:
 
 @router.post("/workflows/{workflow_id}/run")
 async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> dict:
-    """Start a run from the dashboard — the same path the CLI ``run`` uses."""
+    """Start a run from the dashboard. Non-blocking by design: a global-scope
+    ``agent_task`` executes synchronously inside the first advance (Direct
+    executor), so the blocking CLI path would hold this request open for the
+    whole node. The route records the run, arms the advance tick, kicks the
+    first advance in the background, and returns the created state — the UI
+    polls ``GET /runs/{id}`` for progress."""
     import uuid
 
     from hermes_workflows import config, tools
+    from hermes_workflows.bridge import cron
     from hermes_workflows.cli import (
         ScriptsDisabledError,
         build_engine,
@@ -378,13 +384,17 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     project_id = _default_project(engine, spec, payload.get("project_id"))
     run_id = f"{workflow_id}-{uuid.uuid4().hex[:8]}"
-    return tools.run_workflow(
+    return tools.start_workflow(
         workflow_id,
         engine=engine,
+        # Fresh engine per advance thread: this engine's SQLite connections are
+        # bound to the request thread and must not cross thread boundaries.
+        engine_factory=build_engine,
         roots=config.spec_roots(),
         core_cli=config.core_cli(),
         run_id=run_id,
         project_id=project_id,
+        ensure_tick=cron.ensure_workflow_tick,
     )
 
 

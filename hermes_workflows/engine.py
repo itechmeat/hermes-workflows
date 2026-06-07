@@ -22,7 +22,10 @@ from typing import Any, Callable, Optional, Sequence
 from . import cli_bridge, notifications, telemetry
 from .executor import CompositeExecutor, NodeExecutor
 
-_ACTIVE_STATUSES = frozenset({"created", "running", "waiting"})
+# Statuses that still need future advances — the tick's liveness condition,
+# shared with the CLI/dashboard start paths that arm the tick.
+ACTIVE_RUN_STATUSES = frozenset({"created", "running", "waiting"})
+_ACTIVE_STATUSES = ACTIVE_RUN_STATUSES
 REVIEW_OPTIONS = frozenset({"approved", "rejected", "needs_changes"})
 
 # Terminal run statuses that warrant a single run-lifecycle notice.
@@ -102,13 +105,16 @@ class Engine:
 
     # --- public API -------------------------------------------------------
 
-    def run(
+    def create(
         self,
         spec_path: str,
         run_id: str,
         project_id: Optional[str] = None,
         origin: Optional[str] = None,
     ) -> dict:
+        """Record a new run without advancing it — the non-blocking half of
+        :meth:`run`, for callers (the dashboard start route) that must return
+        before the first node executes."""
         args = ["run-create", spec_path, "--db", self.db_path, "--id", run_id]
         if project_id:
             args += ["--project", project_id]
@@ -121,6 +127,16 @@ class Engine:
             workflow_id=(created or {}).get("workflow_id"),
             project_id=project_id,
         )
+        return created
+
+    def run(
+        self,
+        spec_path: str,
+        run_id: str,
+        project_id: Optional[str] = None,
+        origin: Optional[str] = None,
+    ) -> dict:
+        self.create(spec_path, run_id, project_id, origin)
         return self.advance(spec_path, run_id)
 
     def status(self, run_id: str) -> dict:

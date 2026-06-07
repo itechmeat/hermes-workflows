@@ -19,7 +19,7 @@ import uuid
 from typing import Any, Optional, Sequence
 
 from . import config
-from .engine import Engine
+from .engine import ACTIVE_RUN_STATUSES, Engine
 
 
 def build_engine() -> Engine:
@@ -147,7 +147,16 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
             raise SystemExit(str(exc)) from exc
         project_id = _default_project(engine, spec, args.project)
         run_id = f"{args.workflow_id}-{uuid.uuid4().hex[:8]}"
-        return engine.run(spec, run_id, project_id=project_id, origin=args.origin)
+        run = engine.run(spec, run_id, project_id=project_id, origin=args.origin)
+        # A run that survived its first advance still needs future advances;
+        # arm the singleton tick or a multi-node run stalls right here (the
+        # tick keeps itself alive afterwards and tears down once idle). Never
+        # tear down from this side: other active runs may still need it.
+        if run.get("status") in ACTIVE_RUN_STATUSES:
+            from .bridge import cron
+
+            cron.ensure_workflow_tick()
+        return run
     if args.command == "advance-all":
         return _advance_all(engine)
     if args.command == "status":

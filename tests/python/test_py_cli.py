@@ -67,3 +67,13 @@ def test_wrapper_script_is_executable() -> None:
     assert wrapper.is_file()
     assert os.access(wrapper, os.X_OK)
     assert "hermes_workflows.cli" in wrapper.read_text()
+
+
+def test_run_arms_the_tick_for_an_active_run(home: Path, capsys) -> None:
+    """A CLI-started run must leave the advance tick armed — without it a
+    multi-node run stalls after the first step (nothing else calls advance)."""
+    from hermes_workflows.bridge import cron as cron_bridge
+
+    run = _invoke(capsys, "run", "feature-development")
+    assert run["status"] == "running"
+    assert cron_bridge.find_by_name(cron_bridge.TICK_NAME) is not None
