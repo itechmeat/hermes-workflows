@@ -146,7 +146,11 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
     case "run-list":
       return cmdRunList(required(db, "--db"), flags["active"] === true);
     case "run-list-summary":
-      return cmdRunListSummary(required(db, "--db"), flags["active"] === true);
+      return cmdRunListSummary(
+        required(db, "--db"),
+        flags["active"] === true,
+        str(flags, "workflow"),
+      );
     case "run-latest":
       return cmdRunLatest(required(db, "--db"));
     case "spec-get":

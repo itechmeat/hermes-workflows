@@ -90,8 +90,8 @@ export type {
 // Persistence
 export { openRunsDatabase } from "./runtime/db/connection.ts";
 export { SCHEMA_SQL } from "./runtime/db/schema.ts";
-export { RunRepository } from "./runtime/db/runRepository.ts";
-export type { RunMeta, RunSummary, LatestRun } from "./runtime/db/runRepository.ts";
+export { ActiveRunExistsError, RunRepository } from "./runtime/db/runRepository.ts";
+export type { ActiveRunRef, RunMeta, RunSummary, LatestRun } from "./runtime/db/runRepository.ts";
 export {
   SpecStore,
   SpecValidationError,

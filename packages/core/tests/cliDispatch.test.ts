@@ -6,11 +6,12 @@ import { join } from "node:path";
 const cli = join(import.meta.dir, "../src/cli.ts");
 const example = join(import.meta.dir, "../../../examples/feature-development.workflow.yaml");
 
-async function run(args: string[]): Promise<{ code: number; json: unknown }> {
+async function run(args: string[]): Promise<{ code: number; json: unknown; stderr: string }> {
   const proc = Bun.spawn(["bun", "run", cli, ...args], { stdout: "pipe", stderr: "pipe" });
   const out = await new Response(proc.stdout).text();
+  const stderr = await new Response(proc.stderr).text();
   const code = await proc.exited;
-  return { code, json: out.trim() ? JSON.parse(out) : null };
+  return { code, json: out.trim() ? JSON.parse(out) : null, stderr };
 }
 
 describe("cli.ts dispatcher", () => {
@@ -83,6 +84,42 @@ describe("cli.ts dispatcher", () => {
     ]);
     expect(code).toBe(0);
     expect((json as { ok: boolean }).ok).toBe(true);
+    await rm(base, { recursive: true, force: true });
+  });
+
+  test("run-create maps a duplicate active run to a structured 409-able error", async () => {
+    const base = await mkdtemp(join(tmpdir(), "hw-sf-cli-"));
+    const db = join(base, "runs.db");
+    expect((await run(["run-create", "--db", db, example, "--id", "sf-1"])).code).toBe(0);
+
+    const refused = await run(["run-create", "--db", db, example, "--id", "sf-2"]);
+    expect(refused.code).not.toBe(0);
+    // The Python bridge reads {error:{name,message}} from stderr and maps the
+    // name to an HTTP status — ActiveRunExistsError must arrive structured.
+    const parsed = JSON.parse(refused.stderr) as { error: { name: string; message: string } };
+    expect(parsed.error.name).toBe("ActiveRunExistsError");
+    expect(parsed.error.message).toContain("sf-1");
+    await rm(base, { recursive: true, force: true });
+  });
+
+  test("run-list-summary --workflow returns only that workflow's runs", async () => {
+    const base = await mkdtemp(join(tmpdir(), "hw-sf-filter-"));
+    const db = join(base, "runs.db");
+    const other = join(import.meta.dir, "../../../examples/blog-daily-signals.workflow.yaml");
+    expect((await run(["run-create", "--db", db, example, "--id", "f-1"])).code).toBe(0);
+    expect((await run(["run-create", "--db", db, other, "--id", "b-1"])).code).toBe(0);
+
+    const filtered = await run([
+      "run-list-summary",
+      "--db",
+      db,
+      "--active",
+      "--workflow",
+      "feature-development",
+    ]);
+    expect(filtered.code).toBe(0);
+    const rows = filtered.json as { run_id: string }[];
+    expect(rows.map((r) => r.run_id)).toEqual(["f-1"]);
     await rm(base, { recursive: true, force: true });
   });
 

@@ -155,7 +155,9 @@ export async function cmdRunCreate(
 ): Promise<RunState> {
   const workflow = await loadWorkflow(specPath);
   const run = createRunState(workflow, runId, projectId, origin);
-  repository(dbPath).saveRun(run, timingMeta(run, true));
+  // Single-flight: throws ActiveRunExistsError when the workflow already has
+  // an active run (the bridge maps the error name to HTTP 409).
+  repository(dbPath).createRun(run, timingMeta(run, true));
   return run;
 }
 
@@ -172,9 +174,14 @@ export function cmdRunList(dbPath: string, activeOnly: boolean): RunState[] {
   return activeOnly ? repo.listActiveRuns() : repo.listAllRuns();
 }
 
-/** Flat run summaries for the dashboard Runs page (see {@link RunSummary}). */
-export function cmdRunListSummary(dbPath: string, activeOnly: boolean): RunSummary[] {
-  return repository(dbPath).listRunSummaries(activeOnly);
+/** Flat run summaries for the dashboard Runs page (see {@link RunSummary}).
+ * `workflowId` narrows to one workflow's runs — the editor-attach lookup. */
+export function cmdRunListSummary(
+  dbPath: string,
+  activeOnly: boolean,
+  workflowId?: string,
+): RunSummary[] {
+  return repository(dbPath).listRunSummaries(activeOnly, workflowId);
 }
 
 /** Map each workflow id to its most recent run (for the Templates page). */
@@ -245,6 +252,8 @@ export function cmdRunCancel(dbPath: string, runId: string): RunState {
 export function cmdRunRetry(dbPath: string, runId: string, node?: string): RunState {
   const repo = repository(dbPath);
   const retried = retryRun(loadRunOrThrow(repo, runId), node !== undefined ? { node } : {});
-  repo.saveRun(retried, timingMeta(retried, false)); // back in flight → clears finished_at
+  // Retry revives the run — the same single-flight guard as create, excluding
+  // the run itself; back in flight → timingMeta clears finished_at.
+  repo.reviveRun(retried, timingMeta(retried, false));
   return retried;
 }

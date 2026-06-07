@@ -3,8 +3,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openRunsDatabase, RunRepository, createRunState, fromObject } from "../src/index.ts";
+import {
+  ActiveRunExistsError,
+  openRunsDatabase,
+  RunRepository,
+  createRunState,
+  fromObject,
+} from "../src/index.ts";
 import type { Database } from "bun:sqlite";
+import type { RunState } from "../src/index.ts";
 
 const workflow = fromObject({
   id: "wf",
@@ -283,6 +290,108 @@ describe("RunRepository — node telemetry", () => {
     expect(mrepo.loadRun("migrated-run")?.nodes["a"]?.telemetry).toEqual({ api_calls: 1 });
     reopened.close();
     await rm(mdir, { recursive: true, force: true });
+  });
+});
+
+describe("RunRepository — single-flight create", () => {
+  let sdir: string;
+  let sdb: Database;
+  let srepo: RunRepository;
+  const wfOther = fromObject({ ...workflow, id: "wf-other" }).workflow;
+
+  beforeAll(async () => {
+    sdir = await mkdtemp(join(tmpdir(), "hw-single-flight-"));
+    sdb = openRunsDatabase(join(sdir, "runs.db"));
+    srepo = new RunRepository(sdb);
+  });
+
+  afterAll(async () => {
+    sdb.close();
+    await rm(sdir, { recursive: true, force: true });
+  });
+
+  test("createRun inserts when the workflow has no active run", () => {
+    const run = createRunState(workflow, "sf-first");
+    srepo.createRun(run, { started_at: 10 });
+    expect(srepo.loadRun("sf-first")?.status).toBe("created");
+    expect(srepo.loadRun("sf-first")?.workflow_id).toBe("wf");
+  });
+
+  test("createRun refuses a second run while a sibling is active, per active status", () => {
+    for (const status of ["created", "running", "waiting"] as const) {
+      const sibling = srepo.loadRun("sf-first") as RunState;
+      sibling.status = status;
+      srepo.saveRun(sibling);
+
+      const second = createRunState(workflow, `sf-second-${status}`);
+      expect(() => srepo.createRun(second, { started_at: 20 })).toThrow(ActiveRunExistsError);
+      // The refused run must not be persisted.
+      expect(srepo.loadRun(`sf-second-${status}`)).toBeNull();
+    }
+  });
+
+  test("the error names the workflow, the active run id, and its status", () => {
+    const second = createRunState(workflow, "sf-named");
+    let thrown: unknown;
+    try {
+      srepo.createRun(second, {});
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ActiveRunExistsError);
+    const err = thrown as ActiveRunExistsError;
+    expect(err.name).toBe("ActiveRunExistsError"); // travels to Python as `kind`
+    expect(err.message).toContain("wf");
+    expect(err.message).toContain("sf-first");
+    expect(err.message).toContain("waiting"); // last status the loop above left
+  });
+
+  test("a different workflow is unaffected by the active sibling", () => {
+    const other = createRunState(wfOther, "sf-other");
+    srepo.createRun(other, { started_at: 30 });
+    expect(srepo.loadRun("sf-other")?.status).toBe("created");
+  });
+
+  test("createRun succeeds again once the sibling settles", () => {
+    const sibling = srepo.loadRun("sf-first") as RunState;
+    sibling.status = "completed";
+    srepo.saveRun(sibling, { finished_at: 50 });
+
+    const next = createRunState(workflow, "sf-after-settle");
+    srepo.createRun(next, { started_at: 60 });
+    expect(srepo.loadRun("sf-after-settle")?.status).toBe("created");
+  });
+
+  test("the guard holds across separate connections to the same file", () => {
+    // A second connection (another process in production) must see the active
+    // run the first connection just inserted and refuse its own create.
+    const dbB = openRunsDatabase(join(sdir, "runs.db"));
+    const repoB = new RunRepository(dbB);
+    try {
+      const viaB = createRunState(workflow, "sf-cross-conn");
+      expect(() => repoB.createRun(viaB, {})).toThrow(ActiveRunExistsError);
+    } finally {
+      dbB.close();
+    }
+  });
+
+  test("findActiveRun picks the newest active sibling deterministically", () => {
+    // Pre-guard databases can hold several active runs of one workflow; the
+    // attach lookup must resolve them the same way latestRunByWorkflow does:
+    // highest started_at, ties broken on the higher run_id.
+    const wfDup = fromObject({ ...workflow, id: "wf-dup" }).workflow;
+    for (const [id, started] of [
+      ["dup-old", 100],
+      ["dup-new", 200],
+      ["dup-tie", 200],
+    ] as const) {
+      const run = createRunState(wfDup, id);
+      run.status = "running";
+      srepo.saveRun(run, { started_at: started }); // saveRun bypasses the guard
+    }
+    expect(srepo.findActiveRun("wf-dup")?.run_id).toBe("dup-tie");
+    expect(srepo.findActiveRun("wf-dup", "dup-tie")?.run_id).toBe("dup-new");
+    expect(srepo.findActiveRun("wf-never")).toBeUndefined();
   });
 });
 

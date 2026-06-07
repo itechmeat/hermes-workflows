@@ -10,6 +10,26 @@ import type { Database } from "bun:sqlite";
 import type { RunState, RunStatus, NodeRunState, NodeTelemetry } from "../../schema/run.ts";
 import { ACTIVE_NODE_STATUSES, ACTIVE_RUN_STATUSES } from "../status.ts";
 
+/** The active statuses as a quoted SQL `IN (...)` list. Safe to interpolate:
+ * the values are compile-time constants from status.ts, never user input. */
+const ACTIVE_STATUS_LITERALS = ACTIVE_RUN_STATUSES.map((s) => `'${s}'`).join(", ");
+
+/** Thrown by {@link RunRepository.createRun} when the workflow already has an
+ * active run. Single-flight invariant: at most one run per workflow may be in
+ * an active status at a time. The class name travels to the Python bridge as
+ * `CoreBridgeError.kind` and maps to HTTP 409 there. */
+export class ActiveRunExistsError extends Error {
+  override name = "ActiveRunExistsError";
+}
+
+/** The active run blocking a new create, as the guard and the editor-attach
+ * lookup see it. */
+export interface ActiveRunRef {
+  run_id: string;
+  status: RunStatus;
+  started_at?: number;
+}
+
 /** Extra run-level fields persisted alongside the reconstructable RunState. */
 export interface RunMeta {
   input?: unknown;
@@ -92,6 +112,71 @@ interface NodeRow {
 
 export class RunRepository {
   constructor(private readonly db: Database) {}
+
+  /**
+   * The workflow's active run (status `created`/`running`/`waiting`), if any.
+   * Pre-guard databases can hold several; the newest `started_at` wins, ties
+   * broken on the higher `run_id` — the same convention as
+   * {@link latestRunByWorkflow}, so the editor attach is deterministic.
+   * `excludeRunId` lets retry ignore the run it is reviving.
+   */
+  findActiveRun(workflowId: string, excludeRunId?: string): ActiveRunRef | undefined {
+    const row = this.db
+      .query(
+        `SELECT id, status, started_at FROM workflow_runs
+         WHERE workflow_id = $wf
+           AND status IN (${ACTIVE_STATUS_LITERALS})
+           AND ($exclude IS NULL OR id != $exclude)
+         ORDER BY COALESCE(started_at, -1) DESC, id DESC
+         LIMIT 1`,
+      )
+      .get({
+        $wf: workflowId,
+        $exclude: excludeRunId ?? null,
+      }) as Pick<RunRow, "id" | "status" | "started_at"> | null;
+    if (!row) return undefined;
+    const ref: ActiveRunRef = { run_id: row.id, status: row.status as RunStatus };
+    if (row.started_at !== null) ref.started_at = row.started_at;
+    return ref;
+  }
+
+  /** Throw {@link ActiveRunExistsError} when the workflow has an active run
+   * other than `excludeRunId`. */
+  private assertNoActiveSibling(workflowId: string, excludeRunId?: string): void {
+    const active = this.findActiveRun(workflowId, excludeRunId);
+    if (active !== undefined) {
+      throw new ActiveRunExistsError(
+        `workflow '${workflowId}' already has an active run ` +
+          `'${active.run_id}' (status ${active.status}); ` +
+          `cancel it or wait for it to finish before starting another`,
+      );
+    }
+  }
+
+  /** Single-flight write: run `write` after {@link assertNoActiveSibling},
+   * both inside one IMMEDIATE transaction — the write lock is taken before
+   * the check, so two concurrent writers serialize and the loser sees the
+   * winner's row and throws. */
+  private guardedWrite(workflowId: string, excludeRunId: string | undefined, write: () => void) {
+    const guarded = this.db.transaction(() => {
+      this.assertNoActiveSibling(workflowId, excludeRunId);
+      write();
+    });
+    guarded.immediate();
+  }
+
+  /** Insert a brand-new run, enforcing single-flight: at most one active run
+   * per workflow ({@link ActiveRunExistsError} otherwise). */
+  createRun(run: RunState, meta: RunMeta = {}): void {
+    this.guardedWrite(run.workflow_id, undefined, () => this.saveRun(run, meta));
+  }
+
+  /** Save a revived run (retry): the same single-flight guard as
+   * {@link createRun}, except the run being revived is excluded — it becoming
+   * active again is the point; a *different* active sibling blocks it. */
+  reviveRun(run: RunState, meta: RunMeta = {}): void {
+    this.guardedWrite(run.workflow_id, run.run_id, () => this.saveRun(run, meta));
+  }
 
   /** Insert or update a run and all of its node rows in one transaction. */
   saveRun(run: RunState, meta: RunMeta = {}): void {
@@ -215,10 +300,8 @@ export class RunRepository {
 
   listActiveRuns(): RunState[] {
     const ids = this.db
-      .query(
-        `SELECT id FROM workflow_runs WHERE status IN (${ACTIVE_RUN_STATUSES.map(() => "?").join(", ")})`,
-      )
-      .all(...ACTIVE_RUN_STATUSES) as { id: string }[];
+      .query(`SELECT id FROM workflow_runs WHERE status IN (${ACTIVE_STATUS_LITERALS})`)
+      .all() as { id: string }[];
     return this.hydrate(ids);
   }
 
@@ -234,19 +317,24 @@ export class RunRepository {
   }
 
   /**
-   * List runs as flat summaries for the dashboard Runs page. `activeOnly`
-   * restricts to in-flight runs (same filter as {@link listActiveRuns}). Each
-   * summary carries the persisted timing meta and a derived `current_node`.
+   * List runs as flat summaries for the dashboard Runs page, newest
+   * `started_at` first (ties on the higher `run_id`, never-started runs last —
+   * the {@link findActiveRun} convention). `activeOnly` restricts to in-flight
+   * runs (same filter as {@link listActiveRuns}); `workflowId` to one
+   * workflow's runs (the editor-attach lookup). Each summary carries the
+   * persisted timing meta and a derived `current_node`.
    */
-  listRunSummaries(activeOnly: boolean): RunSummary[] {
+  listRunSummaries(activeOnly: boolean, workflowId?: string): RunSummary[] {
+    const where: string[] = [];
+    if (activeOnly) where.push(`status IN (${ACTIVE_STATUS_LITERALS})`);
+    if (workflowId !== undefined) where.push("workflow_id = $wf");
+    const sql =
+      `SELECT * FROM workflow_runs` +
+      (where.length > 0 ? ` WHERE ${where.join(" AND ")}` : "") +
+      ` ORDER BY COALESCE(started_at, -1) DESC, id DESC`;
+    const query = this.db.query(sql);
     const rows = (
-      activeOnly
-        ? this.db
-            .query(
-              `SELECT * FROM workflow_runs WHERE status IN (${ACTIVE_RUN_STATUSES.map(() => "?").join(", ")})`,
-            )
-            .all(...ACTIVE_RUN_STATUSES)
-        : this.db.query(`SELECT * FROM workflow_runs`).all()
+      workflowId !== undefined ? query.all({ $wf: workflowId }) : query.all()
     ) as RunRow[];
     return rows.map((row) => this.toSummary(row));
   }
