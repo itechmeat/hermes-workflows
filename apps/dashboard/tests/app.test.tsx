@@ -41,6 +41,7 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
     getWorkflow: vi.fn(async () => detail),
     runWorkflow: vi.fn(async () => ({ run_id: "deploy-1", status: "running" as const })),
     getRun: vi.fn(async () => run),
+    listRuns: vi.fn(async () => []), // the editor's mount attach check
     listProfiles: vi.fn(async () => []),
     listModels: vi.fn(async () => []),
     ...overrides,

@@ -173,6 +173,18 @@ describe("workflows API client", () => {
     expect(h.last().path).toBe(`${BASE}/runs?scope=all`);
   });
 
+  it("filters runs by workflow id (the editor attach lookup)", async () => {
+    const h = harness();
+    h.reply({ runs: [] });
+    await h.client.listRuns("active", "deploy me");
+    // workflow_id rides as an encoded query param alongside the scope default.
+    expect(h.last().path).toBe(`${BASE}/runs?workflow_id=deploy+me`);
+
+    h.reply({ runs: [] });
+    await h.client.listRuns("all", "wf-1");
+    expect(h.last().path).toBe(`${BASE}/runs?scope=all&workflow_id=wf-1`);
+  });
+
   it("exports a run's log bundle, returning the JSON envelope", async () => {
     const h = harness();
     const envelope = { run_id: "r1", filename: "r1.run.json", json: { run_id: "r1", nodes: {} } };

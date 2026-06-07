@@ -1,23 +1,27 @@
-// Start → poll → hand-off state machine behind the editor's Play button, split
-// from FlowEditor so the flow is unit-testable through a mocked WorkflowsApi.
-// The hook only orchestrates the run: the save-before-play gate stays in the
-// editor (it owns the dirty state), and navigation is delegated to `onHandOff`.
-// Every failure is exposed via `error` — never swallowed.
+// Attach → start → poll → hand-off state machine behind the editor's Play
+// button, split from FlowEditor so the flow is unit-testable through a mocked
+// WorkflowsApi. On mount the hook checks for an already-active run of this
+// workflow (single-flight guarantees at most one) and, when found, enters
+// playback attached to it — returning to the page never pretends the workflow
+// is idle. The hook only orchestrates the run: the save-before-play gate stays
+// in the editor (it owns the dirty state), and navigation is delegated to
+// `onHandOff`. Every failure is exposed via `error` — never swallowed.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkflowsApi } from "../api/client";
-import type { RunState } from "../api/types";
+import type { RunState, RunSummary } from "../api/types";
 import { shouldHandOff } from "../run/runView";
 import { errorMessage, RUN_POLL_MS, useRunPolling } from "../run/useRunPolling";
 
-export type PlaybackPhase = "idle" | "starting" | "playing";
+export type PlaybackPhase = "attaching" | "idle" | "starting" | "playing";
 
 export interface RunPlayback {
   phase: PlaybackPhase;
   /** Live state of the playing run; null until the first poll lands. */
   run: RunState | null;
-  /** Start or poll failure, surfaced to the operator. */
+  /** Attach, start, or poll failure, surfaced to the operator. */
   error: string | null;
-  /** Start the run. Ignored unless the playback is idle (double-start guard). */
+  /** Start the run. Ignored unless the playback is idle (double-start guard;
+   *  also inert while the mount attach check is pending). */
   play: () => void;
 }
 
@@ -26,10 +30,13 @@ export function useRunPlayback(options: {
   workflowId: string;
   /** Navigate to the run inspector; called exactly once per playback. */
   onHandOff: (runId: string) => void;
+  /** Whether playback is wired up at all (the editor only enables it when the
+   *  inspector navigation exists). Disabled skips the mount attach check. */
+  enabled?: boolean;
   pollMs?: number;
 }): RunPlayback {
-  const { api, workflowId, onHandOff, pollMs = RUN_POLL_MS } = options;
-  const [phase, setPhase] = useState<PlaybackPhase>("idle");
+  const { api, workflowId, onHandOff, enabled = true, pollMs = RUN_POLL_MS } = options;
+  const [phase, setPhase] = useState<PlaybackPhase>(enabled ? "attaching" : "idle");
   const [runId, setRunId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   // Ref, not state: the hand-off must fire exactly once even if a poll result
@@ -45,6 +52,52 @@ export function useRunPlayback(options: {
     },
     [onHandOff],
   );
+
+  /** The workflow's active run, if any — newest first per the runs API. */
+  const findActiveRun = useCallback(
+    (): Promise<RunSummary | undefined> =>
+      api.listRuns("active", workflowId).then((summaries) => summaries[0]),
+    [api, workflowId],
+  );
+
+  /** Enter playback on an existing active run (or hand a parked one straight
+   *  to the inspector — only it has review controls). */
+  const adopt = useCallback(
+    (active: RunSummary): void => {
+      if (shouldHandOff(active.status)) {
+        handOff(active.run_id);
+        return;
+      }
+      setRunId(active.run_id);
+      setPhase("playing");
+    },
+    [handOff],
+  );
+
+  // Mount attach check: the page must reflect a run that is already in flight.
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let disposed = false;
+    findActiveRun()
+      .then((active) => {
+        if (disposed) return;
+        if (active === undefined) {
+          setPhase("idle");
+          return;
+        }
+        adopt(active);
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        // Unknown state — unlock Play (the server guard still protects the
+        // single-flight invariant) but say loudly that the check failed.
+        setPhase("idle");
+        setStartError(`Active-run check failed: ${errorMessage(error)}`);
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [enabled, findActiveRun, adopt]);
 
   // Watch polled state for the moment the run settles (or parks in review).
   const status = run?.status;
@@ -71,10 +124,27 @@ export function useRunPlayback(options: {
         setPhase("playing");
       })
       .catch((error: unknown) => {
-        setPhase("idle");
-        setStartError(`Run failed to start: ${errorMessage(error)}`);
+        const startMessage = `Run failed to start: ${errorMessage(error)}`;
+        setStartError(startMessage);
+        // A refused start may mean another surface holds the active run
+        // (single-flight 409) — re-check and adopt it so the canvas shows the
+        // real state alongside the refusal.
+        findActiveRun()
+          .then((active) => {
+            if (active === undefined) {
+              setPhase("idle");
+              return;
+            }
+            adopt(active);
+          })
+          .catch((checkError: unknown) => {
+            setPhase("idle");
+            setStartError(
+              `${startMessage}; active-run check also failed: ${errorMessage(checkError)}`,
+            );
+          });
       });
-  }, [api, workflowId, phase, handOff]);
+  }, [api, workflowId, phase, handOff, findActiveRun, adopt]);
 
   return { phase, run, error: startError ?? pollError, play };
 }

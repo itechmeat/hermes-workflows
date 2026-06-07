@@ -67,6 +67,7 @@ function statusLabel(status: SaveStatus, dirty: boolean): string {
 }
 
 const PLAY_LABEL: Record<PlaybackPhase, string> = {
+  attaching: "Play", // disabled until the mount active-run check lands
   idle: "Play",
   starting: "Starting…",
   playing: "Running…",
@@ -128,9 +129,14 @@ export function FlowEditor({
     api,
     workflowId: detail.workflow.id,
     onHandOff: handOff,
+    // Playback (incl. the mount attach check) exists only when the inspector
+    // navigation is wired — same condition that renders the Play button.
+    enabled: onOpenRun !== undefined,
     pollMs,
   });
-  const playing = playback.phase !== "idle";
+  // Editing locks once a run is underway; the brief mount attach check does
+  // not lock the canvas, it only holds the Play button.
+  const playing = playback.phase === "starting" || playback.phase === "playing";
 
   const openNode = useCallback(
     (id: string) => {
@@ -222,9 +228,10 @@ export function FlowEditor({
       {onOpenRun !== undefined && (
         <Button
           variant="primary"
-          // Also disabled while the pre-play save is in flight, so a rapid
-          // double-click cannot queue a second save.
-          disabled={playing || ctrl.status.kind === "saving"}
+          // Held while the mount attach check runs (phase "attaching"), while
+          // a run is underway, and while the pre-play save is in flight (so a
+          // rapid double-click cannot queue a second save).
+          disabled={playback.phase !== "idle" || ctrl.status.kind === "saving"}
           onClick={handlePlay}
         >
           <PlayIcon />

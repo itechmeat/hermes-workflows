@@ -40,7 +40,9 @@ export interface WorkflowsApi {
   validateWorkflow(id: string): Promise<ValidationResult>;
   compilePreview(id: string): Promise<HermesPlan>;
   runWorkflow(id: string, options?: RunOptions): Promise<RunStartResult>;
-  listRuns(scope?: RunScope): Promise<RunSummary[]>;
+  /** `workflowId` narrows to one workflow's runs, newest first — the editor's
+   *  attach lookup. */
+  listRuns(scope?: RunScope, workflowId?: string): Promise<RunSummary[]>;
   exportRunLogs(id: string): Promise<ExportedRun>;
   getRun(id: string): Promise<RunState>;
   cancelRun(id: string): Promise<RunState>;
@@ -126,8 +128,11 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
       return postJson<RunStartResult>(`${workflow(id)}/run`, options ?? {});
     },
 
-    async listRuns(scope) {
-      const query = scope === "all" ? "?scope=all" : "";
+    async listRuns(scope, workflowId) {
+      const params = new URLSearchParams();
+      if (scope === "all") params.set("scope", "all");
+      if (workflowId !== undefined) params.set("workflow_id", workflowId);
+      const query = params.size > 0 ? `?${params}` : "";
       const { runs } = await fetchJSON<{ runs?: RunSummary[] }>(`${BASE}/runs${query}`);
       return runs ?? [];
     },

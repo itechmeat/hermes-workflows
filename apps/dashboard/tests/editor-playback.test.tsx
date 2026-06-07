@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FlowEditor } from "../src/editor/FlowEditor";
 import type { WorkflowsApi } from "../src/api/client";
-import type { RunState, SpecDetail, Workflow, UiLayout } from "../src/api/types";
+import type { RunState, RunSummary, SpecDetail, Workflow, UiLayout } from "../src/api/types";
 
 const workflow: Workflow = {
   id: "deploy",
@@ -45,11 +45,28 @@ function runState(status: RunState["status"]): RunState {
   };
 }
 
+/** An active-run summary as the attach lookup returns it. */
+function runSummary(status: RunSummary["status"], runId = RUN_ID): RunSummary {
+  return {
+    run_id: runId,
+    workflow_id: "deploy",
+    project_id: null,
+    status,
+    current_node: "build",
+    started_at: 1000,
+    finished_at: null,
+    duration: null,
+    total_tokens: null,
+  };
+}
+
 function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
   return {
     saveWorkflow: vi.fn(async (_id: string, body: object) => ({ ...body, path: detail.path })),
     listProfiles: vi.fn(async () => []),
     listModels: vi.fn(async () => []),
+    // The attach lookup: no active run by default.
+    listRuns: vi.fn(async () => [] as RunSummary[]),
     runWorkflow: vi.fn(async () => ({ run_id: RUN_ID, status: "running" })),
     getRun: vi.fn(async () => runState("running")),
     ...overrides,
@@ -59,6 +76,12 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
 // The Play button's visible label tracks the phase (Play / Starting… / Running…).
 const playButton = (): HTMLElement =>
   screen.getByRole("button", { name: /^(play|starting…|running…)$/i });
+
+/** Click Play once the mount attach check has released it. */
+async function clickPlay(): Promise<void> {
+  await waitFor(() => expect(playButton()).toBeEnabled());
+  await userEvent.click(playButton());
+}
 
 describe("FlowEditor playback", () => {
   it("renders Play only when the run-inspector navigation is wired", () => {
@@ -75,7 +98,7 @@ describe("FlowEditor playback", () => {
       <FlowEditor detail={detail} client={client} onOpenRun={vi.fn()} pollMs={10_000} />,
     );
 
-    await userEvent.click(playButton());
+    await clickPlay();
 
     expect(client.runWorkflow).toHaveBeenCalledWith("deploy");
     await waitFor(() => expect(container.querySelector('[data-status="running"]')).not.toBeNull());
@@ -85,7 +108,7 @@ describe("FlowEditor playback", () => {
   it("locks editing actions while the run plays", async () => {
     render(<FlowEditor detail={detail} client={stubClient()} onOpenRun={vi.fn()} pollMs={10_000} />);
 
-    await userEvent.click(playButton());
+    await clickPlay();
 
     await waitFor(() => expect(playButton()).toBeDisabled());
     expect(screen.getByRole("button", { name: /add node/i })).toBeDisabled();
@@ -107,7 +130,7 @@ describe("FlowEditor playback", () => {
       />,
     );
 
-    await userEvent.click(playButton());
+    await clickPlay();
 
     await waitFor(() => expect(onOpenRun).toHaveBeenCalledWith(RUN_ID));
     expect(onOpenRun).toHaveBeenCalledTimes(1);
@@ -125,7 +148,7 @@ describe("FlowEditor playback", () => {
       />,
     );
 
-    await userEvent.click(playButton());
+    await clickPlay();
 
     await waitFor(() => expect(onOpenRun).toHaveBeenCalledWith(RUN_ID));
   });
@@ -143,7 +166,7 @@ describe("FlowEditor playback", () => {
       />,
     );
 
-    await userEvent.click(playButton());
+    await clickPlay();
 
     await waitFor(() => expect(onOpenRun).toHaveBeenCalledWith(RUN_ID));
     expect(getRun).not.toHaveBeenCalled();
@@ -170,7 +193,7 @@ describe("FlowEditor playback", () => {
 
     // Auto-layout marks the graph dirty without needing canvas gestures.
     await userEvent.click(screen.getByRole("button", { name: /auto-layout/i }));
-    await userEvent.click(playButton());
+    await clickPlay();
 
     await waitFor(() => expect(runWorkflow).toHaveBeenCalled());
     expect(calls).toEqual(["save", "run"]);
@@ -191,7 +214,7 @@ describe("FlowEditor playback", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: /auto-layout/i }));
-    await userEvent.click(playButton());
+    await clickPlay();
 
     await screen.findByText(/save failed: disk full/i);
     expect(runWorkflow).not.toHaveBeenCalled();
@@ -211,7 +234,7 @@ describe("FlowEditor playback", () => {
       />,
     );
 
-    await userEvent.click(playButton());
+    await clickPlay();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/workflow is disabled/i);
@@ -235,7 +258,7 @@ describe("FlowEditor playback", () => {
       />,
     );
 
-    await userEvent.click(playButton());
+    await clickPlay();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/network down/i);
@@ -243,6 +266,146 @@ describe("FlowEditor playback", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument(), {
       timeout: 1000,
     });
+  });
+
+  it("attaches to an already-active run on mount, locking the editor", async () => {
+    const listRuns = vi.fn(async () => [runSummary("running")]);
+    const { container } = render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ listRuns })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+
+    // No Play click: the mount check finds the active run and enters playback.
+    expect(listRuns).toHaveBeenCalledWith("active", "deploy");
+    await waitFor(() => expect(container.querySelector('[data-status="running"]')).not.toBeNull());
+    expect(playButton()).toBeDisabled();
+    expect(playButton().textContent).toMatch(/running…/i);
+    expect(screen.getByRole("button", { name: /add node/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
+  });
+
+  it("hands off to the inspector when the active run found on mount settles", async () => {
+    const onOpenRun = vi.fn();
+    const listRuns = vi.fn(async () => [runSummary("running")]);
+    const getRun = vi.fn(async () => runState("completed"));
+    render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ listRuns, getRun })}
+        onOpenRun={onOpenRun}
+        pollMs={20}
+      />,
+    );
+
+    await waitFor(() => expect(onOpenRun).toHaveBeenCalledWith(RUN_ID));
+  });
+
+  it("hands off immediately when the run found on mount is parked in waiting", async () => {
+    const onOpenRun = vi.fn();
+    const listRuns = vi.fn(async () => [runSummary("waiting")]);
+    render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ listRuns })}
+        onOpenRun={onOpenRun}
+        pollMs={10_000}
+      />,
+    );
+
+    await waitFor(() => expect(onOpenRun).toHaveBeenCalledWith(RUN_ID));
+  });
+
+  it("stays idle when the mount check finds no active run", async () => {
+    const client = stubClient();
+    render(<FlowEditor detail={detail} client={client} onOpenRun={vi.fn()} pollMs={10_000} />);
+
+    await waitFor(() => expect(playButton()).toBeEnabled());
+    expect(playButton().textContent).toMatch(/^play$/i);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps Play disabled while the mount check is pending", () => {
+    const listRuns = vi.fn(() => new Promise<never>(() => {})); // never settles
+    render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ listRuns: listRuns as unknown as WorkflowsApi["listRuns"] })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+
+    expect(playButton()).toBeDisabled();
+  });
+
+  it("surfaces a failed mount check as a visible error and unlocks Play", async () => {
+    const listRuns = vi.fn(async () => {
+      throw new Error("runs store unreachable");
+    });
+    render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ listRuns })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/active-run check failed/i);
+    expect(alert.textContent).toMatch(/runs store unreachable/i);
+    expect(playButton()).toBeEnabled();
+  });
+
+  it("attaches to the concurrent run after a refused start, keeping the error visible", async () => {
+    // Single-flight race: another surface started a run between the mount
+    // check and the Play click — the start 409s, the editor shows the refusal
+    // AND adopts the real state.
+    const runWorkflow = vi.fn(async () => {
+      throw new Error("workflow 'deploy' already has an active run 'deploy-1'");
+    });
+    const listRuns = vi
+      .fn(async () => [] as RunSummary[]) // mount: idle
+      .mockResolvedValueOnce([] as RunSummary[])
+      .mockResolvedValue([runSummary("running")]); // re-check after the refusal
+    render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ runWorkflow, listRuns })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+
+    await clickPlay();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/already has an active run/i);
+    await waitFor(() => expect(playButton().textContent).toMatch(/running…/i));
+    expect(playButton()).toBeDisabled();
+  });
+
+  it("returns to idle after a refused start when nothing is active", async () => {
+    const runWorkflow = vi.fn(async () => {
+      throw new Error("workflow is disabled");
+    });
+    render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ runWorkflow })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+
+    await clickPlay();
+
+    await screen.findByRole("alert");
+    await waitFor(() => expect(playButton()).toBeEnabled());
   });
 
   it("prevents a double start while the run is starting", async () => {
@@ -258,7 +421,7 @@ describe("FlowEditor playback", () => {
       />,
     );
 
-    await userEvent.click(playButton());
+    await clickPlay();
 
     await waitFor(() => expect(playButton()).toBeDisabled());
     expect(runWorkflow).toHaveBeenCalledTimes(1);
