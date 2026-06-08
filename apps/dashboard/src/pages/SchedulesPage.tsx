@@ -81,6 +81,15 @@ export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElemen
   return (
     <div className="hw-page">
       <PageHeader title="Schedules" />
+      <p className="hw-note">
+        A schedule comes from a workflow with a <strong>cron</strong> trigger. To add one, open a
+        workflow in{" "}
+        <a className="hw-link" href="#workflows">
+          Workflows
+        </a>{" "}
+        and set its trigger to cron. Below you can pause, resume, run now, edit the cron expression,
+        or delete an existing schedule.
+      </p>
       {message !== null && (
         <p role="status" className="hw-status">
           {message}

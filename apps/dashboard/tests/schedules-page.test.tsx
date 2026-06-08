@@ -54,6 +54,12 @@ describe("SchedulesPage", () => {
     expect(await screen.findByText(/no schedules/i)).toBeInTheDocument();
   });
 
+  it("explains where schedules come from, linking to the Workflows section", async () => {
+    render(<SchedulesPage client={stubClient()} />);
+    const link = await screen.findByRole("link", { name: /workflows/i });
+    expect(link).toHaveAttribute("href", "#workflows");
+  });
+
   it("pauses a schedule and refreshes", async () => {
     const pauseSchedule = vi.fn(async () => ({ ok: true }));
     const listSchedules = vi.fn(async () => schedules);

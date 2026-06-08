@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { FlowNode } from "../graphMapping";
-import { nodeTypeLabel } from "../graphMapping";
+import { nodeMetaLine, nodeTypeLabel } from "../graphMapping";
 import { useNodeOpen } from "../nodeOpenContext";
 import { ExpandIcon } from "../../ui/icons";
 
@@ -11,10 +11,7 @@ import { ExpandIcon } from "../../ui/icons";
 export function WorkflowNodeView({ data, selected }: NodeProps<FlowNode>): React.ReactElement {
   const { node } = data;
   const openNode = useNodeOpen();
-  const meta =
-    node.type === "agent_task"
-      ? [node.profile, node.model].filter((v): v is string => Boolean(v)).join(" · ")
-      : "";
+  const meta = nodeMetaLine(node);
 
   return (
     <div data-node-type={node.type} className={`hw-node${selected ? " is-selected" : ""}`}>

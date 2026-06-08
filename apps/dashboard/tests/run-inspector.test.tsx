@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RunInspector } from "../src/run/RunInspector";
 import type { WorkflowsApi } from "../src/api/client";
@@ -43,12 +43,41 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
   } as unknown as WorkflowsApi;
 }
 
+// Open the "build" node's detail modal. ReactFlow leaves unmeasured nodes in an
+// inaccessible (hidden) subtree under jsdom, so the open button is queried by
+// its aria-label and clicked with fireEvent (userEvent / getByRole skip hidden
+// elements). In a real browser the node is visible and clickable.
+async function openBuildNode(): Promise<void> {
+  const btn = await waitFor(() => {
+    const el = document.querySelector('[aria-label="Open node build"]');
+    if (el === null) throw new Error("open button not rendered yet");
+    return el as HTMLElement;
+  });
+  fireEvent.click(btn);
+}
+
 describe("RunInspector", () => {
   it("renders nodes coloured by their run status", async () => {
     const { container } = render(<RunInspector runId="deploy-1" client={stubClient()} pollMs={10_000} />);
     await screen.findByText("deploy-1");
     await waitFor(() => expect(container.querySelector('[data-status="running"]')).not.toBeNull());
     expect(container.querySelector('[data-status="pending"]')).not.toBeNull();
+  });
+
+  it("keeps the node's profile·model info line and shows the run status on its own line", async () => {
+    const { container } = render(
+      <RunInspector runId="deploy-1" client={stubClient()} pollMs={10_000} />,
+    );
+    await screen.findByText("deploy-1");
+    const card = await waitFor(() => {
+      const el = container.querySelector('.hw-node--run[data-status="running"]');
+      if (el === null) throw new Error("node not rendered yet");
+      return el as HTMLElement;
+    });
+    // The info line (profile · model) is preserved — not overwritten by status…
+    expect(card.querySelector(".hw-node__meta")?.textContent).toContain("dev");
+    // …and the run status sits on its own dedicated line.
+    expect(card.querySelector(".hw-node__status")?.textContent).toContain("running");
   });
 
   it("cancels the run", async () => {
@@ -71,7 +100,7 @@ describe("RunInspector", () => {
     const retryRun = vi.fn(async () => runState("running"));
     render(<RunInspector runId="deploy-1" client={stubClient({ retryRun })} pollMs={10_000} />);
     await screen.findByText("deploy-1");
-    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+    await openBuildNode();
     await userEvent.click(screen.getByRole("button", { name: /retry node/i }));
     expect(retryRun).toHaveBeenCalledWith("deploy-1", "build");
   });
@@ -93,7 +122,7 @@ describe("RunInspector", () => {
     const getRun = vi.fn(async () => state);
     render(<RunInspector runId="deploy-1" client={stubClient({ getRun })} pollMs={10_000} />);
     await screen.findByText("deploy-1");
-    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+    await openBuildNode();
 
     expect(screen.getByText(/agent telemetry/i)).toBeInTheDocument();
     expect(screen.getByText("1m 5s")).toBeInTheDocument(); // duration
@@ -124,7 +153,7 @@ describe("RunInspector", () => {
       expect(container.querySelector('[data-approval="pending"]')).not.toBeNull(),
     );
     // The node detail names the command awaiting approval.
-    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+    await openBuildNode();
     expect(screen.getByText(/waiting for command approval/i)).toBeInTheDocument();
     expect(screen.getByText("rm -rf /tmp/x")).toBeInTheDocument();
   });
@@ -139,7 +168,7 @@ describe("RunInspector", () => {
     );
     await screen.findByText("deploy-1");
     expect(container.querySelector('[data-approval="pending"]')).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+    await openBuildNode();
     expect(screen.queryByText(/waiting for command approval/i)).toBeNull();
     // An uneventful resolution (once/session/always) leaves no note either.
     expect(screen.queryByText(/rm -rf/)).toBeNull();
@@ -159,7 +188,7 @@ describe("RunInspector", () => {
       <RunInspector runId="deploy-1" client={stubClient({ getRun: vi.fn(async () => state) })} pollMs={10_000} />,
     );
     await screen.findByText("deploy-1");
-    await userEvent.click(screen.getByRole("button", { name: /build — failed/i }));
+    await openBuildNode();
     expect(screen.getByText(/command approval denied/i)).toBeInTheDocument();
     expect(screen.getByText("rm -rf /tmp/x")).toBeInTheDocument();
   });
@@ -167,7 +196,7 @@ describe("RunInspector", () => {
   it("renders no telemetry block when a node has none", async () => {
     render(<RunInspector runId="deploy-1" client={stubClient()} pollMs={10_000} />);
     await screen.findByText("deploy-1");
-    await userEvent.click(screen.getByRole("button", { name: /build — running/i }));
+    await openBuildNode();
     expect(screen.queryByText(/agent telemetry/i)).toBeNull();
   });
 

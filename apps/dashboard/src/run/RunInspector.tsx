@@ -9,7 +9,7 @@ import { applyRunStatus, isTerminalRun } from "./runView";
 import { CANVAS_NODE_TYPES } from "./canvasNodeTypes";
 import { errorMessage, RUN_POLL_MS, useRunPolling } from "./useRunPolling";
 import { TelemetryDetail } from "./TelemetryDetail";
-import { Badge, Button } from "../ui/components";
+import { Badge, Button, Modal } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
 
 export interface RunInspectorProps {
@@ -93,6 +93,13 @@ export function RunInspector({
   const inspectorError = pollError ?? actionError;
 
   const { nodes, edges } = applyRunStatus(detail, run);
+  // Carry the open-detail handler on each node's data: ReactFlow does not
+  // propagate React context into custom node components, so a context provider
+  // would never reach RunNodeView's open button.
+  const canvasNodes = nodes.map((node) => ({
+    ...node,
+    data: { ...node.data, onSelect: setSelectedNodeId },
+  }));
   const selected = selectedNodeId === null ? undefined : run.nodes[selectedNodeId];
   const terminal = isTerminalRun(run.status);
 
@@ -131,56 +138,48 @@ export function RunInspector({
       )}
 
       <div className="hw-shell">
-      <div className="hw-editor-body">
-        <div className="hw-canvas">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={CANVAS_NODE_TYPES}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
-            fitView
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background />
-            <Controls />
-          </ReactFlow>
+        <div className="hw-editor-body">
+          <div className="hw-canvas">
+            <ReactFlow
+              nodes={canvasNodes}
+              edges={edges}
+              nodeTypes={CANVAS_NODE_TYPES}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
+              fitView
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background />
+              <Controls />
+            </ReactFlow>
+          </div>
         </div>
-        <div className="hw-run-rail">
-          <div className="hw-eyebrow">Nodes</div>
-          <ul className="hw-navlist">
-            {Object.values(run.nodes).map((node) => (
-              <li key={node.node_id}>
-                <Button onClick={() => setSelectedNodeId(node.node_id)}>
-                  {node.node_id} — {node.status}
-                </Button>
-              </li>
-            ))}
-          </ul>
-          {selected ? (
-            <div>
-              <div>
-                <code>{selected.node_id}</code>
-              </div>
-              <p>Status: {selected.status}</p>
-              {selected.outcome !== undefined && <p>Outcome: {selected.outcome}</p>}
-              {selected.output !== undefined && <pre className="hw-output">{selected.output}</pre>}
-              {selected.error !== undefined && <p className="hw-error">{selected.error}</p>}
-              {selected.telemetry !== undefined && (
-                <TelemetryDetail
-                  telemetry={selected.telemetry}
-                  nodeActive={selected.status === "scheduled" || selected.status === "running"}
-                />
-              )}
-              <Button onClick={() => retry(selected.node_id)}>Retry node</Button>
-            </div>
-          ) : (
-            <p className="hw-note">Select a node for detail.</p>
+      </div>
+
+      {/* Click a node to inspect it — the detail (status, output, telemetry,
+          retry) opens in a modal, mirroring the editor's node inspector, so
+          the run view is a clean canvas with its actions in the header. */}
+      {selected !== undefined && selectedNodeId !== null && (
+        <Modal
+          title={selectedNodeId}
+          ariaLabel={`Node ${selectedNodeId}`}
+          className="hw-node-modal"
+          onClose={() => setSelectedNodeId(null)}
+          footer={<Button onClick={() => retry(selectedNodeId)}>Retry node</Button>}
+        >
+          <p>Status: {selected.status}</p>
+          {selected.outcome !== undefined && <p>Outcome: {selected.outcome}</p>}
+          {selected.output !== undefined && <pre className="hw-output">{selected.output}</pre>}
+          {selected.error !== undefined && <p className="hw-error">{selected.error}</p>}
+          {selected.telemetry !== undefined && (
+            <TelemetryDetail
+              telemetry={selected.telemetry}
+              nodeActive={selected.status === "scheduled" || selected.status === "running"}
+            />
           )}
-        </div>
-      </div>
-      </div>
+        </Modal>
+      )}
     </>
   );
 }

@@ -62,6 +62,11 @@ export interface RunNodeData extends Record<string, unknown> {
   status?: NodeStatus;
   /** See {@link isApprovalPending}; drives the node card's waiting badge. */
   approvalPending?: boolean;
+  /** Open this node's detail modal. Carried on node data (not via React
+   *  context) because ReactFlow does not propagate context into custom node
+   *  components. The inspector sets it; the editor-playback canvas leaves it
+   *  unset so a running node renders without the open button. */
+  onSelect?: (id: string) => void;
 }
 
 export type RunFlowNode = FlowNodeBase<RunNodeData>;

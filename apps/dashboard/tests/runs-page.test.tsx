@@ -99,6 +99,32 @@ describe("RunsPage", () => {
     expect(onOpenRun).toHaveBeenCalledWith("deploy-aaaa1111");
   });
 
+  it("links the Run ID to the inspector and the Workflow to its editor", async () => {
+    const onOpenRun = vi.fn();
+    const onOpenWorkflow = vi.fn();
+    const client = stubClient({ listRuns: vi.fn(async () => runs) });
+    render(
+      <RunsPage client={client} onOpenRun={onOpenRun} onOpenWorkflow={onOpenWorkflow} />,
+    );
+    await screen.findByText("deploy-aaaa1111");
+
+    await userEvent.click(screen.getByRole("link", { name: "deploy-aaaa1111" }));
+    expect(onOpenRun).toHaveBeenCalledWith("deploy-aaaa1111");
+
+    await userEvent.click(screen.getByRole("link", { name: "deploy" }));
+    expect(onOpenWorkflow).toHaveBeenCalledWith("deploy");
+  });
+
+  it("falls back to an #editor href for the Workflow link when no callback is wired", async () => {
+    const client = stubClient({ listRuns: vi.fn(async () => runs) });
+    render(<RunsPage client={client} onOpenRun={() => {}} />);
+    await screen.findByText("deploy-aaaa1111");
+    expect(screen.getByRole("link", { name: "deploy" })).toHaveAttribute(
+      "href",
+      "#editor/deploy",
+    );
+  });
+
   it("cancels a run and refreshes", async () => {
     const cancelRun = vi.fn(async () => ({ run_id: "deploy-aaaa1111", status: "cancelled", nodes: {} }) as RunState);
     const listRuns = vi.fn(async () => runs);

@@ -11,6 +11,9 @@ export interface RunsPageProps {
   client?: WorkflowsApi;
   /** Open the run inspector (wired by the app shell). */
   onOpenRun: (runId: string) => void;
+  /** Open a run's workflow in the editor (wired by the app shell). Optional:
+   *  without it the Workflow link still navigates via its `#editor/…` href. */
+  onOpenWorkflow?: (workflowId: string) => void;
 }
 
 type LoadState =
@@ -26,7 +29,11 @@ function formatDuration(seconds: number | null): string {
   return `${mins}m ${rem}s`;
 }
 
-export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactElement {
+export function RunsPage({
+  client,
+  onOpenRun,
+  onOpenWorkflow,
+}: RunsPageProps): React.ReactElement {
   const api = client ?? getApiClient();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [activeOnly, setActiveOnly] = useState(false);
@@ -168,8 +175,34 @@ export function RunsPage({ client, onOpenRun }: RunsPageProps): React.ReactEleme
           <tbody>
             {state.items.map((r) => (
               <tr key={r.run_id}>
-                <td>{r.run_id}</td>
-                <td>{r.workflow_id}</td>
+                <td>
+                  <a
+                    className="hw-link"
+                    href={`#run/${encodeURIComponent(r.run_id)}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onOpenRun(r.run_id);
+                    }}
+                  >
+                    {r.run_id}
+                  </a>
+                </td>
+                <td>
+                  <a
+                    className="hw-link"
+                    href={`#editor/${encodeURIComponent(r.workflow_id)}`}
+                    onClick={(e) => {
+                      // Prefer the wired SPA navigation; the href is the
+                      // fallback (middle-click / copy / no callback).
+                      if (onOpenWorkflow) {
+                        e.preventDefault();
+                        onOpenWorkflow(r.workflow_id);
+                      }
+                    }}
+                  >
+                    {r.workflow_id}
+                  </a>
+                </td>
                 <td>{r.project_id ?? "—"}</td>
                 <td>
                   <Badge tone={r.status}>{r.status}</Badge>

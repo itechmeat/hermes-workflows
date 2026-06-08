@@ -53,6 +53,14 @@ export function nodeTypeLabel(type: string): string {
   return NODE_TYPE_LABEL[type] ?? type;
 }
 
+/** The node's secondary info line: an agent_task shows `profile · model`; other
+ *  node types have no extra detail. Shared by the editor and run node views so
+ *  the run canvas keeps the same info line and only adds a status line. */
+export function nodeMetaLine(node: WorkflowNode): string {
+  if (node.type !== "agent_task") return "";
+  return [node.profile, node.model].filter((v): v is string => Boolean(v)).join(" · ");
+}
+
 function positionFor(
   id: string,
   index: number,

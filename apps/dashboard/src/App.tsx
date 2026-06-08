@@ -135,7 +135,11 @@ export function App({ client }: AppProps): React.ReactElement {
             />
           )}
           {view.name === "runs" && (
-            <RunsPage client={api} onOpenRun={(runId) => go({ name: "inspector", runId })} />
+            <RunsPage
+              client={api}
+              onOpenRun={(runId) => go({ name: "inspector", runId })}
+              onOpenWorkflow={(id) => go({ name: "editor", id })}
+            />
           )}
           {view.name === "schedules" && <SchedulesPage client={api} />}
           {view.name === "settings" && <SettingsPage client={api} />}
