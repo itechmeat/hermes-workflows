@@ -73,6 +73,9 @@ def test_build_argv_carries_profile_skills_and_model() -> None:
         model="deepseek-v4-pro@opencode-go",
         skills=["research-paper-writing", "blog-content-pipeline"],
     )
+    # The provider is split out of the model into its own --provider flag so it
+    # actually switches providers (a model name with an @provider suffix is
+    # rejected by the inference API as unknown).
     assert argv == [
         "hermes",
         "-p",
@@ -82,10 +85,21 @@ def test_build_argv_carries_profile_skills_and_model() -> None:
         "--skills",
         "blog-content-pipeline",
         "-m",
-        "deepseek-v4-pro@opencode-go",
+        "deepseek-v4-pro",
+        "--provider",
+        "opencode-go",
         "-z",
         "do the thing",
     ]
+
+
+def test_build_argv_keeps_bare_model_without_a_provider_flag() -> None:
+    """A model with no ``@provider`` suffix passes through as ``-m <model>`` with
+    no ``--provider`` — Hermes then resolves the provider (profile default /
+    auto-detect)."""
+    argv = build_agent_argv("hermes", "p", "go", model="claude-sonnet-4")
+    assert argv == ["hermes", "-p", "p", "-m", "claude-sonnet-4", "-z", "go"]
+    assert "--provider" not in argv
 
 
 def test_build_argv_omits_absent_model_and_skills() -> None:
@@ -128,7 +142,10 @@ def test_invocation_passes_skills_and_model_through_subprocess(tmp_path, store_d
     recorded = capture.read_text()
     assert "-p\nproduct-tech-lead" in recorded
     assert "--skills\nresearch-paper-writing" in recorded
-    assert "-m\ndeepseek-v4-pro@opencode-go" in recorded
+    # Model and provider arrive as separate flags with a clean model name.
+    assert "-m\ndeepseek-v4-pro\n" in recorded
+    assert "--provider\nopencode-go" in recorded
+    assert "deepseek-v4-pro@opencode-go" not in recorded
     assert "-z\ndesign scopes" in recorded
 
 

@@ -42,16 +42,29 @@ def build_agent_argv(
     model: Optional[str] = None,
     skills: Optional[Sequence[str]] = None,
 ) -> list[str]:
-    """The canonical oneshot agent command. ``--skills`` and ``-m`` are emitted
-    only when set, so a node without them falls back to the profile's configured
-    skill set and model rather than passing empty flags."""
+    """The canonical oneshot agent command. ``--skills`` is emitted once per
+    skill.
+
+    A ``model@provider`` selection is split into ``-m <model> --provider
+    <provider>`` rather than passed whole to ``-m``. A provider baked into the
+    model name reaches the inference API verbatim — ``qwen3.6-plus@opencode-go``
+    is rejected as an unknown model — so the provider must travel in its own
+    ``--provider`` flag to actually switch providers for the node, overriding
+    the profile's configured default (a node with ``...@opencode-go`` must run
+    on opencode-go even when the profile defaults to a different provider).
+
+    Flags are emitted only when set, so a node without a model/skills falls back
+    to the profile's configured model and skill set."""
     argv = [hermes_bin, "-p", profile]
     for skill in skills or []:
         name = str(skill).strip()
         if name:
             argv += ["--skills", name]
     if model:
-        argv += ["-m", model]
+        model_name, _, provider = model.partition("@")
+        argv += ["-m", model_name]
+        if provider:
+            argv += ["--provider", provider]
     argv += ["-z", prompt]
     return argv
 
