@@ -45,6 +45,23 @@ def test_substitution_is_not_recursive() -> None:
     assert out == "{{d}} literal"
 
 
+def test_cross_placeholder_token_in_output_is_not_resubstituted() -> None:
+    # node a's output literally contains '{{y}}'; resolving y must NOT reach into
+    # a's already-injected text. Single-pass substitution over the prompt.
+    out = resolve_input_mapping(
+        "{{x}} {{y}}",
+        {"x": "{{nodes.a.output}}", "y": "{{nodes.b.output}}"},
+        {"a": "INJECT {{y}}", "b": "B"},
+    )
+    assert out == "INJECT {{y}} B"
+
+
+def test_output_with_regex_replacement_chars_is_literal() -> None:
+    # A backreference-like token in the output must be inserted verbatim.
+    out = resolve_input_mapping("{{d}}", {"d": "{{nodes.a.output}}"}, {"a": r"\1 \g<0>"})
+    assert out == r"\1 \g<0>"
+
+
 def test_missing_source_output_raises() -> None:
     with pytest.raises(UnresolvedInput):
         resolve_input_mapping("{{d}}", {"d": "{{nodes.a.output}}"}, {"a": None})
