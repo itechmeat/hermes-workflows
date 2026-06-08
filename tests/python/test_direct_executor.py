@@ -194,6 +194,28 @@ def test_executor_default_timeout_applies_without_a_node_timeout(tmp_path, store
     assert completion.outcome == "failure"
 
 
+def test_detached_child_holding_stdio_does_not_block_settling(tmp_path, store_dir) -> None:
+    """The agent may spawn a detached child that outlives it and inherits its
+    stdio (e.g. `hermes send`'s delivery worker). With pipe capture the node
+    would hang until that grandchild exits — past its own timeout. Capturing to
+    a file decouples them: the node settles as soon as the agent itself exits."""
+    # `sleep 5 &` leaks a backgrounded grandchild holding the inherited stdio;
+    # the agent then prints and exits. timeout is a short 2s, the wait deadline
+    # 4s — both shorter than the 5s grandchild, so settling proves we did not
+    # block on it.
+    hermes = _fake_hermes(tmp_path / "hermes", 'sleep 5 & echo "done: $PROMPT"')
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=2)
+    handle = ex.schedule(
+        run_id="run-1",
+        node_id="n",
+        workflow_id="wf",
+        params={"assignee": "researcher", "prompt": "go"},
+    )
+    completion = _wait_settled(ex, handle, deadline_s=4)
+    assert completion.outcome == "success"
+    assert completion.output == "done: go"
+
+
 def test_poll_unknown_handle_is_not_settled(tmp_path, store_dir) -> None:
     ex = _executor(tmp_path, store_dir)
     completion = ex.poll("run-1:n:0")

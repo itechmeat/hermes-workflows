@@ -19,7 +19,9 @@ Kanban backend is durable through the board DB.
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
+import tempfile
 import threading
 from typing import Optional, Sequence
 
@@ -142,21 +144,60 @@ class DirectExecutor:
         # authorship; -p activates the profile, the env var pins it for the
         # child regardless of how it loads config. Mirrors the Kanban worker.
         env = {**os.environ, "HERMES_PROFILE": profile}
-        try:
-            proc = subprocess.run(
-                argv,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            return Completion(
-                settled=True,
-                outcome="failure",
-                output=f"agent timed out after {timeout:g}s",
-            )
+        # Capture to temp files, NOT pipes. The agent can spawn a detached child
+        # that outlives it and inherits its stdio (e.g. the `hermes send`
+        # delivery worker); a PIPE read — and subprocess's own timeout cleanup
+        # read — then blocks until that grandchild closes the pipe, so the node
+        # hangs forever past its timeout. A file has no reader/EOF coupling.
+        # start_new_session puts the worker in its own process group so the
+        # timeout path can SIGKILL the whole tree, detached children included.
+        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            try:
+                proc = subprocess.Popen(
+                    argv,
+                    stdin=subprocess.DEVNULL,
+                    stdout=out,
+                    stderr=err,
+                    env=env,
+                    start_new_session=True,
+                )
+            except FileNotFoundError as exc:
+                return Completion(
+                    settled=True,
+                    outcome="failure",
+                    output=f"agent runner {self.hermes_bin!r} not found: {exc}",
+                )
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                _kill_process_group(proc)
+                return Completion(
+                    settled=True,
+                    outcome="failure",
+                    output=f"agent timed out after {timeout:g}s",
+                )
+            stdout = _read_text(out)
+            stderr = _read_text(err)
         if proc.returncode == 0:
-            return Completion(settled=True, outcome="success", output=clip_output(proc.stdout))
-        detail = proc.stderr.strip() or proc.stdout.strip()
+            return Completion(settled=True, outcome="success", output=clip_output(stdout))
+        detail = stderr.strip() or stdout.strip()
         return Completion(settled=True, outcome="failure", output=clip_output(detail))
+
+
+def _read_text(handle) -> str:
+    handle.seek(0)
+    return handle.read().decode("utf-8", "replace")
+
+
+def _kill_process_group(proc: subprocess.Popen) -> None:
+    """SIGKILL the worker's whole process group — start_new_session made the
+    worker the group leader, so any detached child it spawned dies too — then
+    reap it so no zombie lingers."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        proc.kill()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
