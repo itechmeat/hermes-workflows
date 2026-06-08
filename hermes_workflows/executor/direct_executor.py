@@ -152,7 +152,11 @@ class DirectExecutor:
             model=params.get("model"),
             skills=params.get("skills"),
         )
-        timeout = params.get("timeout_seconds") or self.timeout_seconds
+        # Explicit None check, not `or`: a node that set a value (even a falsy
+        # one) gets it; only an unset timeout falls back to the executor default.
+        timeout = params.get("timeout_seconds")
+        if timeout is None:
+            timeout = self.timeout_seconds
         # HERMES_PROFILE is what tools (e.g. kanban_comment) read to attribute
         # authorship; -p activates the profile, the env var pins it for the
         # child regardless of how it loads config. Mirrors the Kanban worker.
