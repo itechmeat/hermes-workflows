@@ -21,6 +21,7 @@ from typing import Any, Callable, Optional, Sequence
 
 from . import cli_bridge, notifications, telemetry
 from .executor import CompositeExecutor, NodeExecutor
+from .resolve import UnresolvedInput, resolve_input_mapping
 
 # Statuses that still need future advances — the tick's liveness condition,
 # shared with the CLI/dashboard start paths that arm the tick.
@@ -526,6 +527,21 @@ class Engine:
             raise ValueError(f"no executor configured for scope '{scope_type}'")
         return executor
 
+    def _resolve_inputs(self, run: dict, params: dict) -> dict:
+        """Substitute a node's input_mapping placeholders with upstream outputs
+        from the run state. Returns a copy with the resolved prompt; the original
+        params (the compiled task) are left untouched. A no-mapping node is
+        returned unchanged. Raises UnresolvedInput when a reference cannot be
+        satisfied (handled by the caller)."""
+        mapping = params.get("input_mapping")
+        if not mapping:
+            return params
+        outputs = {nid: node.get("output") for nid, node in run["nodes"].items()}
+        resolved_prompt = resolve_input_mapping(params.get("prompt", ""), mapping, outputs)
+        resolved = dict(params)
+        resolved["prompt"] = resolved_prompt
+        return resolved
+
     def _schedule_node(
         self,
         executor: NodeExecutor,
@@ -537,6 +553,18 @@ class Engine:
         if params is None:
             return
         node = run["nodes"][node_id]
+        try:
+            params = self._resolve_inputs(run, params)
+        except UnresolvedInput as exc:
+            # A declared input could not be satisfied on this run (e.g. an
+            # unexecuted conditional source). Settle the node failure loudly
+            # rather than schedule it with an unresolved placeholder; the next
+            # advance routes the failure like any other settled node.
+            node["status"] = "completed"
+            node["outcome"] = "failure"
+            node["output"] = f"input resolution failed: {exc}"
+            node["seq"] = _max_seq(run) + 1
+            return
         handle = executor.schedule(
             run_id=run_id,
             node_id=node_id,
