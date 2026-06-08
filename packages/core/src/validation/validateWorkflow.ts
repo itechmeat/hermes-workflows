@@ -104,41 +104,7 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
     }
   }
 
-  // input_mapping references: each value is a well-formed reference to an
-  // ancestor node's output, and each declared placeholder is used in the prompt.
-  for (const node of workflow.nodes) {
-    if (node.type !== "agent_task" || node.input_mapping === undefined) continue;
-    for (const [key, ref] of Object.entries(node.input_mapping)) {
-      if (!node.prompt.includes(`{{${key}}}`)) {
-        err(
-          "unused_input_mapping",
-          `node '${node.id}'.input_mapping declares '${key}' but the prompt never references '{{${key}}}'`,
-        );
-      }
-      const match = INPUT_REF_PATTERN.exec(ref);
-      if (!match) {
-        err(
-          "invalid_input_mapping_ref",
-          `node '${node.id}'.input_mapping.${key} must be of the form '{{nodes.<id>.output}}', got '${ref}'`,
-        );
-        continue;
-      }
-      const source = match[1] as string;
-      if (!nodes.has(source)) {
-        err(
-          "unknown_input_mapping_node",
-          `node '${node.id}'.input_mapping.${key} references unknown node '${source}'`,
-        );
-        continue;
-      }
-      if (source === node.id || !reachableFrom(workflow, source).has(node.id)) {
-        err(
-          "non_ancestor_input_mapping",
-          `node '${node.id}'.input_mapping.${key} references '${source}', which is not an ancestor of '${node.id}'`,
-        );
-      }
-    }
-  }
+  validateInputMappings(workflow, nodes, err);
 
   // Exactly one entry node; at least one finish; reachability.
   const entries = entryNodes(workflow);
@@ -192,6 +158,48 @@ function validateBranches(workflow: Workflow, err: (code: string, message: strin
         "incomplete_branch",
         `node '${node.id}' branches on node_status but covers neither both outcomes nor a fallback edge`,
       );
+    }
+  }
+}
+
+// input_mapping references: each value is a well-formed reference to an
+// ancestor node's output, and each declared placeholder is used in the prompt.
+function validateInputMappings(
+  workflow: Workflow,
+  nodes: ReturnType<typeof nodeMap>,
+  err: (code: string, message: string) => void,
+): void {
+  for (const node of workflow.nodes) {
+    if (node.type !== "agent_task" || node.input_mapping === undefined) continue;
+    for (const [key, ref] of Object.entries(node.input_mapping)) {
+      if (!node.prompt.includes(`{{${key}}}`)) {
+        err(
+          "unused_input_mapping",
+          `node '${node.id}'.input_mapping declares '${key}' but the prompt never references '{{${key}}}'`,
+        );
+      }
+      const match = INPUT_REF_PATTERN.exec(ref);
+      if (!match) {
+        err(
+          "invalid_input_mapping_ref",
+          `node '${node.id}'.input_mapping.${key} must be of the form '{{nodes.<id>.output}}', got '${ref}'`,
+        );
+        continue;
+      }
+      const source = match[1] as string;
+      if (!nodes.has(source)) {
+        err(
+          "unknown_input_mapping_node",
+          `node '${node.id}'.input_mapping.${key} references unknown node '${source}'`,
+        );
+        continue;
+      }
+      if (source === node.id || !reachableFrom(workflow, source).has(node.id)) {
+        err(
+          "non_ancestor_input_mapping",
+          `node '${node.id}'.input_mapping.${key} references '${source}', which is not an ancestor of '${node.id}'`,
+        );
+      }
     }
   }
 }
