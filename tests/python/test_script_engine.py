@@ -32,7 +32,7 @@ def _engine(tmp_path: Path) -> Engine:
     return Engine(
         core_cli=["bun", "run", str(CLI)],
         db_path=str(tmp_path / "runs.db"),
-        direct=DirectExecutor(runner_dir=tmp_path / "runners", store_dir=tmp_path / "direct"),
+        direct=DirectExecutor(store_dir=tmp_path / "direct"),
         script=ScriptExecutor(store_dir=tmp_path / "scripts", env_allowlist=["PATH"]),
     )
 
@@ -79,7 +79,7 @@ def test_disabled_scripts_fail_the_run_on_advance(tmp_path: Path) -> None:
     eng = Engine(
         core_cli=["bun", "run", str(CLI)],
         db_path=str(tmp_path / "runs.db"),
-        direct=DirectExecutor(runner_dir=tmp_path / "runners", store_dir=tmp_path / "direct"),
+        direct=DirectExecutor(store_dir=tmp_path / "direct"),
         script=ScriptExecutor(
             store_dir=tmp_path / "scripts", env_allowlist=["PATH"], enabled=lambda: False
         ),

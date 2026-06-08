@@ -61,12 +61,6 @@ def script_env_allowlist() -> list[str]:
     return [name.strip() for name in str(raw).split(",") if name.strip()]
 
 
-def runner_dir() -> Path:
-    """Where profile runners live (``<profile>`` executables). Used by the
-    DirectExecutor to run global, unbound workflow nodes."""
-    return Path(os.environ.get("HERMES_AGENT_RUNNERS", str(hermes_home() / "bin" / "agents")))
-
-
 def direct_store_dir() -> Path:
     """Completion store for global (no-board) node runs."""
     return workflows_dir() / "direct"

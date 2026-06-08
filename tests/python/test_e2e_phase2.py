@@ -16,6 +16,8 @@ kb = pytest.importorskip("hermes_cli.kanban_db")
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import DirectExecutor, KanbanExecutor
 
+from conftest import fake_hermes_bin
+
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
 PROJECT_SPEC = str(ROOT / "examples" / "feature-development.workflow.yaml")
@@ -31,14 +33,6 @@ def _complete(board: sqlite3.Connection, task_id: str) -> None:
         (task_id,),
     )
     board.commit()
-
-
-def _stub_runners(runner_dir: Path, *profiles: str) -> None:
-    runner_dir.mkdir(parents=True, exist_ok=True)
-    for profile in profiles:
-        path = runner_dir / profile
-        path.write_text('#!/usr/bin/env bash\necho "ok: $1"\n')
-        path.chmod(0o755)
 
 
 def _node(run: dict, node_id: str) -> dict:
@@ -57,7 +51,7 @@ def test_project_backend_runs_to_completion_on_project_board(tmp_path: Path) -> 
         core_cli=CLI,
         db_path=str(tmp_path / "runs.db"),
         kanban_factory=kanban_factory,
-        direct=DirectExecutor(runner_dir=tmp_path / "r", store_dir=tmp_path / "s"),
+        direct=DirectExecutor(store_dir=tmp_path / "s"),
     )
 
     run = eng.run(PROJECT_SPEC, "p-1", project_id="acme")
@@ -78,11 +72,12 @@ def test_project_backend_runs_to_completion_on_project_board(tmp_path: Path) -> 
 
 
 def test_global_backend_runs_to_completion_without_cards(tmp_path: Path) -> None:
-    _stub_runners(tmp_path / "r", "researcher", "analyst", "writer", "publisher")
     eng = Engine(
         core_cli=CLI,
         db_path=str(tmp_path / "runs.db"),
-        direct=DirectExecutor(runner_dir=tmp_path / "r", store_dir=tmp_path / "s"),
+        direct=DirectExecutor(
+            hermes_bin=fake_hermes_bin(tmp_path / "hermes"), store_dir=tmp_path / "s"
+        ),
     )
 
     run = eng.run(GLOBAL_SPEC, "g-1")

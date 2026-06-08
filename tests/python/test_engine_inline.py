@@ -63,7 +63,7 @@ def _engine(tmp_path: Path, mode: str) -> Engine:
     return Engine(
         core_cli=["bun", "run", str(CLI)],
         db_path=str(tmp_path / "runs.db"),
-        direct=DirectExecutor(runner_dir=tmp_path / "runners", store_dir=tmp_path / "direct"),
+        direct=DirectExecutor(store_dir=tmp_path / "direct"),
         script=ScriptExecutor(store_dir=tmp_path / "scripts", env_allowlist=["PATH"]),
         default_mode=mode,
     )

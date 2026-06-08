@@ -44,9 +44,7 @@ def build_engine() -> Engine:
         core_cli=config.core_cli(),
         db_path=str(config.runs_db_path()),
         kanban=KanbanExecutor(kb.connect(board=config.runtime_board())),
-        direct=DirectExecutor(
-            runner_dir=config.runner_dir(), store_dir=config.direct_store_dir()
-        ),
+        direct=DirectExecutor(store_dir=config.direct_store_dir()),
         # The script executor runs script nodes locally in any scope. The enable
         # gate is enforced at the executor (consulted at schedule time, so every
         # advance path is covered) as well as fail-fast at the run entrypoint;

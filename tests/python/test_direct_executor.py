@@ -1,6 +1,9 @@
-"""P1.3 — DirectExecutor: run a global node by invoking the profile runner
-(``<runner_dir>/<profile>``) with the prompt, capture stdout, persist the
-completion under a results store keyed by an idempotent handle.
+"""P1.3 — DirectExecutor: run a global node by invoking the Hermes agent CLI in
+oneshot mode (``hermes -p <profile> [--skills X]... [-m <model>] -z <prompt>``),
+capture stdout, persist the completion under a results store keyed by an
+idempotent handle. Oneshot (-z) prints only the agent's final message, which
+becomes the node output — the same profile/model/skills contract the Kanban
+dispatcher uses for project nodes.
 """
 
 from __future__ import annotations
@@ -12,24 +15,36 @@ from pathlib import Path
 import pytest
 
 from hermes_workflows.executor import Completion
-from hermes_workflows.executor.direct_executor import DirectExecutor, RunnerNotFound
+from hermes_workflows.executor.direct_executor import (
+    DirectExecutor,
+    ProfileNotSpecified,
+    build_agent_argv,
+)
 
 
-def _runner(runner_dir: Path, profile: str, body: str) -> None:
-    runner_dir.mkdir(parents=True, exist_ok=True)
-    path = runner_dir / profile
-    path.write_text("#!/usr/bin/env bash\n" + body + "\n")
+def _fake_hermes(path: Path, body: str) -> Path:
+    """A stand-in for the ``hermes`` binary. Parses the oneshot prompt out of
+    ``-z`` so a test can echo it back, then runs ``body``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "#!/usr/bin/env bash\n"
+        'ARGV=("$@")\n'
+        'PROMPT=""\n'
+        'while [ $# -gt 0 ]; do case "$1" in -z) shift; PROMPT="$1";; esac; shift; done\n'
+        f"{body}\n"
+    )
     path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IRWXU)
+    return path
 
 
 @pytest.fixture()
-def dirs(tmp_path: Path):
-    return tmp_path / "runners", tmp_path / "store"
+def store_dir(tmp_path: Path) -> Path:
+    return tmp_path / "store"
 
 
-def _executor(dirs, timeout: float = 10.0) -> DirectExecutor:
-    runner_dir, store_dir = dirs
-    return DirectExecutor(runner_dir=runner_dir, store_dir=store_dir, timeout_seconds=timeout)
+def _executor(tmp_path: Path, store_dir: Path, *, timeout: float = 10.0) -> DirectExecutor:
+    hermes = _fake_hermes(tmp_path / "hermes", 'echo "done: $PROMPT"')
+    return DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=timeout)
 
 
 def _wait_settled(ex: DirectExecutor, handle: str, deadline_s: float = 10.0) -> Completion:
@@ -44,10 +59,84 @@ def _wait_settled(ex: DirectExecutor, handle: str, deadline_s: float = 10.0) -> 
     raise AssertionError(f"handle {handle} never settled")
 
 
-def test_success_runner_settles_with_stdout(dirs) -> None:
-    runner_dir, _ = dirs
-    _runner(runner_dir, "researcher", 'echo "done: $1"')
-    ex = _executor(dirs)
+# --- the contract: model + skills + profile reach the agent ----------------
+
+
+def test_build_argv_carries_profile_skills_and_model() -> None:
+    """The selected agent (profile), skills, and model override must all land in
+    the canonical oneshot command — this is the global-scope equivalent of the
+    Kanban card's assignee / skills / model_override columns."""
+    argv = build_agent_argv(
+        "hermes",
+        "product-tech-lead",
+        "do the thing",
+        model="deepseek-v4-pro@opencode-go",
+        skills=["research-paper-writing", "blog-content-pipeline"],
+    )
+    assert argv == [
+        "hermes",
+        "-p",
+        "product-tech-lead",
+        "--skills",
+        "research-paper-writing",
+        "--skills",
+        "blog-content-pipeline",
+        "-m",
+        "deepseek-v4-pro@opencode-go",
+        "-z",
+        "do the thing",
+    ]
+
+
+def test_build_argv_omits_absent_model_and_skills() -> None:
+    """A node with no model / no skills must not emit empty flags — the agent
+    falls back to the profile's configured model and default skill set."""
+    argv = build_agent_argv("hermes", "fullstack-engineer", "go", model=None, skills=None)
+    assert argv == ["hermes", "-p", "fullstack-engineer", "-z", "go"]
+    assert "--skills" not in argv
+    assert "-m" not in argv
+
+
+def test_build_argv_skips_blank_skill_names() -> None:
+    argv = build_agent_argv("hermes", "p", "go", skills=["", "real", "  "])
+    assert argv.count("--skills") == 1
+    assert "real" in argv
+
+
+def test_invocation_passes_skills_and_model_through_subprocess(tmp_path, store_dir) -> None:
+    """End-to-end through the real subprocess path: the fake hermes records the
+    argv it was launched with, proving model/skills are not dropped."""
+    capture = tmp_path / "argv.txt"
+    hermes = _fake_hermes(
+        tmp_path / "hermes",
+        f'printf "%s\\n" "${{ARGV[@]}}" > {capture}\necho "ok: $PROMPT"',
+    )
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
+    handle = ex.schedule(
+        run_id="run-1",
+        node_id="analyze",
+        workflow_id="wf",
+        params={
+            "assignee": "product-tech-lead",
+            "prompt": "design scopes",
+            "model": "deepseek-v4-pro@opencode-go",
+            "skills": ["research-paper-writing"],
+        },
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "success"
+    recorded = capture.read_text()
+    assert "-p\nproduct-tech-lead" in recorded
+    assert "--skills\nresearch-paper-writing" in recorded
+    assert "-m\ndeepseek-v4-pro@opencode-go" in recorded
+    assert "-z\ndesign scopes" in recorded
+
+
+# --- lifecycle / durability (preserved from the runner_dir contract) --------
+
+
+def test_success_settles_with_final_message_stdout(tmp_path, store_dir) -> None:
+    ex = _executor(tmp_path, store_dir)
     handle = ex.schedule(
         run_id="run-1",
         node_id="research",
@@ -61,10 +150,9 @@ def test_success_runner_settles_with_stdout(dirs) -> None:
     assert completion.output == "done: go"
 
 
-def test_nonzero_runner_settles_failure(dirs) -> None:
-    runner_dir, _ = dirs
-    _runner(runner_dir, "researcher", 'echo "boom" >&2; exit 3')
-    ex = _executor(dirs)
+def test_nonzero_exit_settles_failure(tmp_path, store_dir) -> None:
+    hermes = _fake_hermes(tmp_path / "hermes", 'echo "boom" >&2; exit 3')
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
     handle = ex.schedule(
         run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"}
     )
@@ -73,18 +161,32 @@ def test_nonzero_runner_settles_failure(dirs) -> None:
     assert "boom" in (completion.output or "")
 
 
-def test_missing_runner_raises_clear_error(dirs) -> None:
-    ex = _executor(dirs)
-    with pytest.raises(RunnerNotFound):
-        ex.schedule(
-            run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "ghost"}
-        )
+def test_missing_profile_raises_clear_error(tmp_path, store_dir) -> None:
+    ex = _executor(tmp_path, store_dir)
+    with pytest.raises(ProfileNotSpecified):
+        ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params={})
 
 
-def test_runner_timeout_settles_failure(dirs) -> None:
-    runner_dir, _ = dirs
-    _runner(runner_dir, "slow", "sleep 5")
-    ex = _executor(dirs, timeout=0.3)
+def test_per_node_timeout_overrides_the_executor_default(tmp_path, store_dir) -> None:
+    """The node's own ``timeout_seconds`` is honored — a slow agent fails at the
+    node deadline, not the executor's generous default."""
+    hermes = _fake_hermes(tmp_path / "hermes", "sleep 5")
+    # Generous executor default; the per-node timeout (0.3s) must win.
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=600)
+    handle = ex.schedule(
+        run_id="run-1",
+        node_id="n",
+        workflow_id="wf",
+        params={"assignee": "slow", "timeout_seconds": 0.3},
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "failure"
+    assert "timed out" in (completion.output or "")
+
+
+def test_executor_default_timeout_applies_without_a_node_timeout(tmp_path, store_dir) -> None:
+    hermes = _fake_hermes(tmp_path / "hermes", "sleep 5")
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=0.3)
     handle = ex.schedule(
         run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "slow"}
     )
@@ -92,39 +194,29 @@ def test_runner_timeout_settles_failure(dirs) -> None:
     assert completion.outcome == "failure"
 
 
-def test_poll_unknown_handle_is_not_settled(dirs) -> None:
-    ex = _executor(dirs)
+def test_poll_unknown_handle_is_not_settled(tmp_path, store_dir) -> None:
+    ex = _executor(tmp_path, store_dir)
     completion = ex.poll("run-1:n:0")
     assert completion.settled is False
     assert completion.outcome is None
 
 
-def test_handle_is_idempotent_per_iteration(dirs) -> None:
-    runner_dir, _ = dirs
-    _runner(runner_dir, "researcher", 'echo "ok"')
-    ex = _executor(dirs)
-    first = ex.schedule(
-        run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"}
-    )
-    again = ex.schedule(
-        run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"}
-    )
+def test_handle_is_idempotent_per_iteration(tmp_path, store_dir) -> None:
+    ex = _executor(tmp_path, store_dir)
+    params = {"assignee": "researcher"}
+    first = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
+    again = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
     looped = ex.schedule(
-        run_id="run-1",
-        node_id="n",
-        workflow_id="wf",
-        params={"assignee": "researcher"},
-        iteration=1,
+        run_id="run-1", node_id="n", workflow_id="wf", params=params, iteration=1
     )
     assert first == again
     assert looped != first
 
 
-def test_settled_handle_is_not_re_executed(dirs) -> None:
-    runner_dir, store_dir = dirs
-    counter = store_dir.parent / "count"
-    _runner(runner_dir, "researcher", f'echo "x" >> {counter}')
-    ex = _executor(dirs)
+def test_settled_handle_is_not_re_executed(tmp_path, store_dir) -> None:
+    counter = tmp_path / "count"
+    hermes = _fake_hermes(tmp_path / "hermes", f'echo "x" >> {counter}')
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
     params = {"assignee": "researcher"}
     first = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
     _wait_settled(ex, first)
@@ -133,40 +225,36 @@ def test_settled_handle_is_not_re_executed(dirs) -> None:
     assert counter.read_text().count("x") == 1
 
 
-def test_persisted_completion_survives_a_fresh_executor(dirs) -> None:
-    runner_dir, _ = dirs
-    _runner(runner_dir, "researcher", 'echo "persisted"')
-    first = _executor(dirs)
+def test_persisted_completion_survives_a_fresh_executor(tmp_path, store_dir) -> None:
+    hermes = _fake_hermes(tmp_path / "hermes", 'echo "persisted"')
+    first = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
     handle = first.schedule(
         run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"}
     )
     _wait_settled(first, handle)
-    # A later tick is a fresh process / executor reading the same store dir.
-    reopened = _executor(dirs).poll(handle)
+    reopened = DirectExecutor(
+        hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10
+    ).poll(handle)
     assert reopened.settled is True
     assert reopened.outcome == "success"
     assert reopened.output == "persisted"
 
 
-def test_store_dir_is_created_on_demand(dirs) -> None:
-    runner_dir, store_dir = dirs
-    _runner(runner_dir, "researcher", 'echo "ok"')
+def test_store_dir_is_created_on_demand(tmp_path, store_dir) -> None:
+    ex = _executor(tmp_path, store_dir)
     assert not os.path.exists(store_dir)
-    _executor(dirs).schedule(
-        run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"}
-    )
+    ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher"})
     assert os.path.isdir(store_dir)
 
 
-def test_schedule_returns_before_the_runner_finishes(dirs) -> None:
-    """schedule() is non-blocking: the engine persists the scheduled state
-    right after, so a long node is visible in the run state while it works
-    (and a concurrent tick cannot double-start it)."""
+def test_schedule_returns_before_the_agent_finishes(tmp_path, store_dir) -> None:
+    """schedule() is non-blocking: the engine persists the scheduled state right
+    after, so a long node is visible while it works (and a concurrent tick
+    cannot double-start it)."""
     import time
 
-    runner_dir, _ = dirs
-    _runner(runner_dir, "slow", 'sleep 3; echo "done"')
-    ex = _executor(dirs)
+    hermes = _fake_hermes(tmp_path / "hermes", 'sleep 3; echo "done"')
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
     t0 = time.monotonic()
     handle = ex.schedule(
         run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "slow"}
@@ -178,11 +266,10 @@ def test_schedule_returns_before_the_runner_finishes(dirs) -> None:
     assert completion.output == "done"
 
 
-def test_inflight_handle_is_not_double_spawned(dirs) -> None:
-    runner_dir, store_dir = dirs
-    counter = store_dir.parent / "count"
-    _runner(runner_dir, "slow", f'echo "x" >> {counter}; sleep 1')
-    ex = _executor(dirs)
+def test_inflight_handle_is_not_double_spawned(tmp_path, store_dir) -> None:
+    counter = tmp_path / "count"
+    hermes = _fake_hermes(tmp_path / "hermes", f'echo "x" >> {counter}; sleep 1')
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
     params = {"assignee": "slow"}
     first = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)
     again = ex.schedule(run_id="run-1", node_id="n", workflow_id="wf", params=params)

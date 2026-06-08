@@ -28,6 +28,21 @@ def sibling_spec(tmp_path: Path, spec: Path, suffix: str = "b") -> Path:
     return path
 
 
+def fake_hermes_bin(path: Path, body: str = 'echo "ok"') -> str:
+    """A stand-in ``hermes`` executable for tests that exercise the global
+    (DirectExecutor) backend without a real agent. The executor invokes
+    ``hermes -p <profile> [--skills X]... [-m model] -z <prompt>``; this script
+    ignores the routing flags and runs ``body`` (which must exit 0 and print the
+    node's final message to stdout). Returns the path as a str for
+    ``DirectExecutor(hermes_bin=...)``."""
+    import stat
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/usr/bin/env bash\n" + body + "\n")
+    path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IRWXU)
+    return str(path)
+
+
 def _ensure_hermes_importable() -> None:
     try:
         import hermes_cli  # noqa: F401

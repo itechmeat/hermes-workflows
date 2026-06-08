@@ -2,7 +2,7 @@
 
 from .base import Completion, NodeExecutor, select_executor
 from .composite import CompositeExecutor
-from .direct_executor import DirectExecutor, RunnerNotFound
+from .direct_executor import DirectExecutor, ProfileNotSpecified, build_agent_argv
 from .kanban_executor import KanbanExecutor
 from .script_executor import ScriptExecutor
 
@@ -12,7 +12,8 @@ __all__ = [
     "select_executor",
     "KanbanExecutor",
     "DirectExecutor",
-    "RunnerNotFound",
+    "ProfileNotSpecified",
+    "build_agent_argv",
     "ScriptExecutor",
     "CompositeExecutor",
 ]

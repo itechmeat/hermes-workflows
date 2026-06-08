@@ -16,6 +16,8 @@ kb = pytest.importorskip("hermes_cli.kanban_db")
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import DirectExecutor, KanbanExecutor, ScriptExecutor
 
+from conftest import fake_hermes_bin
+
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ROOT / "packages" / "core" / "src" / "cli.ts"
 SPEC = ROOT / "examples" / "feature-development.workflow.yaml"
@@ -101,19 +103,11 @@ def test_fix_loop_reruns_validate(engine: Engine) -> None:
     assert _node(run, "validate")["hermes_task_id"] != first_validate_task
 
 
-def _stub_runners(runner_dir: Path, *profiles: str) -> None:
-    runner_dir.mkdir(parents=True, exist_ok=True)
-    for profile in profiles:
-        path = runner_dir / profile
-        path.write_text('#!/usr/bin/env bash\necho "ok: $1"\n')
-        path.chmod(0o755)
-
-
 def test_global_workflow_runs_via_direct_executor(tmp_path: Path) -> None:
-    runner_dir = tmp_path / "runners"
-    _stub_runners(runner_dir, "researcher", "analyst", "writer", "publisher")
     direct = DirectExecutor(
-        runner_dir=runner_dir, store_dir=tmp_path / "store", timeout_seconds=10
+        hermes_bin=fake_hermes_bin(tmp_path / "hermes"),
+        store_dir=tmp_path / "store",
+        timeout_seconds=10,
     )
     eng = Engine(
         core_cli=["bun", "run", str(CLI)],
@@ -151,16 +145,13 @@ def test_direct_node_reports_running_while_the_runner_works(tmp_path: Path) -> N
     """A long agent node must show `running`, not a stale `scheduled`, while
     its runner works — the editor playback and the run inspector both render
     this status live."""
-    runner_dir = tmp_path / "runners"
-    runner_dir.mkdir(parents=True)
-    slow = runner_dir / "researcher"
-    slow.write_text('#!/usr/bin/env bash\nsleep 3\necho "ok"\n')
-    slow.chmod(0o755)
     eng = Engine(
         core_cli=["bun", "run", str(CLI)],
         db_path=str(tmp_path / "runs.db"),
         direct=DirectExecutor(
-            runner_dir=runner_dir, store_dir=tmp_path / "store", timeout_seconds=30
+            hermes_bin=fake_hermes_bin(tmp_path / "hermes", 'sleep 3; echo "ok"'),
+            store_dir=tmp_path / "store",
+            timeout_seconds=30,
         ),
     )
 
