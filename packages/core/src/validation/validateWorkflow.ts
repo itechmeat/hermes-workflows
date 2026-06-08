@@ -26,6 +26,9 @@ const CRON_TOKEN = /^(\*|\?|\*\/\d+|\d+(-\d+)?(\/\d+)?(,\d+(-\d+)?(\/\d+)?)*)$/;
 // it from escaping the storage root via path traversal.
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+// An input_mapping value references exactly one prior node's captured output.
+const INPUT_REF_PATTERN = /^\{\{nodes\.([A-Za-z0-9_-]+)\.output\}\}$/;
+
 function isValidCron(expr: string): boolean {
   const parts = expr.trim().split(/\s+/);
   return parts.length === 5 && parts.every((p) => CRON_TOKEN.test(p));
@@ -98,6 +101,42 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
   for (const node of workflow.nodes) {
     if (node.type === "finish" && outgoingEdges(workflow, node.id).length > 0) {
       err("finish_has_outgoing", `finish node '${node.id}' must not have outgoing edges`);
+    }
+  }
+
+  // input_mapping references: each value is a well-formed reference to an
+  // ancestor node's output, and each declared placeholder is used in the prompt.
+  for (const node of workflow.nodes) {
+    if (node.type !== "agent_task" || node.input_mapping === undefined) continue;
+    for (const [key, ref] of Object.entries(node.input_mapping)) {
+      if (!node.prompt.includes(`{{${key}}}`)) {
+        err(
+          "unused_input_mapping",
+          `node '${node.id}'.input_mapping declares '${key}' but the prompt never references '{{${key}}}'`,
+        );
+      }
+      const match = INPUT_REF_PATTERN.exec(ref);
+      if (!match) {
+        err(
+          "invalid_input_mapping_ref",
+          `node '${node.id}'.input_mapping.${key} must be of the form '{{nodes.<id>.output}}', got '${ref}'`,
+        );
+        continue;
+      }
+      const source = match[1] as string;
+      if (!nodes.has(source)) {
+        err(
+          "unknown_input_mapping_node",
+          `node '${node.id}'.input_mapping.${key} references unknown node '${source}'`,
+        );
+        continue;
+      }
+      if (source === node.id || !reachableFrom(workflow, source).has(node.id)) {
+        err(
+          "non_ancestor_input_mapping",
+          `node '${node.id}'.input_mapping.${key} references '${source}', which is not an ancestor of '${node.id}'`,
+        );
+      }
     }
   }
 

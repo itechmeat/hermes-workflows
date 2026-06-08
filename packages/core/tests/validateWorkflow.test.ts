@@ -240,3 +240,53 @@ describe("validateWorkflow — script nodes", () => {
     expect(validateWorkflow(w).valid).toBe(true);
   });
 });
+
+describe("validateWorkflow — input_mapping", () => {
+  // a -> b -> done, with b consuming a's output by default.
+  function im(
+    mapping: Record<string, string>,
+    bPrompt = "use {{data}}",
+    extraNodes: unknown[] = [],
+    extraEdges: unknown[] = [],
+  ): Workflow {
+    return wf(
+      base({
+        nodes: [
+          { id: "a", type: "agent_task", prompt: "produce" },
+          { id: "b", type: "agent_task", prompt: bPrompt, input_mapping: mapping },
+          { id: "done", type: "finish" },
+          ...extraNodes,
+        ],
+        edges: [{ from: "a", to: "b" }, { from: "b", to: "done" }, ...extraEdges],
+      }),
+    );
+  }
+
+  test("accepts a well-formed reference to an ancestor that the prompt uses", () => {
+    expect(validateWorkflow(im({ data: "{{nodes.a.output}}" })).valid).toBe(true);
+  });
+
+  test("rejects a malformed reference", () => {
+    expect(codes(im({ data: "{{nodes.a}}" }))).toContain("invalid_input_mapping_ref");
+    expect(codes(im({ data: "nodes.a.output" }))).toContain("invalid_input_mapping_ref");
+  });
+
+  test("rejects a reference to an unknown node", () => {
+    expect(codes(im({ data: "{{nodes.ghost.output}}" }))).toContain("unknown_input_mapping_node");
+  });
+
+  test("rejects a reference to a non-ancestor node", () => {
+    // b references done, which is downstream of b, not an ancestor.
+    expect(codes(im({ data: "{{nodes.done.output}}" }))).toContain("non_ancestor_input_mapping");
+  });
+
+  test("rejects a self-reference", () => {
+    expect(codes(im({ data: "{{nodes.b.output}}" }))).toContain("non_ancestor_input_mapping");
+  });
+
+  test("rejects a declared placeholder the prompt never references", () => {
+    expect(codes(im({ data: "{{nodes.a.output}}" }, "no placeholder here"))).toContain(
+      "unused_input_mapping",
+    );
+  });
+});

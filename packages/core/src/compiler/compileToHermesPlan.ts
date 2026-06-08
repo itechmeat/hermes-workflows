@@ -18,6 +18,9 @@ export interface CompiledKanbanTask {
    *  interpreter of the spec; the Python orchestrator just executes this. */
   title?: string;
   prompt: string;
+  /** Placeholder -> `{{nodes.<id>.output}}` references the engine resolves into
+   *  the prompt at schedule time. Carried verbatim; the engine substitutes. */
+  input_mapping?: Record<string, string>;
   model?: string;
   skills?: string[];
   workspace?: "scratch" | "worktree";
@@ -85,6 +88,7 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
       prompt: node.prompt,
     };
     if (node.title !== undefined) task.title = node.title;
+    if (node.input_mapping !== undefined) task.input_mapping = node.input_mapping;
     if (node.model !== undefined) task.model = node.model;
     if (node.skills !== undefined) task.skills = node.skills;
     if (node.workspace !== undefined) task.workspace = node.workspace.type;

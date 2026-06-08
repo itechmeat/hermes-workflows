@@ -119,3 +119,31 @@ describe("compileToHermesPlan — script steps", () => {
     expect(plan.script_steps[0]).toEqual({ node: "build", kind: "script", command: "make" });
   });
 });
+
+describe("compileToHermesPlan — input_mapping", () => {
+  test("carries a node's input_mapping onto its compiled task", () => {
+    const plan = compileToHermesPlan(
+      wf(
+        [
+          { id: "a", type: "agent_task", prompt: "produce" },
+          {
+            id: "b",
+            type: "agent_task",
+            prompt: "use {{data}}",
+            input_mapping: { data: "{{nodes.a.output}}" },
+          },
+          { id: "done", type: "finish" },
+        ],
+        [
+          { from: "a", to: "b" },
+          { from: "b", to: "done" },
+        ],
+      ),
+    );
+    const a = plan.kanban_tasks.find((t) => t.node === "a");
+    const b = plan.kanban_tasks.find((t) => t.node === "b");
+    expect(b?.input_mapping).toEqual({ data: "{{nodes.a.output}}" });
+    // A node without a mapping carries none (the field stays absent, not {}).
+    expect(a?.input_mapping).toBeUndefined();
+  });
+});
