@@ -29,6 +29,22 @@ Both implement the same contract:
 - `poll(handle) -> Completion` reports whether the node has settled and, once
   settled, its `success` / `failure` outcome and captured output.
 
+## Inter-node inputs
+
+An `agent_task` consumes a prior node's output through its `input_mapping`: each
+entry maps a placeholder to a `{{nodes.<id>.output}}` reference, and the prompt
+uses `{{placeholder}}`. The engine resolves these at the single scheduling seam
+(`_schedule_node`, just before the executor runs), substituting each placeholder
+with the referenced node's captured output from the run state in one pass — so
+both backends behave identically and an injected output is never re-scanned for
+another placeholder. A reference that cannot be satisfied on this run (an
+upstream node that produced no output, e.g. an unexecuted conditional branch)
+settles the node `failure` with a clear message rather than scheduling it with an
+unresolved placeholder. Static checks (the source is an ancestor, the placeholder
+is used) run at author time in `validateWorkflow`; this runtime path only guards
+the per-run gap. Data therefore flows through the run, not a host file, keeping a
+workflow exportable.
+
 ## Boards (project scope)
 
 A project run's cards live on the **project's own board** — the board slug is

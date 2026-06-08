@@ -47,6 +47,26 @@ for export from the Runs view. See the Observability section in
 - `human_review` — pause for a human decision (channel-agnostic resolution)
 - `finish` — terminate the run
 
+## Passing data between nodes
+
+An `agent_task` can consume a prior node's output instead of a shared file. Declare the
+inputs it needs and reference them by placeholder in the prompt:
+
+```yaml
+- id: analyze
+  type: agent_task
+  prompt: "Design scopes from this inventory:\n{{inventory}}"
+  input_mapping:
+    inventory: "{{nodes.collect.output}}"
+```
+
+At schedule time the engine substitutes each `{{placeholder}}` with the referenced node's
+captured output. References are validated when the workflow is authored: the source must be a
+prior (ancestor) node, every declared placeholder must appear in the prompt, and an output that
+never materialised fails the node loudly rather than substituting empty text. Because the data
+flows through the run state, the workflow stays fully exportable and editable — no host path is
+baked into the graph.
+
 ## Execution
 
 The workflow scope picks the execution backend: a **project** run schedules durable Kanban cards

@@ -14,6 +14,16 @@ playback: run the workflow you are editing and watch it play on the canvas.
 
 ### Added
 
+- Inter-node data flow: an `agent_task` can consume a prior node's output by
+  declaring `input_mapping: { <placeholder>: "{{nodes.<id>.output}}" }` and
+  referencing `{{<placeholder>}}` in its prompt. The engine substitutes each
+  placeholder with the referenced node's captured output at schedule time (one
+  pass, for both the global and project backends), so a workflow passes data
+  through the run state instead of a host file and stays fully exportable. The
+  reference is validated when the workflow is authored — the source must be a
+  prior (ancestor) node, and every declared placeholder must appear in the
+  prompt — and an output that never materialised fails the node loudly rather
+  than substituting empty text.
 - Editor Play button: run the workflow straight from the editor page. A dirty
   graph is saved first (a failed save aborts the start); while the run plays,
   the editor canvas switches to the read-only run pipeline and shows live
