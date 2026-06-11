@@ -8,17 +8,18 @@
 // product name stays in the title/aria-label for assistive tech.
 
 const REPO_URL = "https://github.com/itechmeat/open-second-brain";
-// The host plugins page. Root-relative on purpose: this deployment serves the
-// dashboard at the origin root. (A path-prefixed deploy — Hermes
-// X-Forwarded-Prefix — would need this made prefix-aware, alongside the API
-// base; tracked separately.)
-const PLUGINS_URL = "/plugins";
+// The host plugins page, relative to the dashboard root. Under a path-prefixed
+// deploy (Hermes X-Forwarded-Prefix) the `basePath` prop carries the prefix so
+// the link resolves through the same proxy path the host's own pages use.
+const PLUGINS_PATH = "/plugins";
 
 export interface O2BStatusProps {
   /** true = connected, false = not connected, null = still checking. */
   connected: boolean | null;
   /** true = CLI installed, false = absent, null = still checking. */
   installed: boolean | null;
+  /** Host reverse-proxy prefix (e.g. `/hermes`), or `""` at root. */
+  basePath?: string;
 }
 
 function toneFor(connected: boolean | null): "ok" | "down" | "unknown" {
@@ -31,7 +32,11 @@ function labelFor(connected: boolean | null): string {
   return connected ? "Open Second Brain: connected" : "Open Second Brain: not connected";
 }
 
-export function O2BStatus({ connected, installed }: O2BStatusProps): React.ReactElement {
+export function O2BStatus({
+  connected,
+  installed,
+  basePath = "",
+}: O2BStatusProps): React.ReactElement {
   const tone = toneFor(connected);
   const label = labelFor(connected);
   const dot = <span className={`hw-o2b-dot hw-o2b-dot--${tone}`} aria-hidden="true" />;
@@ -46,7 +51,7 @@ export function O2BStatus({ connected, installed }: O2BStatusProps): React.React
     );
   }
 
-  const href = installed ? PLUGINS_URL : REPO_URL;
+  const href = installed ? `${basePath}${PLUGINS_PATH}` : REPO_URL;
   // The repo is an external destination; the host page is same-origin.
   const external = !installed;
   return (

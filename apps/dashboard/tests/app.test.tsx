@@ -78,6 +78,20 @@ describe("App shell", () => {
     expect(indicator).toHaveAttribute("target", "_blank");
   });
 
+  it("prefixes the /plugins link with the host base path under a proxy", async () => {
+    (window as unknown as { __HERMES_BASE_PATH__?: string }).__HERMES_BASE_PATH__ = "/hermes";
+    try {
+      render(<App client={stubClient()} />);
+      await screen.findByText("Deploy");
+      expect(screen.getByLabelText(/Open Second Brain: connected/i)).toHaveAttribute(
+        "href",
+        "/hermes/plugins",
+      );
+    } finally {
+      delete (window as unknown as { __HERMES_BASE_PATH__?: string }).__HERMES_BASE_PATH__;
+    }
+  });
+
   it("opens a workflow in the editor", async () => {
     render(<App client={stubClient()} />);
     await screen.findByText("Deploy");

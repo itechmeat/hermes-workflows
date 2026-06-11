@@ -37,6 +37,8 @@ export interface PluginHeaderProps {
   onNavigate: (key: string) => void;
   o2bConnected: boolean | null;
   o2bInstalled: boolean | null;
+  /** Host reverse-proxy prefix for the indicator's link. */
+  o2bBasePath: string;
   /** Callback refs for the left (title) and actions portal hosts. */
   leftRef: (el: HTMLElement | null) => void;
   actionsRef: (el: HTMLElement | null) => void;
@@ -48,6 +50,7 @@ export function PluginHeader({
   onNavigate,
   o2bConnected,
   o2bInstalled,
+  o2bBasePath,
   leftRef,
   actionsRef,
 }: PluginHeaderProps): React.ReactElement {
@@ -74,7 +77,7 @@ export function PluginHeader({
             );
           })}
         </nav>
-        <O2BStatus connected={o2bConnected} installed={o2bInstalled} />
+        <O2BStatus connected={o2bConnected} installed={o2bInstalled} basePath={o2bBasePath} />
       </div>
     </header>
   );

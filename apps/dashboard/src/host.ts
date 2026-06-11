@@ -20,7 +20,21 @@ declare global {
   interface Window {
     __HERMES_PLUGIN_SDK__?: HermesPluginSdk;
     __HERMES_PLUGINS__?: HermesPluginRegistry;
+    /** Reverse-proxy path prefix (e.g. `/hermes`), or `""` at root. The host
+     *  injects it and its own `fetchJSON` already prepends it to API paths;
+     *  we need it only for top-level navigation links we build ourselves. */
+    __HERMES_BASE_PATH__?: string;
   }
+}
+
+/** The host's reverse-proxy path prefix, normalised to match how the host
+ *  resolves it: a leading slash, no trailing slash, and `""` when served at the
+ *  origin root. Use it to prefix navigation links the plugin emits directly
+ *  (anything going through the host `fetchJSON` is already prefixed). */
+export function getBasePath(): string {
+  const raw = typeof window !== "undefined" ? (window.__HERMES_BASE_PATH__ ?? "") : "";
+  if (!raw) return "";
+  return (raw.startsWith("/") ? raw : `/${raw}`).replace(/\/+$/, "");
 }
 
 export function getSdk(): HermesPluginSdk {

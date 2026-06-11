@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./ui/theme.css";
-import { getApiClient } from "./host";
+import { getApiClient, getBasePath } from "./host";
 import type { WorkflowsApi } from "./api/client";
 import type { O2BStatus, SpecDetail } from "./api/types";
 import { TemplatesPage } from "./pages/TemplatesPage";
@@ -75,6 +75,7 @@ function viewToHash(view: View): string {
 // component (no createRoot of our own). View state is mirrored to the URL hash.
 export function App({ client }: AppProps): React.ReactElement {
   const api = client ?? getApiClient();
+  const basePath = useMemo(() => getBasePath(), []);
   const [view, setView] = useState<View>(() => parseHash());
   const [o2b, setO2b] = useState<O2BStatus | null>(null);
   const [leftHost, setLeftHost] = useState<HTMLElement | null>(null);
@@ -122,6 +123,7 @@ export function App({ client }: AppProps): React.ReactElement {
         onNavigate={(key) => go({ name: key } as View)}
         o2bConnected={o2b?.connected ?? null}
         o2bInstalled={o2b?.installed ?? null}
+        o2bBasePath={basePath}
         leftRef={setLeftHost}
         actionsRef={setActionsHost}
       />
