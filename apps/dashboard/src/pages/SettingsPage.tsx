@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
-import { Button, Checkbox, Field, Input, Select } from "../ui/components";
+import { Button, Field, Input, Select, Switch } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
 import type { SettingsField, SettingsSchema, SettingsValue, WorkflowSettings } from "../api/types";
 
@@ -108,6 +108,15 @@ interface FieldProps {
 function SettingField({ field, value, onChange }: FieldProps): React.ReactElement {
   const id = `hw-set-${field.key}`;
   const label = `${humanize(field.key)}${field.enforced ? "" : " (not yet enforced)"}`;
+  // A boolean is a single on/off toggle: render an inline Switch (switch first,
+  // then its label) rather than the stacked label-above-control Field layout.
+  if (field.type === "bool") {
+    return (
+      <Switch checked={Boolean(value)} onCheckedChange={(checked) => onChange(field.key, checked)}>
+        {label}
+      </Switch>
+    );
+  }
   return (
     <Field label={label} htmlFor={id}>
       <Control id={id} label={label} field={field} value={value} onChange={onChange} />
@@ -116,9 +125,9 @@ function SettingField({ field, value, onChange }: FieldProps): React.ReactElemen
 }
 
 // A native Input associates with the Field's `<label htmlFor>` via `id`. The
-// Base UI Select/Checkbox manage their own element ids, so they cannot be
-// targeted by `htmlFor`; they carry the label as `aria-label` (one reliable
-// accessible name). The visible Field label stays presentational for them.
+// Base UI Select manages its own element id, so it cannot be targeted by
+// `htmlFor`; it carries the label as `aria-label` (one reliable accessible
+// name). The visible Field label stays presentational for it.
 function Control({
   id,
   label,
@@ -126,15 +135,6 @@ function Control({
   value,
   onChange,
 }: FieldProps & { id: string; label: string }): React.ReactElement {
-  if (field.type === "bool") {
-    return (
-      <Checkbox
-        aria-label={label}
-        checked={Boolean(value)}
-        onCheckedChange={(checked) => onChange(field.key, checked)}
-      />
-    );
-  }
   if (field.type === "enum") {
     return (
       <Select

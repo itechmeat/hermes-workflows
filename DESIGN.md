@@ -42,7 +42,8 @@ the class names at its own theme. Keep it updated as the component set grows.
 | `Button`   | `Button`                | Base UI **does** have a Button (renders native `<button>`, Field/Form-aware). Keeps the `variant`/`size` class map. |
 | `Input`    | `Input`                 | Native `<input>`. `type="number"` is used directly for numeric fields — we do **not** use `NumberField` (its spinner widget is not the Hermes look). |
 | `Textarea` | — (native `<textarea>`) | Base UI has no textarea primitive. The wrapper is a native element carrying `hw-input`; it exists for call-site consistency, documented as having no Base UI equivalent. |
-| `Checkbox` | `Checkbox`              | A `role="checkbox"` widget (a `<span>`, not a native input). |
+| `Checkbox` | `Checkbox`              | A `role="checkbox"` widget (a `<span>`, not a native input). Use for multi-select option lists (e.g. the node inspector's review options). |
+| `Switch`   | `Switch`                | A `role="switch"` pill + sliding thumb, for a single on/off setting (the settings page uses it for `bool` fields). The switch sits first in its row, the label after. |
 | `Select`   | `Select`                | A portaled, keyboard-driven listbox (**not** a native `<select>`). |
 
 ### Styling contract
@@ -56,6 +57,9 @@ the class names at its own theme. Keep it updated as the component set grows.
 - The Checkbox is `.hw-checkbox-box` + `.hw-checkbox-indicator`, with
   `[data-checked]` flipping the fill. An inline-text checkbox is wrapped in the
   `.hw-checkbox` row.
+- The Switch is `.hw-switch` (track) + `.hw-switch-thumb`, with `[data-checked]`
+  switching the track colour and sliding the thumb; the inline row is
+  `.hw-switch-row`.
 - **Overlays portal to `<body>`.** The Select popup sets `z-index: 60` so it
   renders above the modal overlay (`z-index: 50`) when a select is used inside a
   dialog.
@@ -113,8 +117,9 @@ Interaction patterns:
   await userEvent.click(screen.getByRole("combobox", { name: "Profile" }));
   await userEvent.click(await screen.findByRole("option", { name: "qa-engineer" }));
   ```
-- **Checkbox** is queried by `getByRole("checkbox", { name })` and toggled with a
-  click; `toBeChecked()` reads its `aria-checked`.
+- **Checkbox** / **Switch** are queried by `getByRole("checkbox", { name })` /
+  `getByRole("switch", { name })` and toggled with a click — not `getByLabelText`,
+  which double-matches the inline-text label wrapper.
 
 ## Deferred (next migrations)
 

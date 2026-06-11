@@ -13,6 +13,7 @@ import {
   PageHeader,
   Select,
   type SelectItem,
+  Switch,
   Textarea,
 } from "../src/ui/components";
 
@@ -227,6 +228,21 @@ describe("Checkbox", () => {
     const box = screen.getByRole("checkbox", { name: "Accept" });
     expect(box).toHaveAttribute("aria-checked", "false");
     await userEvent.click(box);
+    expect(onCheckedChange).toHaveBeenCalledWith(true, expect.anything());
+  });
+});
+
+describe("Switch", () => {
+  it("renders a role=switch reflecting `checked` and toggles via onCheckedChange", async () => {
+    const onCheckedChange = vi.fn();
+    render(
+      <Switch checked={false} onCheckedChange={onCheckedChange}>
+        Fail open
+      </Switch>,
+    );
+    const sw = screen.getByRole("switch", { name: "Fail open" });
+    expect(sw).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(sw);
     expect(onCheckedChange).toHaveBeenCalledWith(true, expect.anything());
   });
 });

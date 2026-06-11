@@ -863,6 +863,53 @@ a.hw-o2b:hover {
   height: 12px;
 }
 
+/* --- Switch: a pill track + sliding thumb (Base UI Switch.Root span), for a
+ *     single on/off setting. The switch sits first in its row, label after. */
+.hw-switch-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  color: var(--color-muted-foreground, #9a9a9a);
+  cursor: pointer;
+}
+.hw-switch {
+  flex: none;
+  box-sizing: border-box;
+  width: 34px;
+  height: 20px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--color-input, var(--color-border, #2a2a2a));
+  background: var(--color-secondary, #2a2a2a);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.hw-switch[data-checked] {
+  background: var(--color-primary, #4a90e2);
+  border-color: transparent;
+}
+.hw-switch[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.hw-switch:focus-visible {
+  outline: 2px solid var(--color-ring, #4a90e2);
+  outline-offset: 1px;
+}
+.hw-switch-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-foreground, #ededed);
+  transition: translate 0.12s ease;
+}
+.hw-switch[data-checked] .hw-switch-thumb {
+  translate: 14px 0;
+  background: var(--color-primary-foreground, #fff);
+}
+
 /* --- Select: the trigger reuses `.hw-select` (input-like); these parts add the
  *     trigger layout and the portaled dark popup. */
 .hw-select-trigger {

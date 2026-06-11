@@ -47,7 +47,8 @@ describe("SettingsPage", () => {
     expect(screen.getByText("OpenSecondBrain")).toBeInTheDocument();
     expect(screen.getByLabelText(/default mode/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/max parallel runs/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/fail open/i)).toBeInTheDocument();
+    // A bool renders as a switch (role=switch), labelled by its inline text.
+    expect(screen.getByRole("switch", { name: /fail open/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/internal board/i)).toBeInTheDocument();
   });
 

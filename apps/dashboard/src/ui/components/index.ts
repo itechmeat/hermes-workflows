@@ -6,6 +6,7 @@ export { Field, type FieldProps } from "./Field";
 export { Input, type InputProps } from "./Input";
 export { Textarea, type TextareaProps } from "./Textarea";
 export { Checkbox, type CheckboxProps } from "./Checkbox";
+export { Switch, type SwitchProps } from "./Switch";
 export { Select, type SelectProps, type SelectItem } from "./Select";
 export { PageHeader, type PageHeaderProps } from "./PageHeader";
 export { Modal, type ModalProps } from "./Modal";
