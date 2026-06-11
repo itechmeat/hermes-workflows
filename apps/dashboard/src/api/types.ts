@@ -150,7 +150,11 @@ export interface RunOptions {
 }
 
 export interface O2BStatus {
+  /** Installed AND configured — actually usable. Drives the badge colour. */
   connected: boolean;
+  /** CLI present on the system. Drives the indicator's link target:
+   *  installed -> host `/plugins`; not installed -> the project repo. */
+  installed: boolean;
 }
 
 /** Models offered by one authenticated provider, for the agent_task model

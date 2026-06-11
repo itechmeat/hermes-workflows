@@ -55,7 +55,12 @@ def test_runs_route(client: TestClient) -> None:
 def test_o2b_status_route(client: TestClient) -> None:
     resp = client.get("/o2b-status")
     assert resp.status_code == 200
-    assert isinstance(resp.json()["connected"], bool)
+    payload = resp.json()
+    assert isinstance(payload["connected"], bool)
+    # `installed` drives the indicator's link target and is reported separately.
+    assert isinstance(payload["installed"], bool)
+    # connected implies installed (connected = installed AND configured).
+    assert not payload["connected"] or payload["installed"]
 
 
 def test_profiles_route(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

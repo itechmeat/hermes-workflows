@@ -326,7 +326,7 @@
   color: var(--color-muted-foreground, #9a9a9a);
 }
 
-/* OpenSecondBrain indicator: label + colour-coded dot. */
+/* Open Second Brain (O2B) indicator: label + colour-coded dot, links out. */
 .hw-o2b {
   display: inline-flex;
   align-items: center;
@@ -334,6 +334,16 @@
   font-size: 0.82em;
   color: var(--color-muted-foreground, #9a9a9a);
   white-space: nowrap;
+  text-decoration: none;
+}
+/* When the indicator is a link (O2B installed / available), give it the usual
+ *  affordances without adopting the browser's default link colour. */
+a.hw-o2b {
+  cursor: pointer;
+}
+a.hw-o2b:hover {
+  color: var(--color-foreground, #e6e6e6);
+  text-decoration: underline;
 }
 .hw-o2b-dot {
   width: 9px;

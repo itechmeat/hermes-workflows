@@ -84,7 +84,7 @@ describe("T0 bundling spike — built plugin bundle", () => {
       hostReact.createElement(App as React.ComponentType),
     );
     // The shell mounts using the host React (the SDK React getter fired above)
-    // and renders its chrome — here the OpenSecondBrain connection badge.
-    expect(container.textContent).toContain("OpenSecondBrain");
+    // and renders its chrome — here the Open Second Brain (O2B) indicator.
+    expect(container.textContent).toContain("O2B");
   });
 });

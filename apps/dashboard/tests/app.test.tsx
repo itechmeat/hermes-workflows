@@ -36,7 +36,7 @@ const run: RunState = {
 
 function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
   return {
-    o2bStatus: vi.fn(async () => ({ connected: true })),
+    o2bStatus: vi.fn(async () => ({ connected: true, installed: true })),
     listWorkflows: vi.fn(async () => [listItem]),
     getWorkflow: vi.fn(async () => detail),
     runWorkflow: vi.fn(async () => ({ run_id: "deploy-1", status: "running" as const })),
@@ -60,7 +60,22 @@ describe("App shell", () => {
     expect(await screen.findByText("Deploy")).toBeInTheDocument();
     // The status word is replaced by a colour dot; the full state lives on the
     // indicator's accessible name.
-    expect(screen.getByLabelText(/OpenSecondBrain: connected/i)).toBeInTheDocument();
+    const indicator = screen.getByLabelText(/Open Second Brain: connected/i);
+    expect(indicator).toBeInTheDocument();
+    expect(indicator).toHaveTextContent("O2B");
+    // Installed -> links to the host plugins page, same tab.
+    expect(indicator).toHaveAttribute("href", "/plugins");
+    expect(indicator).not.toHaveAttribute("target");
+  });
+
+  it("points the O2B indicator at the repo when O2B is not installed", async () => {
+    render(
+      <App client={stubClient({ o2bStatus: vi.fn(async () => ({ connected: false, installed: false })) })} />,
+    );
+    await screen.findByText("Deploy");
+    const indicator = screen.getByLabelText(/Open Second Brain: not connected/i);
+    expect(indicator).toHaveAttribute("href", "https://github.com/itechmeat/open-second-brain");
+    expect(indicator).toHaveAttribute("target", "_blank");
   });
 
   it("opens a workflow in the editor", async () => {

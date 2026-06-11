@@ -4,6 +4,12 @@ import { downloadTextFile, readTextFile } from "../templates/download";
 import { NewWorkflowModal } from "../templates/NewWorkflowModal";
 import { isValidSlug } from "../templates/slug";
 import { parseWorkflowJsonFile, workflowJsonFile } from "../templates/transfer";
+import {
+  describeImportNormalization,
+  modelKeySet,
+  normalizeWorkflowForImport,
+  type ImportCatalog,
+} from "../templates/normalizeImport";
 import { formatEpochSeconds, formatIso, orDash } from "../ui/format";
 import { Badge, Button, Menu, PageHeader } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
@@ -23,6 +29,23 @@ export interface TemplatesPageProps {
 
 function describeTrigger(trigger: Trigger): string {
   return trigger.type === "cron" ? `cron (${trigger.schedule})` : trigger.type;
+}
+
+/** Fetch the host's models/profiles/skills for import normalization. Each
+ *  dimension is resolved independently: a lookup that fails stays `undefined`
+ *  so its node field is left untouched (never stripped on a transient error)
+ *  and is reported as unverified. */
+async function loadImportCatalog(api: WorkflowsApi): Promise<ImportCatalog> {
+  const [models, profiles, skills] = await Promise.allSettled([
+    api.listModels(),
+    api.listProfiles(),
+    api.listSkills(),
+  ]);
+  const catalog: ImportCatalog = {};
+  if (models.status === "fulfilled") catalog.models = modelKeySet(models.value);
+  if (profiles.status === "fulfilled") catalog.profiles = new Set(profiles.value);
+  if (skills.status === "fulfilled") catalog.skills = new Set(skills.value);
+  return catalog;
 }
 
 type LoadState =
@@ -170,9 +193,20 @@ export function TemplatesPage({
         // parseWorkflowJsonFile throws the human-readable reason (bad JSON /
         // not a workflow export); everything semantic is core validation via
         // createWorkflow, whose 409/400 detail lands in the same status line.
-        .then((text) => api.createWorkflow(parseWorkflowJsonFile(text)))
-        .then((created) => {
-          setRunMessage(`Imported "${created.workflow.id}"`);
+        .then(async (text) => {
+          const parsed = parseWorkflowJsonFile(text);
+          // Reset models/profiles/skills this host doesn't have, so a workflow
+          // from another environment imports clean instead of carrying dangling
+          // references. A failed catalogue lookup leaves that dimension as-is.
+          const catalog = await loadImportCatalog(api);
+          const { body, resets, unverified } = normalizeWorkflowForImport(parsed, catalog);
+          const created = await api.createWorkflow(body);
+          return { created, summary: describeImportNormalization(resets, unverified) };
+        })
+        .then(({ created, summary }) => {
+          setRunMessage(
+            summary ? `Imported "${created.workflow.id}" (${summary})` : `Imported "${created.workflow.id}"`,
+          );
           reload();
         })
         .catch((err: unknown) =>

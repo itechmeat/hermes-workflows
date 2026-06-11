@@ -6,7 +6,7 @@ import { O2BStatus } from "./O2BStatus";
 // (which we can't populate — the page-header API is internal), so rather than
 // stack a second ad-hoc header we keep ONE plugin bar: a left slot for the
 // current context (workflow / run name), a centre slot for view actions, and a
-// right slot with the section nav + the OpenSecondBrain indicator.
+// right slot with the section nav + the Open Second Brain indicator.
 //
 // The left and centre are portal hosts: views (editor, run inspector) render
 // their title/actions into them via `useHeaderSlots`, so there is exactly one
@@ -36,6 +36,7 @@ export interface PluginHeaderProps {
   activeKey: string;
   onNavigate: (key: string) => void;
   o2bConnected: boolean | null;
+  o2bInstalled: boolean | null;
   /** Callback refs for the left (title) and actions portal hosts. */
   leftRef: (el: HTMLElement | null) => void;
   actionsRef: (el: HTMLElement | null) => void;
@@ -46,6 +47,7 @@ export function PluginHeader({
   activeKey,
   onNavigate,
   o2bConnected,
+  o2bInstalled,
   leftRef,
   actionsRef,
 }: PluginHeaderProps): React.ReactElement {
@@ -72,7 +74,7 @@ export function PluginHeader({
             );
           })}
         </nav>
-        <O2BStatus connected={o2bConnected} />
+        <O2BStatus connected={o2bConnected} installed={o2bInstalled} />
       </div>
     </header>
   );

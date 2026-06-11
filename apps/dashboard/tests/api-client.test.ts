@@ -314,11 +314,18 @@ describe("workflows API client", () => {
     expect(JSON.parse(String(call.init?.body))).toEqual({ internal_board: "b2", fail_open: false });
   });
 
-  it("reads the O2B status badge", async () => {
+  it("reads the O2B status badge (connected + installed)", async () => {
     const h = harness();
-    h.reply({ connected: true });
-    expect(await h.client.o2bStatus()).toEqual({ connected: true });
+    h.reply({ connected: true, installed: true });
+    expect(await h.client.o2bStatus()).toEqual({ connected: true, installed: true });
     expect(h.last().path).toBe(`${BASE}/o2b-status`);
+  });
+
+  it("lists host skills by name from /api/skills", async () => {
+    const h = harness();
+    h.reply([{ name: "github" }, { name: "" }, { other: 1 }, { name: "email" }]);
+    expect(await h.client.listSkills()).toEqual(["github", "email"]);
+    expect(h.last().path).toBe("/api/skills");
   });
 
   it("creates a workflow with a JSON POST to the collection route", async () => {

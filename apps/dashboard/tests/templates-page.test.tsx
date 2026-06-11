@@ -44,6 +44,9 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
       filename: `${id}.workflow.yaml`,
       yaml: `id: ${id}\n`,
     })),
+    listModels: vi.fn(async () => []),
+    listProfiles: vi.fn(async () => []),
+    listSkills: vi.fn(async () => []),
   };
   return { ...base, ...overrides } as unknown as WorkflowsApi;
 }
@@ -473,6 +476,93 @@ describe("TemplatesPage — JSON import", () => {
 
     expect(await screen.findByText(/not valid JSON/i)).toBeInTheDocument();
     expect(createWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("resets node model/profile/skills the host doesn't have, and reports it", async () => {
+    const bodyWithUnknowns = {
+      workflow: {
+        id: "imported",
+        name: "Imported",
+        nodes: [
+          {
+            id: "work",
+            type: "agent_task",
+            prompt: "do",
+            model: "ghost@nowhere",
+            profile: "missing-agent",
+            skills: ["known-skill", "ghost-skill"],
+          },
+          { id: "done", type: "finish" },
+        ],
+        edges: [{ from: "work", to: "done" }],
+      },
+    };
+    const createWorkflow = vi.fn(
+      async (_body: CreateWorkflowBody): Promise<SpecDetail> => ({
+        workflow: { id: "imported" } as never,
+        path: "",
+      }),
+    );
+    const client = stubClient({
+      listWorkflows: vi.fn(async () => items),
+      createWorkflow,
+      listModels: vi.fn(async () => [{ provider: "openai", label: "OpenAI", models: ["gpt-4o"] }]),
+      listProfiles: vi.fn(async () => ["known-agent"]),
+      listSkills: vi.fn(async () => ["known-skill"]),
+    });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await pickImportFile(importFile(JSON.stringify(bodyWithUnknowns)));
+
+    await waitFor(() => expect(createWorkflow).toHaveBeenCalledTimes(1));
+    const sent = createWorkflow.mock.calls[0]![0] as CreateWorkflowBody;
+    const work = sent.workflow.nodes.find((n) => n.id === "work")!;
+    // Unknown model + profile dropped (fall back to defaults); only the known
+    // skill survives.
+    expect(work).not.toHaveProperty("model");
+    expect(work).not.toHaveProperty("profile");
+    expect(work.type === "agent_task" && work.skills).toEqual(["known-skill"]);
+    expect(await screen.findByText(/reset unknown 1 model, 1 profile, 1 skill/i)).toBeInTheDocument();
+  });
+
+  it("leaves a dimension untouched when its host lookup fails", async () => {
+    const bodyWithModel = {
+      workflow: {
+        id: "imported",
+        name: "Imported",
+        nodes: [
+          { id: "work", type: "agent_task", prompt: "do", model: "ghost@nowhere" },
+          { id: "done", type: "finish" },
+        ],
+        edges: [{ from: "work", to: "done" }],
+      },
+    };
+    const createWorkflow = vi.fn(
+      async (_body: CreateWorkflowBody): Promise<SpecDetail> => ({
+        workflow: { id: "imported" } as never,
+        path: "",
+      }),
+    );
+    const client = stubClient({
+      listWorkflows: vi.fn(async () => items),
+      createWorkflow,
+      // The model lookup is down: the model must NOT be stripped, and the gap
+      // is reported instead of silently treated as "unknown".
+      listModels: vi.fn(async () => {
+        throw new Error("model picker offline");
+      }),
+    });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await pickImportFile(importFile(JSON.stringify(bodyWithModel)));
+
+    await waitFor(() => expect(createWorkflow).toHaveBeenCalledTimes(1));
+    const sent = createWorkflow.mock.calls[0]![0] as CreateWorkflowBody;
+    const work = sent.workflow.nodes.find((n) => n.id === "work")!;
+    expect(work.type === "agent_task" && work.model).toBe("ghost@nowhere");
+    expect(await screen.findByText(/could not verify models/i)).toBeInTheDocument();
   });
 
   it("allows picking the same file again after a failure", async () => {

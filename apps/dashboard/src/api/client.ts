@@ -60,6 +60,8 @@ export interface WorkflowsApi {
   listProfiles(): Promise<string[]>;
   /** Models grouped by authenticated provider (from the host model picker). */
   listModels(): Promise<ModelGroup[]>;
+  /** Skill names installed in the host (enabled ones), for import normalization. */
+  listSkills(): Promise<string[]>;
 }
 
 const BASE = "/api/plugins/workflows";
@@ -217,6 +219,15 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
           label: p.name ?? p.slug ?? "",
           models: p.models ?? [],
         }));
+    },
+    async listSkills() {
+      // The host owns the authoritative skills catalogue (`/api/skills` returns
+      // every enabled skill with its `name`). Read it directly — same source
+      // the rest of the dashboard uses — rather than duplicating a plugin route.
+      const r = await fetchJSON<{ name?: string }[]>("/api/skills");
+      return (Array.isArray(r) ? r : [])
+        .map((s) => s.name)
+        .filter((name): name is string => typeof name === "string" && name.length > 0);
     },
   };
 }

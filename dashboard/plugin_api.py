@@ -584,7 +584,7 @@ def _home_dir() -> Path:
 
 
 def _o2b_installed(home: Path) -> bool:
-    """Whether the OpenSecondBrain CLI is present — on PATH or at the
+    """Whether the Open Second Brain CLI is present — on PATH or at the
     conventional user-local install dir (the gateway env may not carry
     ``~/.local/bin``)."""
     return shutil.which("o2b") is not None or (home / ".local/bin/o2b").exists()
@@ -592,16 +592,26 @@ def _o2b_installed(home: Path) -> bool:
 
 @router.get("/o2b-status")
 async def o2b_status() -> dict:
-    """Best-effort OpenSecondBrain availability for the connection badge: the
-    CLI is installed and a config file exists. Resolved from the filesystem
-    (paths derived from the passwd home, not ``$HOME``) rather than a
-    ``o2b status`` subprocess, whose exit code was an unreliable signal under
-    the gateway's mutated service environment — the probe reported
-    "not connected" even when O2B was configured. Never raises — O2B is
-    optional."""
+    """Best-effort Open Second Brain availability for the header indicator.
+
+    Two distinct facts, because the indicator's link target depends on the
+    difference:
+
+    - ``installed`` — the CLI is present on the system (PATH or the
+      conventional user-local dir). Drives the link: installed -> the host
+      ``/plugins`` page (manage it); not installed -> the project repo.
+    - ``connected`` — installed AND configured (a config file exists), i.e.
+      actually usable. Drives the badge colour.
+
+    Resolved from the filesystem (paths derived from the passwd home, not
+    ``$HOME``) rather than a ``o2b status`` subprocess, whose exit code was an
+    unreliable signal under the gateway's mutated service environment — the
+    probe reported "not connected" even when O2B was configured. Never raises —
+    O2B is optional."""
     home = _home_dir()
+    installed = _o2b_installed(home)
     config = home / ".config/open-second-brain/config.yaml"
-    return {"connected": _o2b_installed(home) and config.is_file()}
+    return {"installed": installed, "connected": installed and config.is_file()}
 
 
 def _read_yaml(path: Path) -> dict:
