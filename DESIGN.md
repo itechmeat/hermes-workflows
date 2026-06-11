@@ -43,7 +43,7 @@ the class names at its own theme. Keep it updated as the component set grows.
 | `Input`    | `Input`                 | Native `<input>`. `type="number"` is used directly for numeric fields — we do **not** use `NumberField` (its spinner widget is not the Hermes look). |
 | `Textarea` | — (native `<textarea>`) | Base UI has no textarea primitive. The wrapper is a native element carrying `hw-input`; it exists for call-site consistency, documented as having no Base UI equivalent. |
 | `Checkbox` | `Checkbox`              | A `role="checkbox"` widget (a `<span>`, not a native input). Use for multi-select option lists (e.g. the node inspector's review options). |
-| `Switch`   | `Switch`                | A `role="switch"` pill + sliding thumb, for a single on/off setting (the settings page uses it for `bool` fields). The switch sits first in its row, the label after. |
+| `Switch`   | `Switch`                | A `role="switch"` square track + sliding square thumb (**no** border-radius — the host Hermes toggle has square corners), for a single on/off setting (the settings page uses it for `bool` fields). The switch sits first in its row, the label after. |
 | `Select`   | `Select`                | A portaled, keyboard-driven listbox (**not** a native `<select>`). |
 
 ### Styling contract
@@ -59,7 +59,9 @@ the class names at its own theme. Keep it updated as the component set grows.
   `.hw-checkbox` row.
 - The Switch is `.hw-switch` (track) + `.hw-switch-thumb`, with `[data-checked]`
   switching the track colour and sliding the thumb; the inline row is
-  `.hw-switch-row`.
+  `.hw-switch-row`. It is square (no border-radius) and coloured from
+  `--color-midground`/`--background` (with `color-mix` opacities) to match the
+  host Hermes toggle exactly: 20×36 track, 14px thumb, thumb travels 2px→16px.
 - **Overlays portal to `<body>`.** The Select popup sets `z-index: 60` so it
   renders above the modal overlay (`z-index: 50`) when a select is used inside a
   dialog.

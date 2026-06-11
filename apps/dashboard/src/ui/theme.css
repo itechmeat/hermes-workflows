@@ -863,8 +863,11 @@ a.hw-o2b:hover {
   height: 12px;
 }
 
-/* --- Switch: a pill track + sliding thumb (Base UI Switch.Root span), for a
- *     single on/off setting. The switch sits first in its row, label after. */
+/* --- Switch: a square track + sliding square thumb, for a single on/off
+ *     setting. Mirrors the host Hermes toggle exactly — NO border-radius (the
+ *     Hermes switch has square corners), 20x36 track, 14px thumb, coloured from
+ *     the `--midground`/`--background` tokens. The switch sits first in its row,
+ *     label after. */
 .hw-switch-row {
   display: inline-flex;
   align-items: center;
@@ -876,38 +879,38 @@ a.hw-o2b:hover {
 .hw-switch {
   flex: none;
   box-sizing: border-box;
-  width: 34px;
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
   height: 20px;
-  padding: 2px;
-  border-radius: 999px;
-  border: 1px solid var(--color-input, var(--color-border, #2a2a2a));
-  background: var(--color-secondary, #2a2a2a);
+  border: 1px solid color-mix(in oklab, var(--color-midground, #9a9a9a) 20%, transparent);
+  background: var(--background, #1e1e1e);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 .hw-switch[data-checked] {
-  background: var(--color-primary, #4a90e2);
-  border-color: transparent;
+  background: color-mix(in oklab, var(--color-midground, #9a9a9a) 15%, transparent);
+  border-color: color-mix(in oklab, var(--color-midground, #9a9a9a) 30%, transparent);
 }
 .hw-switch[data-disabled] {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .hw-switch:focus-visible {
-  outline: 2px solid var(--color-ring, #4a90e2);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-midground, #9a9a9a) 30%, transparent);
 }
 .hw-switch-thumb {
   display: block;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
-  background: var(--color-foreground, #ededed);
-  transition: translate 0.12s ease;
+  translate: 2px 0;
+  background: color-mix(in oklab, var(--color-midground, #9a9a9a) 40%, transparent);
+  transition: translate 0.12s ease, background-color 0.12s ease;
 }
 .hw-switch[data-checked] .hw-switch-thumb {
-  translate: 14px 0;
-  background: var(--color-primary-foreground, #fff);
+  translate: 16px 0;
+  background: var(--color-midground, #ededed);
 }
 
 /* --- Select: the trigger reuses `.hw-select` (input-like); these parts add the
