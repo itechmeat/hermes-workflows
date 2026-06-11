@@ -106,7 +106,9 @@ export function App({ client }: AppProps): React.ReactElement {
         if (active) setO2b(status);
       })
       .catch(() => {
-        if (active) setO2b({ connected: false, installed: false });
+        // A failed probe is unknown, not "not installed": asserting the latter
+        // would point the indicator at the external repo on a transient error.
+        if (active) setO2b(null);
       });
     return () => {
       active = false;

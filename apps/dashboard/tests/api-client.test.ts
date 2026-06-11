@@ -328,6 +328,14 @@ describe("workflows API client", () => {
     expect(h.last().path).toBe("/api/skills");
   });
 
+  it("rejects a malformed /api/skills payload instead of coercing to empty", async () => {
+    const h = harness();
+    h.reply({ not: "an array" });
+    // Import normalization treats a fulfilled result as a verified catalogue, so
+    // a garbage payload must fail (→ unverified) rather than strip every skill.
+    await expect(h.client.listSkills()).rejects.toThrow(/expected an array/i);
+  });
+
   it("creates a workflow with a JSON POST to the collection route", async () => {
     const h = harness();
     const body = { workflow: { id: "fresh" }, ui: { xyflow: { nodes: [] } } } as never;

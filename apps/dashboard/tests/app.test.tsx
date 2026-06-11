@@ -59,8 +59,9 @@ describe("App shell", () => {
     render(<App client={stubClient()} />);
     expect(await screen.findByText("Deploy")).toBeInTheDocument();
     // The status word is replaced by a colour dot; the full state lives on the
-    // indicator's accessible name.
-    const indicator = screen.getByLabelText(/Open Second Brain: connected/i);
+    // indicator's accessible name. The status is set by an async effect, so use
+    // a findBy query to avoid racing the fetch/render cycle.
+    const indicator = await screen.findByLabelText(/Open Second Brain: connected/i);
     expect(indicator).toBeInTheDocument();
     expect(indicator).toHaveTextContent("O2B");
     // Installed -> links to the host plugins page, same tab.
@@ -73,7 +74,7 @@ describe("App shell", () => {
       <App client={stubClient({ o2bStatus: vi.fn(async () => ({ connected: false, installed: false })) })} />,
     );
     await screen.findByText("Deploy");
-    const indicator = screen.getByLabelText(/Open Second Brain: not connected/i);
+    const indicator = await screen.findByLabelText(/Open Second Brain: not connected/i);
     expect(indicator).toHaveAttribute("href", "https://github.com/itechmeat/open-second-brain");
     expect(indicator).toHaveAttribute("target", "_blank");
   });
@@ -83,7 +84,7 @@ describe("App shell", () => {
     try {
       render(<App client={stubClient()} />);
       await screen.findByText("Deploy");
-      expect(screen.getByLabelText(/Open Second Brain: connected/i)).toHaveAttribute(
+      expect(await screen.findByLabelText(/Open Second Brain: connected/i)).toHaveAttribute(
         "href",
         "/hermes/plugins",
       );
