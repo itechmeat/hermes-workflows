@@ -1,7 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
+import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Button, Badge, Field, PageHeader, Modal, Menu } from "../src/ui/components";
+import {
+  Button,
+  Badge,
+  Checkbox,
+  Field,
+  Input,
+  Menu,
+  Modal,
+  PageHeader,
+  Select,
+  type SelectItem,
+  Textarea,
+} from "../src/ui/components";
 
 describe("Button", () => {
   it("defaults to type=button and the base class", () => {
@@ -167,5 +180,109 @@ describe("Menu", () => {
     await userEvent.click(screen.getByRole("button", { name: "outside" }));
     expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
     expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe("Input", () => {
+  it("renders an <input> with hw-input and is controlled via value/onChange", async () => {
+    const onChange = vi.fn();
+    render(<Input aria-label="Name" value="abc" onChange={onChange} />);
+    const input = screen.getByLabelText("Name");
+    expect(input.tagName).toBe("INPUT");
+    expect(input.className).toContain("hw-input");
+    expect(input).toHaveValue("abc");
+    await userEvent.type(input, "d");
+    expect(onChange).toHaveBeenCalled();
+  });
+
+  it("supports type=number and appends extra classes after hw-input", () => {
+    render(
+      <Input aria-label="Count" type="number" className="extra" value={3} onChange={() => {}} />,
+    );
+    const input = screen.getByLabelText("Count");
+    expect(input).toHaveAttribute("type", "number");
+    expect(input.className).toBe("hw-input extra");
+  });
+});
+
+describe("Textarea", () => {
+  it("renders a <textarea> with hw-input plus any extra class", () => {
+    render(
+      <Textarea aria-label="Prompt" className="hw-textarea--tall" value="x" onChange={() => {}} />,
+    );
+    const ta = screen.getByLabelText("Prompt");
+    expect(ta.tagName).toBe("TEXTAREA");
+    expect(ta.className).toBe("hw-input hw-textarea--tall");
+  });
+});
+
+describe("Checkbox", () => {
+  it("renders a role=checkbox reflecting `checked` and toggles via onCheckedChange", async () => {
+    const onCheckedChange = vi.fn();
+    render(
+      <Checkbox checked={false} onCheckedChange={onCheckedChange}>
+        Accept
+      </Checkbox>,
+    );
+    const box = screen.getByRole("checkbox", { name: "Accept" });
+    expect(box).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(box);
+    expect(onCheckedChange).toHaveBeenCalledWith(true, expect.anything());
+  });
+});
+
+const FRUITS: SelectItem[] = [
+  { value: "", label: "(default)" },
+  { value: "gala", label: "Gala" },
+  { value: "fuji", label: "Fuji" },
+];
+
+function ControlledSelect({
+  items,
+  onValueChange,
+}: {
+  items: SelectItem[];
+  onValueChange?: (v: string) => void;
+}): React.ReactElement {
+  const [value, setValue] = useState("");
+  return (
+    <Select
+      aria-label="Fruit"
+      value={value}
+      items={items}
+      onValueChange={(v) => {
+        setValue(v);
+        onValueChange?.(v);
+      }}
+    />
+  );
+}
+
+describe("Select", () => {
+  it("shows the selected item's label and lets you pick another from the popup", async () => {
+    const onValueChange = vi.fn();
+    render(<ControlledSelect items={FRUITS} onValueChange={onValueChange} />);
+
+    const trigger = screen.getByRole("combobox", { name: "Fruit" });
+    expect(trigger).toHaveTextContent("(default)");
+
+    await userEvent.click(trigger);
+    await userEvent.click(await screen.findByRole("option", { name: "Fuji" }));
+
+    expect(onValueChange).toHaveBeenCalledWith("fuji");
+    expect(trigger).toHaveTextContent("Fuji");
+  });
+
+  it("renders group headings for grouped items", async () => {
+    const grouped: SelectItem[] = [
+      { value: "", label: "(default)" },
+      { value: "gpt@openai", label: "gpt", group: "OpenAI" },
+      { value: "opus@anthropic", label: "opus", group: "Anthropic" },
+    ];
+    render(<ControlledSelect items={grouped} />);
+    await userEvent.click(screen.getByRole("combobox", { name: "Fruit" }));
+    expect(await screen.findByText("OpenAI")).toBeInTheDocument();
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "gpt" })).toBeInTheDocument();
   });
 });

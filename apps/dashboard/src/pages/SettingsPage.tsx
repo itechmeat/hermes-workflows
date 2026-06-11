@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
-import { Button, Field } from "../ui/components";
+import { Button, Checkbox, Field, Input, Select } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
 import type { SettingsField, SettingsSchema, SettingsValue, WorkflowSettings } from "../api/types";
 
@@ -110,54 +110,55 @@ function SettingField({ field, value, onChange }: FieldProps): React.ReactElemen
   const label = `${humanize(field.key)}${field.enforced ? "" : " (not yet enforced)"}`;
   return (
     <Field label={label} htmlFor={id}>
-      <Control id={id} field={field} value={value} onChange={onChange} />
+      <Control id={id} label={label} field={field} value={value} onChange={onChange} />
     </Field>
   );
 }
 
-function Control({ id, field, value, onChange }: FieldProps & { id: string }): React.ReactElement {
+// A native Input associates with the Field's `<label htmlFor>` via `id`. The
+// Base UI Select/Checkbox manage their own element ids, so they cannot be
+// targeted by `htmlFor`; they carry the label as `aria-label` (one reliable
+// accessible name). The visible Field label stays presentational for them.
+function Control({
+  id,
+  label,
+  field,
+  value,
+  onChange,
+}: FieldProps & { id: string; label: string }): React.ReactElement {
   if (field.type === "bool") {
     return (
-      <input
-        id={id}
-        type="checkbox"
+      <Checkbox
+        aria-label={label}
         checked={Boolean(value)}
-        onChange={(e) => onChange(field.key, e.target.checked)}
+        onCheckedChange={(checked) => onChange(field.key, checked)}
       />
     );
   }
   if (field.type === "enum") {
     return (
-      <select
-        id={id}
-        className="hw-select"
+      <Select
+        aria-label={label}
         value={String(value ?? "")}
-        onChange={(e) => onChange(field.key, e.target.value)}
-      >
-        {(field.options ?? []).map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
+        items={(field.options ?? []).map((opt) => ({ value: opt, label: opt }))}
+        onValueChange={(next) => onChange(field.key, next)}
+      />
     );
   }
   if (field.type === "int") {
     return (
-      <input
+      <Input
         id={id}
         type="number"
-        className="hw-input"
         value={value === undefined || value === "" ? "" : String(value)}
         onChange={(e) => onChange(field.key, e.target.value === "" ? "" : Number(e.target.value))}
       />
     );
   }
   return (
-    <input
+    <Input
       id={id}
       type="text"
-      className="hw-input"
       value={String(value ?? "")}
       onChange={(e) => onChange(field.key, e.target.value)}
     />

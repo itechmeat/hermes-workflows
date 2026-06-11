@@ -4,7 +4,10 @@ import type { WorkflowsApi } from "../api/client";
 import type { Scope, ScopeType, Trigger } from "../api/types";
 import { buildSeedWorkflow } from "./seed";
 import { generateWorkflowId } from "./id";
-import { Button, Field, Modal } from "../ui/components";
+import { Button, Field, Input, Modal, Select } from "../ui/components";
+
+const SCOPE_TYPES = ["global", "project", "projects"] as const;
+const TRIGGER_TYPES = ["manual", "cron"] as const;
 
 export interface NewWorkflowModalProps {
   /** Called with the new workflow id once it is created on disk. */
@@ -96,54 +99,45 @@ export function NewWorkflowModal({
     >
       <form id="hw-new-workflow" onSubmit={submit} className="hw-form">
         <Field label="Name" htmlFor="nw-name">
-          <input
-            id="nw-name"
-            className="hw-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-          />
+          <Input id="nw-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </Field>
 
-        <Field label="Scope" htmlFor="nw-scope">
-          <select
-            id="nw-scope"
-            className="hw-select"
+        <Field label="Scope">
+          <Select
+            aria-label="Scope"
             value={scopeType}
-            onChange={(e) => setScopeType(e.target.value as ScopeType)}
-          >
-            <option value="global">global</option>
-            <option value="project">project</option>
-            <option value="projects">projects</option>
-          </select>
+            items={SCOPE_TYPES.map((s) => ({ value: s, label: s }))}
+            onValueChange={(next) => {
+              const type = SCOPE_TYPES.find((s) => s === next);
+              if (type) setScopeType(type);
+            }}
+          />
         </Field>
         {scopeType !== "global" && (
           <Field label="Projects (comma-separated)" htmlFor="nw-projects">
-            <input
+            <Input
               id="nw-projects"
-              className="hw-input"
               value={projects}
               onChange={(e) => setProjects(e.target.value)}
             />
           </Field>
         )}
 
-        <Field label="Trigger" htmlFor="nw-trigger">
-          <select
-            id="nw-trigger"
-            className="hw-select"
+        <Field label="Trigger">
+          <Select
+            aria-label="Trigger"
             value={triggerType}
-            onChange={(e) => setTriggerType(e.target.value as Trigger["type"])}
-          >
-            <option value="manual">manual</option>
-            <option value="cron">cron</option>
-          </select>
+            items={TRIGGER_TYPES.map((t) => ({ value: t, label: t }))}
+            onValueChange={(next) => {
+              const type = TRIGGER_TYPES.find((t) => t === next);
+              if (type) setTriggerType(type);
+            }}
+          />
         </Field>
         {triggerType === "cron" && (
           <Field label="Schedule (cron)" htmlFor="nw-schedule">
-            <input
+            <Input
               id="nw-schedule"
-              className="hw-input"
               value={schedule}
               onChange={(e) => setSchedule(e.target.value)}
               placeholder="0 5 * * *"

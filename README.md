@@ -84,7 +84,7 @@ hermes-workflows review <run_id> <node_id> <approved|rejected|needs_changes>
 ## Layout
 
 - `packages/core` — TypeScript engine (schema, validation, compiler, runtime, memory) on Bun
-- `apps/dashboard` — frontend source for the dashboard plugin (Vite + React 19 + `@xyflow/react`), built to `dashboard/dist`
+- `apps/dashboard` — frontend source for the dashboard plugin (Vite + React 19 + `@xyflow/react` + `@base-ui/react`), built to `dashboard/dist`. UI-control conventions: [DESIGN.md](DESIGN.md)
 - `hermes_workflows/` — Python orchestrator: execution backends + Hermes bridges (kanban, cron, profiles, boards, notify, o2b)
 - `dashboard/` — Hermes dashboard plugin: the built bundle, manifest, and the authoring + run-control API
 - `docs/` — [architecture](docs/architecture.md), [execution](docs/execution.md), [workflow schema](docs/workflow-schema.md), [dashboard](docs/dashboard.md); specs and plans under `docs/specs`, `docs/plans`

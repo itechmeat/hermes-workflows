@@ -29,6 +29,46 @@ if (!("DOMMatrixReadOnly" in globalThis)) {
     DOMMatrixReadOnlyStub;
 }
 
+// Base UI's portaled popups (Select) touch APIs jsdom does not implement. Stub
+// the ones their open/highlight paths use so component tests can drive them;
+// these are test-env shims, not product fallbacks.
+if (!("matchMedia" in window)) {
+  (window as unknown as { matchMedia: unknown }).matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener(): void {},
+    removeEventListener(): void {},
+    addListener(): void {},
+    removeListener(): void {},
+    dispatchEvent(): boolean {
+      return false;
+    },
+  });
+}
+// jsdom has no PointerEvent; Base UI's Checkbox/Button dispatch one on click.
+if (!("PointerEvent" in window)) {
+  class PointerEventStub extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? "";
+    }
+  }
+  (window as unknown as { PointerEvent: unknown }).PointerEvent = PointerEventStub;
+}
+const noop = (): void => {};
+const returnsFalse = (): boolean => false;
+if (typeof Element !== "undefined") {
+  const proto = Element.prototype as unknown as Record<string, unknown>;
+  proto.scrollIntoView ??= noop;
+  proto.hasPointerCapture ??= returnsFalse;
+  proto.setPointerCapture ??= noop;
+  proto.releasePointerCapture ??= noop;
+}
+
 afterEach(() => {
   cleanup();
 });

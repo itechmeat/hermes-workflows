@@ -64,7 +64,9 @@ describe("NewWorkflowModal", () => {
     );
 
     await userEvent.type(screen.getByLabelText(/^name/i), "Nightly");
-    await userEvent.selectOptions(screen.getByLabelText(/trigger/i), "cron");
+    // Trigger is a Base UI Select (combobox): open it and pick the cron option.
+    await userEvent.click(screen.getByRole("combobox", { name: /trigger/i }));
+    await userEvent.click(await screen.findByRole("option", { name: "cron" }));
     await userEvent.type(screen.getByLabelText(/schedule/i), "0 5 * * *");
     await userEvent.click(screen.getByRole("button", { name: /create/i }));
 

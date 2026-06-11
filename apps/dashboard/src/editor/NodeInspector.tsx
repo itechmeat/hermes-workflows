@@ -1,9 +1,10 @@
 import type { FlowNode } from "./graphMapping";
 import type { ModelGroup, ReviewOption, WorkflowNode } from "../api/types";
-import { Field } from "../ui/components";
+import { Checkbox, Field, Input, Select, Textarea, type SelectItem } from "../ui/components";
 
 const REVIEW_OPTIONS: ReviewOption[] = ["approved", "rejected", "needs_changes"];
 const WORKSPACE_KINDS = ["scratch", "worktree"] as const;
+const OUTCOMES = ["success", "failure"] as const;
 
 export interface NodeInspectorProps {
   node: FlowNode | null;
@@ -34,6 +35,49 @@ function modelGroupsContain(groups: ModelGroup[], value: string): boolean {
   return groups.some((g) => g.models.some((m) => `${m}@${g.provider}` === value));
 }
 
+const DEFAULT_ITEM: SelectItem = { value: "", label: "(default)" };
+
+/** Profile select items: a "(default)" entry plus the roster, preserving an
+ *  out-of-roster current value. */
+function profileItems(profiles: string[], current: string | undefined): SelectItem[] {
+  return [DEFAULT_ITEM, ...withCurrent(profiles, current).map((p) => ({ value: p, label: p }))];
+}
+
+/** Model select items: "(default)", any legacy/out-of-list current value, then
+ *  the provider-grouped models (`model@provider` value shown as the bare model). */
+function modelItems(groups: ModelGroup[], current: string | undefined): SelectItem[] {
+  const items: SelectItem[] = [DEFAULT_ITEM];
+  if (current && !modelGroupsContain(groups, current)) {
+    items.push({ value: current, label: current });
+  }
+  for (const group of groups) {
+    for (const m of group.models) {
+      items.push({ value: `${m}@${group.provider}`, label: m, group: group.label });
+    }
+  }
+  return items;
+}
+
+const WORKSPACE_ITEMS: SelectItem[] = [
+  DEFAULT_ITEM,
+  ...WORKSPACE_KINDS.map((k) => ({ value: k, label: k })),
+];
+
+const OUTCOME_ITEMS: SelectItem[] = [
+  { value: "", label: "(unset)" },
+  ...OUTCOMES.map((o) => ({ value: o, label: o })),
+];
+
+/** Narrow a select value to a workspace kind (or undefined for "(default)"),
+ *  without an unchecked cast — the items guarantee membership. */
+function asWorkspaceKind(value: string): (typeof WORKSPACE_KINDS)[number] | undefined {
+  return WORKSPACE_KINDS.find((k) => k === value);
+}
+
+function asOutcome(value: string): (typeof OUTCOMES)[number] | undefined {
+  return OUTCOMES.find((o) => o === value);
+}
+
 // Node editor body: edit the selected node's fields. Field set is per node type.
 // The node type/id live in the modal header and on the canvas node, so they are
 // not repeated here; everything else is editable and patched back through
@@ -53,8 +97,7 @@ export function NodeInspector({
   return (
     <div className="hw-form">
       <Field label="Title">
-        <input
-          className="hw-input"
+        <Input
           aria-label="Title"
           value={wf.title ?? ""}
           onChange={(e) => onChange({ title: e.target.value || undefined })}
@@ -64,96 +107,56 @@ export function NodeInspector({
       {wf.type === "agent_task" && (
         <>
           <Field label="Prompt">
-            <textarea
-              className="hw-input hw-textarea--tall"
+            <Textarea
+              className="hw-textarea--tall"
               aria-label="Prompt"
               value={wf.prompt}
               onChange={(e) => onChange({ prompt: e.target.value })}
             />
           </Field>
           <Field label="Profile">
-            <select
-              className="hw-select"
+            <Select
               aria-label="Profile"
               value={wf.profile ?? ""}
-              onChange={(e) => onChange({ profile: e.target.value || undefined })}
-            >
-              <option value="">(default)</option>
-              {withCurrent(profiles, wf.profile).map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
+              items={profileItems(profiles, wf.profile)}
+              onValueChange={(value) => onChange({ profile: value || undefined })}
+            />
           </Field>
           <Field label="Model">
-            <select
-              className="hw-select"
+            <Select
               aria-label="Model"
               value={wf.model ?? ""}
-              onChange={(e) => onChange({ model: e.target.value || undefined })}
-            >
-              <option value="">(default)</option>
-              {/* Current value, if it isn't one of the listed provider models
-                 (e.g. a legacy bare model name) — keep it selectable. */}
-              {wf.model && !modelGroupsContain(modelGroups, wf.model) && (
-                <option value={wf.model}>{wf.model}</option>
-              )}
-              {modelGroups.map((group) => (
-                <optgroup key={group.provider} label={group.label}>
-                  {group.models.map((m) => {
-                    const value = `${m}@${group.provider}`;
-                    return (
-                      <option key={value} value={value}>
-                        {m}
-                      </option>
-                    );
-                  })}
-                </optgroup>
-              ))}
-            </select>
+              items={modelItems(modelGroups, wf.model)}
+              onValueChange={(value) => onChange({ model: value || undefined })}
+            />
           </Field>
           <Field label="Skills (comma-separated)">
-            <input
-              className="hw-input"
+            <Input
               aria-label="Skills"
               value={(wf.skills ?? []).join(", ")}
               onChange={(e) => onChange({ skills: splitSkills(e.target.value) })}
             />
           </Field>
           <Field label="Workdir">
-            <input
-              className="hw-input"
+            <Input
               aria-label="Workdir"
               value={wf.workdir ?? ""}
               onChange={(e) => onChange({ workdir: e.target.value || undefined })}
             />
           </Field>
           <Field label="Workspace">
-            <select
-              className="hw-select"
+            <Select
               aria-label="Workspace"
               value={wf.workspace?.type ?? ""}
-              onChange={(e) =>
-                onChange({
-                  workspace:
-                    e.target.value === ""
-                      ? undefined
-                      : { type: e.target.value as (typeof WORKSPACE_KINDS)[number] },
-                })
-              }
-            >
-              <option value="">(default)</option>
-              {WORKSPACE_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {kind}
-                </option>
-              ))}
-            </select>
+              items={WORKSPACE_ITEMS}
+              onValueChange={(value) => {
+                const kind = asWorkspaceKind(value);
+                onChange({ workspace: kind ? { type: kind } : undefined });
+              }}
+            />
           </Field>
           <Field label="Max retries">
-            <input
-              className="hw-input"
+            <Input
               aria-label="Max retries"
               type="number"
               min={0}
@@ -162,8 +165,7 @@ export function NodeInspector({
             />
           </Field>
           <Field label="Timeout (seconds)">
-            <input
-              className="hw-input"
+            <Input
               aria-label="Timeout (seconds)"
               type="number"
               min={0}
@@ -177,24 +179,22 @@ export function NodeInspector({
       {wf.type === "script" && (
         <>
           <Field label="Command">
-            <textarea
-              className="hw-input hw-textarea--tall"
+            <Textarea
+              className="hw-textarea--tall"
               aria-label="Command"
               value={wf.command}
               onChange={(e) => onChange({ command: e.target.value })}
             />
           </Field>
           <Field label="Workdir">
-            <input
-              className="hw-input"
+            <Input
               aria-label="Workdir"
               value={wf.workdir ?? ""}
               onChange={(e) => onChange({ workdir: e.target.value || undefined })}
             />
           </Field>
           <Field label="Timeout (seconds)">
-            <input
-              className="hw-input"
+            <Input
               aria-label="Timeout (seconds)"
               type="number"
               min={0}
@@ -203,8 +203,7 @@ export function NodeInspector({
             />
           </Field>
           <Field label="Env allowlist (comma-separated)">
-            <input
-              className="hw-input"
+            <Input
               aria-label="Env allowlist"
               value={(wf.env ?? []).join(", ")}
               onChange={(e) => {
@@ -223,17 +222,13 @@ export function NodeInspector({
             const current = wf.options ?? REVIEW_OPTIONS;
             const checked = current.includes(option);
             return (
-              <label key={option} className="hw-checkbox">
-                <input
-                  type="checkbox"
-                  aria-label={option}
-                  checked={checked}
-                  onChange={(e) =>
-                    onChange({ options: toggleOption(current, option, e.target.checked) })
-                  }
-                />
+              <Checkbox
+                key={option}
+                checked={checked}
+                onCheckedChange={(on) => onChange({ options: toggleOption(current, option, on) })}
+              >
                 {option}
-              </label>
+              </Checkbox>
             );
           })}
         </fieldset>
@@ -241,18 +236,12 @@ export function NodeInspector({
 
       {wf.type === "finish" && (
         <Field label="Outcome">
-          <select
-            className="hw-select"
+          <Select
             aria-label="Outcome"
             value={wf.outcome ?? ""}
-            onChange={(e) =>
-              onChange({ outcome: e.target.value === "" ? undefined : (e.target.value as "success" | "failure") })
-            }
-          >
-            <option value="">(unset)</option>
-            <option value="success">success</option>
-            <option value="failure">failure</option>
-          </select>
+            items={OUTCOME_ITEMS}
+            onValueChange={(value) => onChange({ outcome: asOutcome(value) })}
+          />
         </Field>
       )}
     </div>

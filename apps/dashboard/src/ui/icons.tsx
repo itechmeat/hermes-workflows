@@ -24,6 +24,11 @@ export function ChevronDownIcon(): React.ReactElement {
   return <Svg>{<path d="m6 9 6 6 6-6" />}</Svg>;
 }
 
+// Check — selection / checked state (Checkbox indicator, Select item indicator).
+export function CheckIcon(): React.ReactElement {
+  return <Svg>{<path d="M20 6 9 17l-5-5" />}</Svg>;
+}
+
 // Open / expand — maximize corners.
 export function ExpandIcon(): React.ReactElement {
   return (

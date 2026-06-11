@@ -9,13 +9,20 @@ function flowNode(node: WorkflowNode): FlowNode {
   return { id: node.id, type: WORKFLOW_NODE_TYPE, position: { x: 0, y: 0 }, data: { node } };
 }
 
+/** Open a Base UI Select (a combobox, not a native <select>) by its accessible
+ *  name and click the named option. */
+async function pickFromSelect(name: string, option: string): Promise<void> {
+  await userEvent.click(screen.getByRole("combobox", { name }));
+  await userEvent.click(await screen.findByRole("option", { name: option }));
+}
+
 describe("NodeInspector", () => {
   it("prompts to select a node when nothing is selected", () => {
     render(<NodeInspector node={null} onChange={() => {}} />);
     expect(screen.getByText(/select a node/i)).toBeInTheDocument();
   });
 
-  it("edits an agent_task prompt and profile", () => {
+  it("edits an agent_task prompt and profile", async () => {
     const onChange = vi.fn();
     const node = flowNode({ id: "build", type: "agent_task", prompt: "old", profile: "dev" });
     render(<NodeInspector node={node} onChange={onChange} profiles={["dev", "qa-engineer"]} />);
@@ -24,8 +31,8 @@ describe("NodeInspector", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "new prompt" } });
     expect(onChange).toHaveBeenCalledWith({ prompt: "new prompt" });
 
-    // Profile is a select over the user's roster
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "qa-engineer" } });
+    // Profile is a select over the user's roster.
+    await pickFromSelect("Profile", "qa-engineer");
     expect(onChange).toHaveBeenCalledWith({ profile: "qa-engineer" });
   });
 
@@ -44,8 +51,8 @@ describe("NodeInspector", () => {
     render(<NodeInspector node={node} onChange={onChange} />);
 
     // defaults to all three options checked
-    expect(screen.getByLabelText("approved")).toBeChecked();
-    await userEvent.click(screen.getByLabelText("approved"));
+    expect(screen.getByRole("checkbox", { name: "approved" })).toBeChecked();
+    await userEvent.click(screen.getByRole("checkbox", { name: "approved" }));
     expect(onChange).toHaveBeenCalledWith({ options: ["rejected", "needs_changes"] });
   });
 
@@ -54,7 +61,7 @@ describe("NodeInspector", () => {
     const node = flowNode({ id: "done", type: "finish" });
     render(<NodeInspector node={node} onChange={onChange} />);
 
-    await userEvent.selectOptions(screen.getByLabelText("Outcome"), "failure");
+    await pickFromSelect("Outcome", "failure");
     expect(onChange).toHaveBeenCalledWith({ outcome: "failure" });
   });
 
@@ -102,7 +109,7 @@ describe("NodeInspector", () => {
     fireEvent.change(screen.getByLabelText("Workdir"), { target: { value: "/srv/app" } });
     expect(onChange).toHaveBeenCalledWith({ workdir: "/srv/app" });
 
-    await userEvent.selectOptions(screen.getByLabelText("Workspace"), "worktree");
+    await pickFromSelect("Workspace", "worktree");
     expect(onChange).toHaveBeenCalledWith({ workspace: { type: "worktree" } });
   });
 

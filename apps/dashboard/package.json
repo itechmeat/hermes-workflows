@@ -12,6 +12,7 @@
     "validate": "tsc --noEmit && vitest run && vite build"
   },
   "dependencies": {
+    "@base-ui/react": "1.5.0",
     "@xyflow/react": "12.10.2"
   },
   "devDependencies": {

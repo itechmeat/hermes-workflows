@@ -817,3 +817,125 @@ a.hw-o2b:hover {
 .hw-modal > h3 {
   margin: 0;
 }
+
+/* ============================================================================
+ * Base UI primitives, dressed as Hermes controls.
+ *
+ * These style the `@base-ui/react` parts wrapped in `ui/components/`
+ * (Checkbox, Select). Inputs/Textareas reuse `.hw-input`; the Button reuses
+ * `.hw-btn`. State comes from Base UI data-attributes (`[data-checked]`,
+ * `[data-highlighted]`, `[data-popup-open]`), not extra class toggling.
+ * See DESIGN.md for the contract.
+ * ========================================================================== */
+
+/* --- Checkbox: a square box + check indicator (Base UI Checkbox.Root span). */
+.hw-checkbox-box {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-input, var(--color-border, #2a2a2a));
+  background: var(--background, #1e1e1e);
+  color: var(--color-primary-foreground, #fff);
+  cursor: pointer;
+}
+.hw-checkbox-box[data-checked] {
+  background: var(--color-primary, #4a90e2);
+  border-color: transparent;
+}
+.hw-checkbox-box[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.hw-checkbox-box:focus-visible {
+  outline: 2px solid var(--color-ring, #4a90e2);
+  outline-offset: 1px;
+}
+.hw-checkbox-indicator {
+  display: inline-flex;
+}
+.hw-checkbox-indicator .hw-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* --- Select: the trigger reuses `.hw-select` (input-like); these parts add the
+ *     trigger layout and the portaled dark popup. */
+.hw-select-trigger {
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+}
+.hw-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hw-select-value[data-placeholder] {
+  opacity: 0.6;
+}
+.hw-select-icon {
+  display: inline-flex;
+  flex: none;
+  opacity: 0.7;
+}
+
+/* Popup is portaled to <body>, so it sits above the modal overlay (z-index 50). */
+.hw-select-positioner {
+  z-index: 60;
+  outline: none;
+}
+.hw-select-popup {
+  box-sizing: border-box;
+  min-width: var(--anchor-width);
+  max-height: min(var(--available-height, 16rem), 18rem);
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--color-border, #2a2a2a);
+  background: var(--color-card, var(--background, #1e1e1e));
+  color: var(--color-foreground, #ededed);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  outline: none;
+}
+.hw-select-list {
+  outline: none;
+}
+.hw-select-item {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.9em;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+.hw-select-item[data-highlighted] {
+  background: var(--color-secondary, #2a2a2a);
+}
+.hw-select-item-indicator {
+  grid-column: 1;
+  display: inline-flex;
+  color: var(--color-primary, #4a90e2);
+}
+.hw-select-item-indicator .hw-icon {
+  width: 13px;
+  height: 13px;
+}
+.hw-select-item-text {
+  grid-column: 2;
+}
+.hw-select-group-label {
+  padding: 6px 8px 2px;
+  font-size: 0.72em;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground, #9a9a9a);
+}

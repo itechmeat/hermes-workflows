@@ -14,6 +14,13 @@ playback: run the workflow you are editing and watch it play on the canvas.
 
 ### Added
 
+- Base UI component primitives: the dashboard's form controls (input, textarea,
+  select, checkbox, button) are now backed by accessible `@base-ui/react`
+  primitives behind a thin `ui/components/` wrapper layer, dressed in the
+  existing Hermes styling. The select is a portaled, keyboard-driven listbox
+  (with provider-grouped options for the model picker) rather than a native
+  `<select>`. A new `DESIGN.md` documents the wrapper-plus-Hermes-styling
+  contract so other plugins can adopt the same pattern.
 - Inter-node data flow: an `agent_task` can consume a prior node's output by
   declaring `input_mapping: { <placeholder>: "{{nodes.<id>.output}}" }` and
   referencing `{{<placeholder>}}` in its prompt. The engine substitutes each
