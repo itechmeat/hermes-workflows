@@ -35,6 +35,7 @@ function stubClient(): WorkflowsApi {
     saveWorkflow: vi.fn(async (_id, body) => ({ ...body, path: detail.path })),
     listProfiles: vi.fn(async () => []),
     listModels: vi.fn(async () => []),
+    listSkills: vi.fn(async () => []),
   } as unknown as WorkflowsApi;
 }
 

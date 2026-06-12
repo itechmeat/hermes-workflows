@@ -44,6 +44,7 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
     listRuns: vi.fn(async () => []), // the editor's mount attach check
     listProfiles: vi.fn(async () => []),
     listModels: vi.fn(async () => []),
+    listSkills: vi.fn(async () => []),
     ...overrides,
   } as unknown as WorkflowsApi;
 }

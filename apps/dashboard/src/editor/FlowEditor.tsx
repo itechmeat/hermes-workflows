@@ -93,6 +93,7 @@ export function FlowEditor({
   // roster + configured models). Best-effort: empty on failure.
   const [profiles, setProfiles] = useState<string[]>([]);
   const [modelGroups, setModelGroups] = useState<ModelGroup[]>([]);
+  const [skills, setSkills] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -106,6 +107,12 @@ export function FlowEditor({
       .listModels()
       .then((m) => {
         if (active) setModelGroups(m);
+      })
+      .catch(() => {});
+    api
+      .listSkills()
+      .then((s) => {
+        if (active) setSkills(s);
       })
       .catch(() => {});
     return () => {
@@ -346,6 +353,7 @@ export function FlowEditor({
             onChange={handleInspectorChange}
             profiles={profiles}
             modelGroups={modelGroups}
+            skills={skills}
           />
         </Modal>
       )}

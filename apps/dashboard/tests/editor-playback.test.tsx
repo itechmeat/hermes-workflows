@@ -65,6 +65,7 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
     saveWorkflow: vi.fn(async (_id: string, body: object) => ({ ...body, path: detail.path })),
     listProfiles: vi.fn(async () => []),
     listModels: vi.fn(async () => []),
+    listSkills: vi.fn(async () => []),
     // The attach lookup: no active run by default.
     listRuns: vi.fn(async () => [] as RunSummary[]),
     runWorkflow: vi.fn(async () => ({ run_id: RUN_ID, status: "running" })),

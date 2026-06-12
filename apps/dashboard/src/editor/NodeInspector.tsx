@@ -12,6 +12,9 @@ export interface NodeInspectorProps {
   /** Profile options (Hermes roster) and model options grouped by provider. */
   profiles?: string[];
   modelGroups?: ModelGroup[];
+  /** Skill catalog from the host `/api/skills` (the same catalog the host's
+   *  cron modals use). The node's current skills not in it are still shown. */
+  skills?: string[];
 }
 
 /** Parse a number input: blank clears the field (undefined), otherwise the
@@ -87,6 +90,7 @@ export function NodeInspector({
   onChange,
   profiles = [],
   modelGroups = [],
+  skills = [],
 }: NodeInspectorProps): React.ReactElement {
   if (node === null) {
     return <p className="hw-note">Select a node to edit.</p>;
@@ -130,13 +134,24 @@ export function NodeInspector({
               onValueChange={(value) => onChange({ model: value || undefined })}
             />
           </Field>
-          <Field label="Skills (comma-separated)">
-            <Input
-              aria-label="Skills"
-              value={(wf.skills ?? []).join(", ")}
-              onChange={(e) => onChange({ skills: splitSkills(e.target.value) })}
-            />
-          </Field>
+          <fieldset className="hw-fieldset">
+            <legend>Skills</legend>
+            {skillOptions(skills, wf.skills ?? []).map((skill) => {
+              const current = wf.skills ?? [];
+              return (
+                <Checkbox
+                  key={skill}
+                  checked={current.includes(skill)}
+                  onCheckedChange={(on) => onChange({ skills: toggleSkill(current, skill, on) })}
+                >
+                  {skill}
+                </Checkbox>
+              );
+            })}
+            {skillOptions(skills, wf.skills ?? []).length === 0 && (
+              <p className="hw-note">No skills available.</p>
+            )}
+          </fieldset>
           <Field label="Workdir">
             <Input
               aria-label="Workdir"
@@ -248,8 +263,22 @@ export function NodeInspector({
   );
 }
 
-function splitSkills(value: string): string[] {
-  return splitList(value);
+/** Skill checkbox options: the host catalog plus any current skill not in it
+ *  (preserve-unknown, mirroring the model/profile pickers). */
+function skillOptions(catalog: string[], current: string[]): string[] {
+  const extras = current.filter((s) => !catalog.includes(s));
+  return [...catalog, ...extras];
+}
+
+/** Toggle one skill in the node's selection; emptied selection clears to
+ *  undefined (no persisted empty array), mirroring the env allowlist. */
+function toggleSkill(current: string[], skill: string, on: boolean): string[] | undefined {
+  const next = on
+    ? current.includes(skill)
+      ? current
+      : [...current, skill]
+    : current.filter((s) => s !== skill);
+  return next.length > 0 ? next : undefined;
 }
 
 /** Split a comma-separated list into trimmed, non-empty items. */

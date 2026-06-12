@@ -36,13 +36,43 @@ describe("NodeInspector", () => {
     expect(onChange).toHaveBeenCalledWith({ profile: "qa-engineer" });
   });
 
-  it("parses comma-separated skills into an array", () => {
+  it("selects skills from the host catalog via checkboxes", async () => {
     const onChange = vi.fn();
-    const node = flowNode({ id: "build", type: "agent_task", prompt: "x" });
-    render(<NodeInspector node={node} onChange={onChange} />);
+    const node = flowNode({ id: "build", type: "agent_task", prompt: "x", skills: ["lint"] });
+    render(
+      <NodeInspector node={node} onChange={onChange} skills={["lint", "test", "deploy"]} />,
+    );
 
-    fireEvent.change(screen.getByLabelText("Skills"), { target: { value: "lint, test , " } });
+    // One checkbox per catalog skill; the node's current skill reads as checked.
+    expect(screen.getByRole("checkbox", { name: "lint" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "test" })).not.toBeChecked();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "test" }));
     expect(onChange).toHaveBeenCalledWith({ skills: ["lint", "test"] });
+  });
+
+  it("removes a skill when unchecked, clearing to undefined when none remain", async () => {
+    const onChange = vi.fn();
+    const node = flowNode({ id: "build", type: "agent_task", prompt: "x", skills: ["lint"] });
+    render(<NodeInspector node={node} onChange={onChange} skills={["lint", "test"]} />);
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "lint" }));
+    expect(onChange).toHaveBeenCalledWith({ skills: undefined });
+  });
+
+  it("preserves a legacy skill not present in the host catalog", () => {
+    const onChange = vi.fn();
+    const node = flowNode({
+      id: "build",
+      type: "agent_task",
+      prompt: "x",
+      skills: ["legacy-skill"],
+    });
+    render(<NodeInspector node={node} onChange={onChange} skills={["lint", "test"]} />);
+
+    // The unknown current value is still shown and checked (mirrors the
+    // model/profile preserve-unknown pattern), never silently dropped.
+    expect(screen.getByRole("checkbox", { name: "legacy-skill" })).toBeChecked();
   });
 
   it("toggles human_review options", async () => {
