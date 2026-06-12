@@ -12,9 +12,12 @@ import type {
   EdgeCondition,
   Scope,
   Trigger,
+  EventTrigger,
+  EventTriggerType,
   Defaults,
   MemoryProviderKind,
 } from "./workflow.ts";
+import { EVENT_TRIGGER_TYPES } from "./workflow.ts";
 import type {
   WorkflowNode,
   AgentTaskNode,
@@ -173,7 +176,27 @@ function parseTrigger(value: unknown): Trigger {
       trigger.timezone = str(value["timezone"], "trigger.timezone");
     return trigger;
   }
-  fail("trigger.type must be 'manual' or 'cron'");
+  if (EVENT_TRIGGER_TYPES.includes(type as EventTriggerType)) {
+    return parseEventTrigger(value, type as EventTriggerType);
+  }
+  fail("trigger.type must be 'manual', 'cron', 'webhook', 'github', or 'api'");
+}
+
+function parseEventTrigger(value: Rec, type: EventTriggerType): EventTrigger {
+  if (!Array.isArray(value["events"])) fail("trigger.events must be a list");
+  const trigger: EventTrigger = {
+    type,
+    events: value["events"].map((e, i) => str(e, `trigger.events[${i}]`)),
+  };
+  if (value["event_mapping"] !== undefined) {
+    if (!isRecord(value["event_mapping"])) fail("trigger.event_mapping must be a mapping");
+    const mapping: Record<string, string> = {};
+    for (const [k, v] of Object.entries(value["event_mapping"])) {
+      mapping[k] = str(v, `trigger.event_mapping.${k}`);
+    }
+    trigger.event_mapping = mapping;
+  }
+  return trigger;
 }
 
 function parseDefaults(value: unknown): Defaults | undefined {

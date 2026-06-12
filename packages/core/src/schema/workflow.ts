@@ -25,7 +25,31 @@ export interface CronTrigger {
   timezone?: string;
 }
 
-export type Trigger = ManualTrigger | CronTrigger;
+/**
+ * Event-driven triggers, mirroring Hermes's three automation trigger sources:
+ * `webhook` (a generic inbound POST), `github` (a GitHub repository event), and
+ * `api` (an external API call). All carry an `events` filter and an optional
+ * `event_mapping` of `{event.<path>}` references substituted into the entry
+ * node's prompt — a namespace distinct from `{{nodes.<id>.output}}`.
+ *
+ * NOTE: the host webhook system dispatches events only to agent prompts /
+ * direct delivery; there is no native event→workflow-run wiring yet, so these
+ * triggers are declarable, validated, and shown in the compile preview, but
+ * firing is deferred to an upstream Hermes change (no local stub).
+ */
+export type EventTriggerType = "webhook" | "github" | "api";
+
+export interface EventTrigger {
+  type: EventTriggerType;
+  /** Event names that start the workflow, e.g. `["pull_request", "issues"]`. */
+  events: string[];
+  /** `{event.<path>}` references threaded into the entry node's prompt. */
+  event_mapping?: Record<string, string>;
+}
+
+export type Trigger = ManualTrigger | CronTrigger | EventTrigger;
+
+export const EVENT_TRIGGER_TYPES: readonly EventTriggerType[] = ["webhook", "github", "api"];
 
 export type MemoryProviderKind = "auto" | "open_second_brain" | "none";
 

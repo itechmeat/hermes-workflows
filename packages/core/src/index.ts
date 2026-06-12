@@ -25,6 +25,8 @@ export type {
   Scope,
   ManualTrigger,
   CronTrigger,
+  EventTrigger,
+  EventTriggerType,
   Trigger,
   MemoryProviderKind,
   MemoryDefaults,
@@ -35,7 +37,7 @@ export type {
   Edge,
   Workflow,
 } from "./schema/workflow.ts";
-export { isWorkflowEnabled } from "./schema/workflow.ts";
+export { isWorkflowEnabled, EVENT_TRIGGER_TYPES } from "./schema/workflow.ts";
 export type { RunStatus, NodeStatus, NodeOutcome, NodeRunState, RunState } from "./schema/run.ts";
 
 // Loading
