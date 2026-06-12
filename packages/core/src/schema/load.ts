@@ -97,7 +97,11 @@ export function fromObject(raw: unknown): LoadResult {
   return ui === undefined ? { workflow } : { workflow, ui };
 }
 
-const PARAM_TYPES = new Set(["text", "enum", "int", "bool"]);
+const PARAM_TYPES: readonly ParamType[] = ["text", "enum", "int", "bool"];
+
+function isParamType(type: string): type is ParamType {
+  return PARAM_TYPES.some((t) => t === type);
+}
 
 function parseScalar(value: unknown, where: string): ParamValue {
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -114,18 +118,15 @@ function parseParams(value: unknown): WorkflowParam[] {
 function parseParam(value: unknown, index: number): WorkflowParam {
   if (!isRecord(value)) fail(`params[${index}] must be a mapping`);
   const type = str(value["type"], `params[${index}].type`);
-  if (!PARAM_TYPES.has(type)) {
-    fail(`params[${index}].type must be one of ${[...PARAM_TYPES].join(", ")}`);
-  }
+  if (!isParamType(type)) fail(`params[${index}].type must be one of ${PARAM_TYPES.join(", ")}`);
   const param: WorkflowParam = {
     name: str(value["name"], `params[${index}].name`),
-    type: type as ParamType,
+    type,
     label: str(value["label"], `params[${index}].label`),
   };
-  if (value["default"] !== undefined) {
-    param.default = parseScalar(value["default"], `params[${index}].default`);
-  }
+  // `options` is enum-only; reject it on other types at the schema boundary.
   if (value["options"] !== undefined) {
+    if (type !== "enum") fail(`params[${index}].options is only valid for an enum param`);
     if (!Array.isArray(value["options"])) fail(`params[${index}].options must be a list`);
     param.options = value["options"].map((o, j) => str(o, `params[${index}].options[${j}]`));
   }
@@ -138,7 +139,40 @@ function parseParam(value: unknown, index: number): WorkflowParam {
     param.strict = value["strict"];
   }
   if (value["help"] !== undefined) param.help = str(value["help"], `params[${index}].help`);
+  // The default must match the declared type (so a malformed template fails at
+  // load, not later in the emitters), and a strict enum's default must be one
+  // of its options.
+  if (value["default"] !== undefined) {
+    param.default = parseDefault(type, value["default"], param, index);
+  }
   return param;
+}
+
+function parseDefault(
+  type: ParamType,
+  raw: unknown,
+  param: WorkflowParam,
+  index: number,
+): ParamValue {
+  const def = parseScalar(raw, `params[${index}].default`);
+  if (type === "int" && !(typeof def === "number" && Number.isInteger(def))) {
+    fail(`params[${index}].default must be an integer for an int param`);
+  }
+  if (type === "bool" && typeof def !== "boolean") {
+    fail(`params[${index}].default must be a boolean for a bool param`);
+  }
+  if ((type === "text" || type === "enum") && typeof def !== "string") {
+    fail(`params[${index}].default must be a string for a ${type} param`);
+  }
+  if (
+    type === "enum" &&
+    param.strict !== false &&
+    param.options !== undefined &&
+    !param.options.includes(String(def))
+  ) {
+    fail(`params[${index}].default must be one of options for a strict enum param`);
+  }
+  return def;
 }
 
 function parseEnabled(value: unknown): boolean | undefined {

@@ -176,6 +176,22 @@ describe("workflow.params schema", () => {
     expect(() => build([{ name: "x", type: "date", label: "X" }])).toThrow();
   });
 
+  test("rejects options on a non-enum param", () => {
+    expect(() => build([{ name: "n", type: "int", label: "N", options: ["1"] }])).toThrow();
+  });
+
+  test("rejects a default whose type does not match the param type", () => {
+    expect(() => build([{ name: "n", type: "int", label: "N", default: "abc" }])).toThrow();
+    expect(() => build([{ name: "b", type: "bool", label: "B", default: "yes" }])).toThrow();
+    expect(() => build([{ name: "t", type: "text", label: "T", default: 5 }])).toThrow();
+  });
+
+  test("rejects a strict enum default that is not one of its options", () => {
+    expect(() =>
+      build([{ name: "tone", type: "enum", label: "Tone", options: ["a", "b"], default: "c" }]),
+    ).toThrow();
+  });
+
   test("flags duplicate param names", () => {
     const wf = build([
       { name: "a", type: "text", label: "A" },
