@@ -289,7 +289,7 @@ class Engine:
             self._schedule_node(executor, run, run_id, node_id, task_params.get(node_id))
 
         run["status"] = decision["run_status"]
-        self._emit_lifecycle(run, decision)
+        self._emit_lifecycle(run, decision, plan.get("deliver"))
         self._emit_memory(run, spec_path)
         if prior is not None:
             self._emit_trace(prior, run)
@@ -365,10 +365,12 @@ class Engine:
 
     # --- lifecycle effects (notifications) --------------------------------
 
-    def _emit_lifecycle(self, run: dict, decision: dict) -> None:
+    def _emit_lifecycle(self, run: dict, decision: dict, deliver: Optional[str] = None) -> None:
         """Fire run-lifecycle notices once per transition into completed /
         failed / waiting, tracked by persisted markers so a run that stays in a
-        state across ticks is never re-announced. Fail-open."""
+        state across ticks is never re-announced. ``deliver`` is the workflow's
+        declared delivery target (compile-preview), routing the notice and, on a
+        completed run, swapping the terse line for the run's result. Fail-open."""
         notified = list(run.get("notified") or [])
         seen = set(notified)
 
@@ -379,24 +381,33 @@ class Engine:
 
         status = run.get("status")
         if status in _TERMINAL_STATUSES and status not in seen:
-            if self._notify(run, status):
+            if self._notify(run, status, deliver=deliver):
                 mark(status)
         for node_id in decision.get("waiting", []):
             key = f"waiting:{node_id}"
-            if key not in seen and self._notify(run, "waiting", node_id=node_id):
+            if key not in seen and self._notify(run, "waiting", node_id=node_id, deliver=deliver):
                 mark(key)
 
         if notified != (run.get("notified") or []):
             run["notified"] = notified
 
-    def _notify(self, run: dict, event: str, node_id: Optional[str] = None) -> bool:
+    def _notify(
+        self,
+        run: dict,
+        event: str,
+        node_id: Optional[str] = None,
+        deliver: Optional[str] = None,
+    ) -> bool:
         """Deliver one notice; return whether it should be recorded as done. A
         headless no-op (no live target) returns False so the notice is retried on
         a later in-process advance rather than falsely marked. No configured
-        sender, or no target at all, returns True (nothing to deliver, ever -
-        don't keep retrying)."""
+        sender, no target at all, or a ``[SILENT]`` result returns True (nothing
+        to deliver, ever - don't keep retrying)."""
         if self.sender is None:
             return True
+        text = self._notice_text_for(run, event, node_id, deliver)
+        if notifications.is_silenced(text):
+            return True  # [SILENT]: intentional suppression, never retry
         try:
             note = notifications.notify_run(
                 run_id=run["run_id"],
@@ -404,7 +415,8 @@ class Engine:
                 send=self.sender,
                 origin=run.get("origin"),
                 default=self.default_deliver,
-                text=_notice_text(run, event, node_id),
+                deliver=deliver,
+                text=text,
             )
         except Exception as exc:  # noqa: BLE001 - a notice must never fail a run
             print(
@@ -415,6 +427,18 @@ class Engine:
         if note is None:
             return True  # no origin and no default target: nowhere to deliver, ever
         return note.delivered is not False  # False == headless no-op -> retry
+
+    def _notice_text_for(
+        self, run: dict, event: str, node_id: Optional[str], deliver: Optional[str]
+    ) -> str:
+        """The text to deliver. When a delivery target is declared, a completed
+        run delivers its RESULT (the final node output); every other case (and
+        the no-deliver path) keeps the terse lifecycle line unchanged."""
+        if deliver and event == "completed":
+            result = _run_result_output(run)
+            if result:
+                return result
+        return _notice_text(run, event, node_id)
 
     # --- lifecycle effects (memory writes) --------------------------------
 
@@ -590,6 +614,21 @@ def _notice_text(run: dict, event: str, node_id: Optional[str]) -> str:
     if event == "waiting":
         return f"Workflow {workflow_id} run {run_id}: review needed ({node_id})."
     return f"Workflow {workflow_id} run {run_id}: {event}."
+
+
+def _run_result_output(run: dict) -> Optional[str]:
+    """The run's result: the output of the most recently completed node that
+    produced one (highest ``seq``; terminal ``finish`` nodes carry none). None
+    when no node produced output."""
+    best: Optional[str] = None
+    best_seq: Optional[int] = None
+    for node in (run.get("nodes") or {}).values():
+        if node.get("status") != "completed" or not node.get("output"):
+            continue
+        seq = node.get("seq") or 0
+        if best_seq is None or seq >= best_seq:
+            best, best_seq = node["output"], seq
+    return best
 
 
 def _trace_snapshot(run: dict) -> dict:

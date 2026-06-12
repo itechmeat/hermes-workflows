@@ -76,6 +76,15 @@ export interface Workflow {
   scope: Scope;
   trigger: Trigger;
   defaults?: Defaults;
+  /**
+   * Where the run's result is delivered, in Hermes `DeliveryTarget` syntax
+   * (`telegram:-100123:42`, `discord`, `email`, `local`, …) or the literal
+   * `"origin"` (the chat the run came from, else the configured default).
+   * Absent leaves today's run-lifecycle notices unchanged. Any non-empty string
+   * is accepted; the gateway validates the platform downstream (mirroring the
+   * host blueprint `deliver` slot, which is non-strict).
+   */
+  deliver?: string;
   nodes: WorkflowNode[];
   edges: Edge[];
 }

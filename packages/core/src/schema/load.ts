@@ -84,6 +84,9 @@ export function fromObject(raw: unknown): LoadResult {
     nodes: parseNodes(rest["nodes"]),
     edges: parseEdges(rest["edges"]),
   };
+  // Where the run result is delivered (DeliveryTarget syntax or "origin"). Any
+  // non-empty string is structurally valid; the gateway validates the platform.
+  if (rest["deliver"] !== undefined) workflow.deliver = str(rest["deliver"], "deliver");
   const ui = parseUi(rawUi);
   return ui === undefined ? { workflow } : { workflow, ui };
 }

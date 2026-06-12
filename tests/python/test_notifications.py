@@ -95,3 +95,47 @@ def test_source_has_no_platform_literals() -> None:
     src = Path(notifications.__file__).read_text().lower()
     for literal in ("telegram", "discord", "slack", "whatsapp", "ntfy"):
         assert literal not in src
+
+
+# --- first-class delivery target + [SILENT] (t_13d09914) --------------------
+
+
+def test_resolve_target_explicit_deliver_overrides_origin() -> None:
+    # A workflow's declared deliver (a concrete platform target) wins over the
+    # captured chat origin.
+    assert notifications.resolve_target("alpha:1", "fallback:1", "team:chan") == "team:chan"
+
+
+def test_resolve_target_origin_keyword_keeps_origin() -> None:
+    # The literal "origin" means "the chat it came from" — same as today.
+    assert notifications.resolve_target("alpha:1", "fallback:1", "origin") == "alpha:1"
+    assert notifications.resolve_target(None, "fallback:1", "origin") == "fallback:1"
+
+
+def test_resolve_target_no_deliver_is_origin_then_default() -> None:
+    # Unchanged when unset: origin, else default, else nowhere.
+    assert notifications.resolve_target("alpha:1", "fallback:1", None) == "alpha:1"
+    assert notifications.resolve_target(None, "fallback:1", None) == "fallback:1"
+    assert notifications.resolve_target(None, None, None) is None
+
+
+def test_is_silenced() -> None:
+    assert notifications.is_silenced("nothing new today [SILENT]") is True
+    assert notifications.is_silenced("a normal result") is False
+    assert notifications.is_silenced(None) is False
+
+
+def test_notify_run_deliver_overrides_target() -> None:
+    sent: list[tuple[str, str]] = []
+    note = notifications.notify_run(
+        run_id="r1",
+        event="completed",
+        origin="alpha:1",
+        default="fallback:1",
+        deliver="team:chan",
+        text="the result",
+        send=lambda target, msg: sent.append((target, msg)),
+    )
+    assert note is not None
+    assert note.target == "team:chan"
+    assert sent == [("team:chan", "the result")]

@@ -26,6 +26,10 @@ from .bridge import notify
 # than falsely marked done.
 Sender = Callable[[str, str], Optional[bool]]
 
+# The Hermes ``[SILENT]`` convention: an agent/result output carrying this marker
+# suppresses delivery (no notification spam). Case-sensitive, matching the host.
+SILENT_MARKER = "[SILENT]"
+
 
 @dataclass
 class Notification:
@@ -36,9 +40,20 @@ class Notification:
     delivered: Optional[bool] = None
 
 
-def resolve_target(origin: Optional[str], default: Optional[str]) -> Optional[str]:
-    """The delivery target: the run's origin when present, else the configured
-    default. ``None`` means there is nowhere to deliver (stay silent)."""
+def is_silenced(text: Optional[str]) -> bool:
+    """Whether a message carries the ``[SILENT]`` marker and must not be sent."""
+    return SILENT_MARKER in (text or "")
+
+
+def resolve_target(
+    origin: Optional[str], default: Optional[str], deliver: Optional[str] = None
+) -> Optional[str]:
+    """The delivery target. A workflow-declared ``deliver`` other than the
+    literal ``"origin"`` wins (the workflow says exactly where its result goes);
+    ``"origin"`` or an unset ``deliver`` keeps the run's origin, else the
+    configured default. ``None`` means there is nowhere to deliver (stay silent)."""
+    if deliver and deliver != "origin":
+        return deliver
     return origin or default
 
 
@@ -85,11 +100,12 @@ def notify_run(
     send: Sender,
     origin: Optional[str] = None,
     default: Optional[str] = None,
+    deliver: Optional[str] = None,
     text: Optional[str] = None,
 ) -> Optional[Notification]:
     """Deliver a run-lifecycle notice to the resolved target. Returns the
     Notification, or ``None`` when there is no target (delivered nowhere)."""
-    target = resolve_target(origin, default)
+    target = resolve_target(origin, default, deliver)
     if target is None:
         return None
     note = Notification(

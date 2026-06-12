@@ -80,6 +80,12 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
     err("invalid_cron", `invalid cron expression '${workflow.trigger.schedule}'`);
   }
 
+  // Delivery target: any non-empty string is valid (the gateway validates the
+  // platform); only an empty/whitespace value is a semantic error.
+  if (workflow.deliver !== undefined && workflow.deliver.trim() === "") {
+    err("empty_deliver", "deliver is set but empty");
+  }
+
   // Edge endpoints and condition references.
   for (const [i, edge] of workflow.edges.entries()) {
     if (!nodes.has(edge.from))

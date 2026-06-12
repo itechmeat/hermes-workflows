@@ -49,6 +49,10 @@ export interface HermesPlan {
   workflow_id: string;
   scope: Scope;
   trigger: Trigger;
+  /** Where the run result is delivered (DeliveryTarget syntax or "origin");
+   *  absent leaves run-lifecycle notices unchanged. Preview only — the engine
+   *  reads this to route the terminal notice; the gateway validates it. */
+  deliver?: string;
   first_node: string | null;
   kanban_tasks: CompiledKanbanTask[];
   script_steps: CompiledScript[];
@@ -119,6 +123,7 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     workflow_id: workflow.id,
     scope: workflow.scope,
     trigger: workflow.trigger,
+    ...(workflow.deliver !== undefined ? { deliver: workflow.deliver } : {}),
     first_node: entry ? entry.id : null,
     kanban_tasks,
     script_steps,
