@@ -185,7 +185,9 @@ function coerceValue(param: WorkflowParam, raw: ParamValue): ParamValue {
     return text;
   }
   if (param.type === "int") {
-    const n = Number(raw);
+    // A boolean Number()-coerces to 0/1, which would pass Number.isInteger; an
+    // int param must come from a number or a numeric string, never a bool.
+    const n = typeof raw === "boolean" ? Number.NaN : Number(raw);
     if (!Number.isInteger(n)) {
       throw new ParamFillError(`${param.name} must be an integer, got '${String(raw)}'`);
     }

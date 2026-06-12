@@ -130,6 +130,10 @@ describe("fillParams", () => {
     expect(() => fillParams([{ name: "n", type: "int", label: "N" }], { n: "x" })).toThrow(
       ParamFillError,
     );
+    // A boolean must not silently coerce to 0/1 for an int param.
+    expect(() => fillParams([{ name: "n", type: "int", label: "N" }], { n: true })).toThrow(
+      ParamFillError,
+    );
     expect(() => fillParams([{ name: "b", type: "bool", label: "B" }], { b: "maybe" })).toThrow(
       ParamFillError,
     );

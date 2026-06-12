@@ -176,10 +176,14 @@ function parseTrigger(value: unknown): Trigger {
       trigger.timezone = str(value["timezone"], "trigger.timezone");
     return trigger;
   }
-  if (EVENT_TRIGGER_TYPES.includes(type as EventTriggerType)) {
-    return parseEventTrigger(value, type as EventTriggerType);
+  if (isEventTriggerType(type)) {
+    return parseEventTrigger(value, type);
   }
   fail("trigger.type must be 'manual', 'cron', 'webhook', 'github', or 'api'");
+}
+
+function isEventTriggerType(type: string): type is EventTriggerType {
+  return EVENT_TRIGGER_TYPES.some((t) => t === type);
 }
 
 function parseEventTrigger(value: Rec, type: EventTriggerType): EventTrigger {
