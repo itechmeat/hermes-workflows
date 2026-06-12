@@ -42,7 +42,7 @@ the class names at its own theme. Keep it updated as the component set grows.
 | `Button`   | `Button`                | Base UI **does** have a Button (renders native `<button>`, Field/Form-aware). Keeps the `variant`/`size` class map. |
 | `Input`    | `Input`                 | Native `<input>`. `type="number"` is used directly for numeric fields — we do **not** use `NumberField` (its spinner widget is not the Hermes look). |
 | `Textarea` | — (native `<textarea>`) | Base UI has no textarea primitive. The wrapper is a native element carrying `hw-input`; it exists for call-site consistency, documented as having no Base UI equivalent. |
-| `Checkbox` | `Checkbox`              | A `role="checkbox"` widget (a `<span>`, not a native input). Use for multi-select option lists (e.g. the node inspector's review options). |
+| `Checkbox` | `Checkbox`              | A `role="checkbox"` widget (a `<span>`, not a native input). Use for multi-select option lists — the node inspector's review options, and its **Skills** multi-select (a checkbox per host `/api/skills` entry, with any current-but-uncatalogued skill still shown and checked). There is no bespoke multi-select control; compose from this primitive. |
 | `Switch`   | `Switch`                | A `role="switch"` square track + sliding square thumb (**no** border-radius — the host Hermes toggle has square corners), for a single on/off setting (the settings page uses it for `bool` fields). The switch sits first in its row, the label after. |
 | `Select`   | `Select`                | A portaled, keyboard-driven listbox (**not** a native `<select>`). |
 

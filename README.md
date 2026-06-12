@@ -52,8 +52,11 @@ for export from the Runs view. See the Observability section in
 
 ## Node types
 
-- `trigger` — `manual` or `cron`
-- `agent_task` — run a text prompt as work assigned to a profile
+- `trigger` — `manual`, `cron`, or an event trigger (`webhook` / `github` / `api`); event
+  triggers are declarable, validated, and shown in the compile preview, with firing pending an
+  upstream Hermes change (no local stub)
+- `agent_task` — run a text prompt as work assigned to a profile, with skills picked from the host
+  `/api/skills` catalog
 - `script` — run a deterministic shell command with no LLM (lint, tests, build), gated by an enable flag and an env allowlist
 - `condition` — branch on a structured condition (node status or review decision)
 - `human_review` — pause for a human decision (channel-agnostic resolution)
@@ -85,6 +88,10 @@ The workflow scope picks the execution backend: a **project** run schedules dura
 on the project's own board; a **global** run invokes the profile runner directly with no card.
 Worker spawning is the Hermes gateway's job; the tick only advances the graph and self-terminates
 when no runs remain active. See [docs/execution.md](docs/execution.md).
+
+A workflow may set a `deliver` target (Hermes `DeliveryTarget` syntax, or the literal `origin`): a
+completed run then delivers its result there through the native delivery router, and a result
+containing `[SILENT]` suppresses delivery. Left unset, run-lifecycle notices behave as before.
 
 ```bash
 hermes-workflows run <workflow_id>          # start a run and advance it once

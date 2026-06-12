@@ -85,6 +85,28 @@ playback: run the workflow you are editing and watch it play on the canvas.
   roster, and a model list read from the host model picker
   (`/api/model/options`); the node inspector offers both as select fields while
   preserving values not in the current roster/model list.
+- Native Hermes alignment after Automation Blueprints (the multi-node layer
+  above the single-prompt blueprint tier):
+  - First-class delivery: a workflow may declare a `deliver` target in Hermes
+    `DeliveryTarget` syntax (or the literal `origin`). When set, a completed run
+    delivers its result to that target through the native delivery router rather
+    than the terse lifecycle line; a result containing `[SILENT]` suppresses
+    delivery. Lifecycle behaviour is unchanged when `deliver` is unset.
+  - Skills are chosen in the node inspector from the host `/api/skills` catalog
+    via a multi-select (built from the Base UI checkbox), replacing the
+    free-text field; a current skill absent from the catalog is preserved.
+  - Typed template parameters: a workflow used as a template can declare
+    `params` (typed slots, mirroring the host blueprint slots) as the single
+    source of truth, and the compile preview surfaces a `catalog` — the form
+    fields plus a ready-to-paste `/workflow` command and a `hermes://` deep-link
+    — emitted from that one schema (`packages/core/src/templates/params.ts`).
+  - Event triggers: the workflow trigger gains `webhook` / `github` / `api`
+    variants with an `events` filter and an `{event.*}` mapping namespace,
+    declarable, validated, and shown in the compile preview. (Firing waits on an
+    upstream Hermes change — the host dispatches events only to agent prompts /
+    direct delivery; no local stub is added.)
+  - The Schedules page tags each row as a `Workflow` schedule, distinct from
+    blueprint cron jobs, and README positions the two tiers.
 
 ### Changed
 
