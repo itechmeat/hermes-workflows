@@ -1,123 +1,116 @@
 # Hermes Workflows
 
-Visual workflow orchestration for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
-Describe a workflow as a graph, then run it on top of Hermes' own primitives.
+> Multi-step automations for [Hermes Agent](https://github.com/NousResearch/hermes-agent) — drawn as a graph, run on Hermes' own primitives, with a human in the loop only where you put one.
 
-```
-Workflow graph -> Hermes-native execution (Kanban, Cron, Profiles)
+Hermes Workflows is a dashboard plugin for Hermes Agent. You draw an automation as a graph — agent
+tasks, shell steps, branches, and review gates — and it runs on top of Hermes' own Kanban, Cron,
+and Profiles. It is not a second engine: every node compiles to a native Hermes primitive, so a
+workflow is something you can read, schedule, and reason about with the tools Hermes already gives
+you. Where a single scheduled prompt (an [Automation Blueprint](#workflows-vs-automation-blueprints))
+isn't enough, a workflow is the layer above it.
+
+## Why
+
+- **It runs itself.** A workflow advances on a self-terminating cron tick — no babysitting, no human
+  in the loop except an explicit `human_review` gate you place yourself. Set it up once; it works
+  while you don't.
+- **Nothing is locked away.** A workflow is a plain spec you export to YAML/JSON, re-import on a
+  clean install, and edit by hand or in the visual editor. Data flows between nodes through the run
+  state, not a host file path baked into the graph — so it stays portable.
+- **It speaks Hermes, not a private dialect.** Nodes become native Kanban cards, Cron jobs, and
+  Profile assignments; results deliver through the host's own delivery router; skills come from the
+  host catalog. There is no parallel runtime to learn or trust.
+- **You see what happened.** Every agent node reports live per-node telemetry (duration, tokens,
+  tool calls, errors), pending dangerous-command approvals surface in the run inspector, and an
+  opt-in per-run trace records the whole timeline.
+
+## How it fits
+
+```mermaid
+flowchart LR
+    You["You — visual editor"] -->|draw a graph| WF["Workflow spec<br/>(agent · script · condition · human_review · finish)"]
+    WF -->|compiles to, no second engine| N["Hermes natives:<br/>Kanban · Cron · Profiles · delivery router · /api/skills"]
+    N --> Run["Autonomous run<br/>branching · inter-node data · review gates"]
+    Run -->|telemetry · traces| Insp["Run inspector"]
+    Run -->|"result (or [SILENT])"| Deliver["Your channel (origin / telegram / …)"]
+    style WF fill:#5d3a9b,stroke:#ce93d8,color:#fff
+    style N fill:#1e3a5f,stroke:#90caf9,color:#fff
 ```
 
-Hermes Workflows is a thin orchestration layer, not a separate engine. Workflows compile to
-native Hermes Kanban tasks, Cron jobs, and Profile assignments. It does not replace any of them.
-OpenSecondBrain is an optional long-term memory layer.
+## What you get
+
+- **A visual authoring lifecycle.** Create a workflow from a modal, grow the graph in an
+  `@xyflow/react` editor (edit every node field, duplicate, auto-layout), validate, preview the
+  compiled Hermes plan, then press **Play** to run it in place — the canvas shows live per-node
+  progress and hands off to the run inspector when it settles.
+- **Five node types.** `agent_task` (a prompt assigned to a profile, with a per-node model and
+  skills picked from the host `/api/skills` catalog), `script` (a deterministic shell step, gated
+  by an enable flag and an env allowlist), `condition` (branch on a node's outcome or a review
+  decision), `human_review` (pause for a channel-agnostic decision), and `finish`.
+- **Triggers.** `manual`, `cron`, or an event trigger (`webhook` / `github` / `api`) — see
+  [the schema doc](docs/workflow-schema.md#triggers) for the current support boundary.
+- **Inter-node data flow.** A node consumes a prior node's output via
+  `input_mapping: { x: "{{nodes.<id>.output}}" }`; the engine substitutes it at schedule time and
+  fails loud if an expected output never materialised — no silent empty text.
+- **First-class delivery.** A workflow can declare where its result is delivered (Hermes
+  `DeliveryTarget` syntax, or `origin`); a result containing `[SILENT]` suppresses delivery so
+  nothing-to-say runs stay quiet.
+- **Runs, Schedules, Settings.** A Runs view (open / cancel / retry / export-logs), a Schedules
+  view over Hermes cron (pause / resume / run-now / edit), and a Settings view backed by the Hermes
+  config. Runs are single-flight: at most one active run per workflow.
 
 ## Workflows vs Automation Blueprints
 
-Hermes Automation Blueprints are the single-prompt automation tier: one typed-slot schema rendered
-natively across surfaces (dashboard form, `/blueprint` slash command, agent-seed, `hermes://`
-deep-link, docs catalog), compiling to a single `cron.jobs` job. Hermes Workflows is the
-complementary **multi-node layer above blueprints**: a graph of agent, script, condition, and
-`human_review` nodes with branching and inter-node data flow (`input_mapping`). They are not
-competitors — a blueprint is one prompt on a schedule; a workflow is a DAG. Both reuse the same
-native primitives (`cron.jobs`, the gateway delivery router, profiles, the `/api/skills` catalog),
-and both appear on the Schedules surface, where workflow-trigger cron jobs are tagged as
-`Workflow` to distinguish them from blueprint jobs.
+Hermes [Automation Blueprints](https://github.com/NousResearch/hermes-agent) are the single-prompt
+tier: one typed-slot schema rendered natively across surfaces (dashboard form, `/blueprint` slash
+command, agent-seed, `hermes://` deep-link, docs catalog), compiling to one `cron.jobs` job.
+Workflows are the **multi-node layer above** them: a graph with branching, inter-node data flow, and
+review gates. They are complementary — a blueprint is one prompt on a schedule, a workflow is a DAG
+— and both reuse the same native primitives. On the Schedules surface, workflow-trigger cron jobs
+are tagged `Workflow` so the two kinds read distinctly.
 
-## Status
-
-The engine is headless-first and runs autonomously. A workflow advances on a self-terminating
-Cron tick with no human in the loop except an explicit `human_review` node. The dashboard tab
-manages the full authoring lifecycle: create a workflow from a modal (seeded with a minimal valid
-graph and opened in the editor), enable/disable, duplicate, export as YAML or JSON, import a
-workflow from a JSON export (validated server-side; an id clash is an explicit error), or delete
-it, with each template showing its last run and next scheduled run. Author the graph in a
-visual `@xyflow/react` editor — edit the full node field set (including agent_task workdir,
-workspace, retries, timeout, and input mapping), duplicate or auto-layout nodes, validate, preview
-the compiled Hermes plan, save (layout included), and press Play to run the workflow in place:
-the canvas shows live per-node progress while editing is locked, then hands off to the run
-inspector once the run settles — alongside that live run inspector with per-node
-status, cancel, and retry. Runs are single-flight: a workflow can have at most one active run
-(a second start is refused with the blocking run named), and re-opening the editor while a run
-is in flight attaches to it instead of pretending the workflow is idle. It also has a **Runs** view (every run, with open / cancel / retry /
-export-logs), a **Schedules** view over Hermes cron (pause / resume / run-now / edit / delete), and
-a **Settings** view backed by the Hermes config. See [docs/dashboard.md](docs/dashboard.md).
-
-Runs are observable through the Hermes observer-hook contract: each `agent_task` node executed by
-a kanban worker reports per-node telemetry (duration, token usage, API and tool calls, subagents,
-structured errors) live in the run inspector and persisted with the run; a node whose worker is
-blocked on a dangerous-command approval shows a waiting annotation with the command text; and an
-opt-in per-run JSONL trace (`observability.trace_enabled`) records the full timeline of every run
-for export from the Runs view. See the Observability section in
-[docs/execution.md](docs/execution.md).
-
-## Node types
-
-- `trigger` — `manual`, `cron`, or an event trigger (`webhook` / `github` / `api`); event
-  triggers are declarable, validated, and shown in the compile preview, with firing pending an
-  upstream Hermes change (no local stub)
-- `agent_task` — run a text prompt as work assigned to a profile, with skills picked from the host
-  `/api/skills` catalog
-- `script` — run a deterministic shell command with no LLM (lint, tests, build), gated by an enable flag and an env allowlist
-- `condition` — branch on a structured condition (node status or review decision)
-- `human_review` — pause for a human decision (channel-agnostic resolution)
-- `finish` — terminate the run
-
-## Passing data between nodes
-
-An `agent_task` can consume a prior node's output instead of a shared file. Declare the
-inputs it needs and reference them by placeholder in the prompt:
-
-```yaml
-- id: analyze
-  type: agent_task
-  prompt: "Design scopes from this inventory:\n{{inventory}}"
-  input_mapping:
-    inventory: "{{nodes.collect.output}}"
-```
-
-At schedule time the engine substitutes each `{{placeholder}}` with the referenced node's
-captured output. References are validated when the workflow is authored: the source must be a
-prior (ancestor) node, every declared placeholder must appear in the prompt, and an output that
-never materialised fails the node loudly rather than substituting empty text. Because the data
-flows through the run state, the workflow stays fully exportable and editable — no host path is
-baked into the graph.
-
-## Execution
-
-The workflow scope picks the execution backend: a **project** run schedules durable Kanban cards
-on the project's own board; a **global** run invokes the profile runner directly with no card.
-Worker spawning is the Hermes gateway's job; the tick only advances the graph and self-terminates
-when no runs remain active. See [docs/execution.md](docs/execution.md).
-
-A workflow may set a `deliver` target (Hermes `DeliveryTarget` syntax, or the literal `origin`): a
-completed run then delivers its result there through the native delivery router, and a result
-containing `[SILENT]` suppresses delivery. Left unset, run-lifecycle notices behave as before.
+## Quick start
 
 ```bash
-hermes-workflows run <workflow_id>          # start a run and advance it once
-hermes-workflows advance-all                # the tick body: advance every active run
-hermes-workflows status <run_id>
-hermes-workflows review <run_id> <node_id> <approved|rejected|needs_changes>
+# Install the plugin into Hermes and restart the gateway
+hermes plugins install itechmeat/hermes-workflows --enable
+hermes gateway restart
 ```
+
+Open the **Workflows** tab in the Hermes dashboard, create a workflow from the modal (it opens in
+the editor seeded with a minimal valid graph), add nodes, set a `cron` trigger if you want it to run
+on a schedule, and press **Play** to try it. Authoring, run-control, and the compile preview all
+live in the dashboard — full tour in [`docs/dashboard.md`](docs/dashboard.md).
+
+## Documentation
+
+| Topic | Doc |
+| --- | --- |
+| Workflow spec — nodes, edges, triggers, data flow, delivery | [`docs/workflow-schema.md`](docs/workflow-schema.md) |
+| Execution model — scopes, the tick, observability | [`docs/execution.md`](docs/execution.md) |
+| Dashboard — authoring lifecycle, runs, schedules, settings | [`docs/dashboard.md`](docs/dashboard.md) |
+| Architecture — TS engine, Python orchestrator, plugin API | [`docs/architecture.md`](docs/architecture.md) |
+| Open Second Brain memory integration | [`docs/o2b-integration.md`](docs/o2b-integration.md) |
+| Dashboard UI control conventions (Base UI, Hermes styling) | [`DESIGN.md`](DESIGN.md) |
+| Changes | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ## Layout
 
-- `packages/core` — TypeScript engine (schema, validation, compiler, runtime, memory) on Bun
-- `apps/dashboard` — frontend source for the dashboard plugin (Vite + React 19 + `@xyflow/react` + `@base-ui/react`), built to `dashboard/dist`. UI-control conventions: [DESIGN.md](DESIGN.md)
-- `hermes_workflows/` — Python orchestrator: execution backends + Hermes bridges (kanban, cron, profiles, boards, notify, o2b)
-- `dashboard/` — Hermes dashboard plugin: the built bundle, manifest, and the authoring + run-control API
-- `docs/` — [architecture](docs/architecture.md), [execution](docs/execution.md), [workflow schema](docs/workflow-schema.md), [dashboard](docs/dashboard.md); specs and plans under `docs/specs`, `docs/plans`
+- `packages/core` — TypeScript engine (schema, validation, compiler, runtime) on Bun
+- `hermes_workflows/` — Python orchestrator: execution backends + Hermes bridges (kanban, cron, profiles, delivery, memory)
+- `apps/dashboard` — React 19 + `@xyflow/react` frontend, built to `dashboard/dist`
+- `dashboard/` — the Hermes dashboard plugin: built bundle, manifest, and the authoring + run-control API
 
 ## Development
 
 ```bash
 bun install
-bun run validate          # core typecheck + lint + tests (Bun + pytest), then the
-                          # frontend typecheck + tests + a fresh build, and a guard
-                          # that the committed dashboard/dist matches that build
+bun run validate          # core typecheck + lint + tests (Bun + pytest), the frontend
+                          # typecheck + tests + a fresh build, and a guard that the
+                          # committed dashboard/dist matches that build
 bun run dashboard:build   # rebuild just the dashboard bundle into dashboard/dist
 ```
 
 ## License
 
-MIT
+MIT. Source: <https://github.com/itechmeat/hermes-workflows>.
