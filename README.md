@@ -11,6 +11,18 @@ Hermes Workflows is a thin orchestration layer, not a separate engine. Workflows
 native Hermes Kanban tasks, Cron jobs, and Profile assignments. It does not replace any of them.
 OpenSecondBrain is an optional long-term memory layer.
 
+## Workflows vs Automation Blueprints
+
+Hermes Automation Blueprints are the single-prompt automation tier: one typed-slot schema rendered
+natively across surfaces (dashboard form, `/blueprint` slash command, agent-seed, `hermes://`
+deep-link, docs catalog), compiling to a single `cron.jobs` job. Hermes Workflows is the
+complementary **multi-node layer above blueprints**: a graph of agent, script, condition, and
+`human_review` nodes with branching and inter-node data flow (`input_mapping`). They are not
+competitors — a blueprint is one prompt on a schedule; a workflow is a DAG. Both reuse the same
+native primitives (`cron.jobs`, the gateway delivery router, profiles, the `/api/skills` catalog),
+and both appear on the Schedules surface, where workflow-trigger cron jobs are tagged as
+`Workflow` to distinguish them from blueprint jobs.
+
 ## Status
 
 The engine is headless-first and runs autonomously. A workflow advances on a self-terminating

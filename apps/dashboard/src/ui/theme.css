@@ -261,6 +261,12 @@
 .hw-badge--disabled {
   opacity: 0.75;
 }
+/* Job-kind tag (e.g. "Workflow") that distinguishes a workflow-trigger cron
+   schedule from a host Automation Blueprint job; neutral, muted. */
+.hw-badge--kind {
+  border-color: color-mix(in srgb, var(--color-midground, #9a9a9a) 35%, transparent);
+  color: var(--color-midground, #9a9a9a);
+}
 
 /* A disabled workflow row reads dimmer than the active ones. */
 .hw-row--disabled {

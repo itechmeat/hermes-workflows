@@ -49,6 +49,16 @@ describe("SchedulesPage", () => {
     expect(screen.getByText("cron-blog-1")).toBeInTheDocument();
   });
 
+  it("tags each row as a Workflow schedule and positions it against blueprints", async () => {
+    const client = stubClient({ listSchedules: vi.fn(async () => schedules) });
+    const { container } = render(<SchedulesPage client={client} />);
+    await screen.findByText("blog");
+    // A neutral kind badge marks the row as a Workflow-trigger schedule,
+    // distinct from a host Automation Blueprint cron job.
+    expect(container.querySelector(".hw-badge--kind")?.textContent).toBe("Workflow");
+    expect(screen.getByText(/Automation Blueprints/)).toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no schedules", async () => {
     render(<SchedulesPage client={stubClient()} />);
     expect(await screen.findByText(/no schedules/i)).toBeInTheDocument();

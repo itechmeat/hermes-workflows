@@ -88,7 +88,9 @@ export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElemen
           Workflows
         </a>{" "}
         and set its trigger to cron. Below you can pause, resume, run now, edit the cron expression,
-        or delete an existing schedule.
+        or delete an existing schedule. These are multi-node <strong>Workflow</strong> schedules;
+        Hermes Automation Blueprints (single-prompt automations) are managed separately and also
+        appear on the host Schedules surface.
       </p>
       {message !== null && (
         <p role="status" className="hw-status">
@@ -114,7 +116,9 @@ export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElemen
           <tbody>
             {state.items.map((s) => (
               <tr key={s.hermes_cron_id}>
-                <td>{s.workflow_id}</td>
+                <td>
+                  {s.workflow_id} <Badge tone="kind">Workflow</Badge>
+                </td>
                 <td>
                   <code>{s.cron_expression ?? "—"}</code>
                 </td>
