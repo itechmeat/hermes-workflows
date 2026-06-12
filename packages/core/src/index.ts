@@ -47,6 +47,25 @@ export type { UiLayout, XyflowLayout, XyflowNodeLayout, Viewport } from "./schem
 // Serialization
 export { serializeWorkflow } from "./serialize/serializeWorkflow.ts";
 
+// Template parameters + per-surface emitters (host-mirror of blueprint_catalog)
+export {
+  paramFormSchema,
+  paramSlashCommand,
+  paramDeeplink,
+  catalogEntry,
+  agentSeed,
+  fillParams,
+  ParamFillError,
+} from "./templates/params.ts";
+export type {
+  ParamType,
+  ParamValue,
+  WorkflowParam,
+  WorkflowTemplate,
+  ParamFormField,
+  CatalogEntry,
+} from "./templates/params.ts";
+
 // Graph helpers
 export {
   nodeMap,

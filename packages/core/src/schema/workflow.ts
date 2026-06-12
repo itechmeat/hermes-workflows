@@ -4,6 +4,7 @@
  */
 
 import type { WorkflowNode } from "./nodes.ts";
+import type { WorkflowParam } from "../templates/params.ts";
 
 export type ScopeType = "global" | "project" | "projects";
 
@@ -76,6 +77,12 @@ export interface Workflow {
   scope: Scope;
   trigger: Trigger;
   defaults?: Defaults;
+  /**
+   * Typed parameters for a workflow used as a template (mirrors the host
+   * blueprint slots). The single source of truth for the per-surface emitters
+   * in `templates/params.ts`; absent for a non-template workflow.
+   */
+  params?: WorkflowParam[];
   /**
    * Where the run's result is delivered, in Hermes `DeliveryTarget` syntax
    * (`telegram:-100123:42`, `discord`, `email`, `local`, …) or the literal

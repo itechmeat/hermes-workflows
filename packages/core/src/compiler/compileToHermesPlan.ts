@@ -6,6 +6,8 @@
 
 import type { Workflow, Trigger, MemoryProviderKind, Scope } from "../schema/workflow.ts";
 import { entryNodes } from "../schema/graph.ts";
+import { catalogEntry } from "../templates/params.ts";
+import type { WorkflowParam, CatalogEntry } from "../templates/params.ts";
 
 export interface CompiledKanbanTask {
   node: string;
@@ -53,6 +55,11 @@ export interface HermesPlan {
    *  absent leaves run-lifecycle notices unchanged. Preview only — the engine
    *  reads this to route the terminal notice; the gateway validates it. */
   deliver?: string;
+  /** Typed template parameters (when this workflow is a template). */
+  params?: WorkflowParam[];
+  /** The per-surface renderings (form fields, /workflow command, deep-link)
+   *  derived from `params` — present only when the workflow declares params. */
+  catalog?: CatalogEntry;
   first_node: string | null;
   kanban_tasks: CompiledKanbanTask[];
   script_steps: CompiledScript[];
@@ -119,11 +126,24 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
 
   const entry = entryNodes(workflow)[0];
 
+  // A workflow used as a template emits its per-surface catalog from one schema.
+  const catalog =
+    workflow.params !== undefined
+      ? catalogEntry({
+          key: workflow.id,
+          title: workflow.name,
+          description: "",
+          params: workflow.params,
+        })
+      : undefined;
+
   return {
     workflow_id: workflow.id,
     scope: workflow.scope,
     trigger: workflow.trigger,
     ...(workflow.deliver !== undefined ? { deliver: workflow.deliver } : {}),
+    ...(workflow.params !== undefined ? { params: workflow.params } : {}),
+    ...(catalog !== undefined ? { catalog } : {}),
     first_node: entry ? entry.id : null,
     kanban_tasks,
     script_steps,

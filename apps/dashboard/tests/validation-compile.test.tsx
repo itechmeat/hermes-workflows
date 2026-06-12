@@ -116,4 +116,36 @@ describe("CompilePreview", () => {
     await userEvent.click(screen.getByRole("button", { name: /preview plan/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/compile boom/i);
   });
+
+  it("renders the template catalog (params, slash command, deep-link) when present", async () => {
+    const plan: HermesPlan = {
+      workflow_id: "digest",
+      scope: { type: "global" },
+      trigger: { type: "manual" },
+      first_node: "a",
+      kanban_tasks: [],
+      script_steps: [],
+      cron_jobs: [],
+      profiles: [],
+      skills: [],
+      memory: { provider: "auto", fail_open: true },
+      params: [{ name: "topic", type: "text", label: "Topic", default: "AI" }],
+      catalog: {
+        key: "digest",
+        title: "Digest",
+        description: "",
+        fields: [
+          { name: "topic", type: "text", label: "Topic", default: "AI", options: [], optional: false, strict: true, help: "" },
+        ],
+        command: '/workflow digest topic="AI"',
+        appUrl: "hermes://workflow/digest?topic=AI",
+      },
+    };
+    render(<CompilePreview workflowId="digest" client={client({ compilePreview: vi.fn(async () => plan) })} />);
+    await userEvent.click(screen.getByRole("button", { name: /preview plan/i }));
+
+    expect(await screen.findByText(/\/workflow digest/)).toBeInTheDocument();
+    expect(screen.getByText(/hermes:\/\/workflow\/digest/)).toBeInTheDocument();
+    expect(screen.getByText(/Template parameters: topic/)).toBeInTheDocument();
+  });
 });

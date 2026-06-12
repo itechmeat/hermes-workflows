@@ -86,6 +86,16 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
     err("empty_deliver", "deliver is set but empty");
   }
 
+  // Template params: names are the keys surfaces fill by, so they must be unique.
+  if (workflow.params !== undefined) {
+    const seenParams = new Set<string>();
+    for (const param of workflow.params) {
+      if (seenParams.has(param.name))
+        err("duplicate_param", `duplicate param name '${param.name}'`);
+      seenParams.add(param.name);
+    }
+  }
+
   // Edge endpoints and condition references.
   for (const [i, edge] of workflow.edges.entries()) {
     if (!nodes.has(edge.from))

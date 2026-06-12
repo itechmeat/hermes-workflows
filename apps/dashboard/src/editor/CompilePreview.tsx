@@ -67,6 +67,19 @@ export function CompilePreview({ workflowId, client }: CompilePreviewProps): Rea
               ))}
             </ul>
           )}
+          {plan.catalog !== undefined && (
+            <div className="hw-catalog">
+              {/* Template params rendered natively across surfaces from one
+                  schema (mirrors the host blueprint catalog). */}
+              <p>Template parameters: {plan.catalog.fields.map((f) => f.name).join(", ")}</p>
+              <p>
+                Slash command: <code>{plan.catalog.command}</code>
+              </p>
+              <p>
+                Deep-link: <code>{plan.catalog.appUrl}</code>
+              </p>
+            </div>
+          )}
         </div>
       )}
     </section>

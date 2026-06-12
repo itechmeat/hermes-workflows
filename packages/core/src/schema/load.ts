@@ -25,6 +25,7 @@ import type {
 } from "./nodes.ts";
 import { parseUi } from "./ui.ts";
 import type { UiLayout } from "./ui.ts";
+import type { ParamType, ParamValue, WorkflowParam } from "../templates/params.ts";
 
 export class WorkflowParseError extends Error {
   override name = "WorkflowParseError";
@@ -87,8 +88,54 @@ export function fromObject(raw: unknown): LoadResult {
   // Where the run result is delivered (DeliveryTarget syntax or "origin"). Any
   // non-empty string is structurally valid; the gateway validates the platform.
   if (rest["deliver"] !== undefined) workflow.deliver = str(rest["deliver"], "deliver");
+  // Typed template parameters (single source of truth for the surface emitters).
+  if (rest["params"] !== undefined) workflow.params = parseParams(rest["params"]);
   const ui = parseUi(rawUi);
   return ui === undefined ? { workflow } : { workflow, ui };
+}
+
+const PARAM_TYPES = new Set(["text", "enum", "int", "bool"]);
+
+function parseScalar(value: unknown, where: string): ParamValue {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  fail(`${where} must be a string, number, or boolean`);
+}
+
+function parseParams(value: unknown): WorkflowParam[] {
+  if (!Array.isArray(value)) fail("params must be a list");
+  return value.map((param, i) => parseParam(param, i));
+}
+
+function parseParam(value: unknown, index: number): WorkflowParam {
+  if (!isRecord(value)) fail(`params[${index}] must be a mapping`);
+  const type = str(value["type"], `params[${index}].type`);
+  if (!PARAM_TYPES.has(type)) {
+    fail(`params[${index}].type must be one of ${[...PARAM_TYPES].join(", ")}`);
+  }
+  const param: WorkflowParam = {
+    name: str(value["name"], `params[${index}].name`),
+    type: type as ParamType,
+    label: str(value["label"], `params[${index}].label`),
+  };
+  if (value["default"] !== undefined) {
+    param.default = parseScalar(value["default"], `params[${index}].default`);
+  }
+  if (value["options"] !== undefined) {
+    if (!Array.isArray(value["options"])) fail(`params[${index}].options must be a list`);
+    param.options = value["options"].map((o, j) => str(o, `params[${index}].options[${j}]`));
+  }
+  if (value["optional"] !== undefined) {
+    if (typeof value["optional"] !== "boolean") fail(`params[${index}].optional must be a boolean`);
+    param.optional = value["optional"];
+  }
+  if (value["strict"] !== undefined) {
+    if (typeof value["strict"] !== "boolean") fail(`params[${index}].strict must be a boolean`);
+    param.strict = value["strict"];
+  }
+  if (value["help"] !== undefined) param.help = str(value["help"], `params[${index}].help`);
+  return param;
 }
 
 function parseEnabled(value: unknown): boolean | undefined {
