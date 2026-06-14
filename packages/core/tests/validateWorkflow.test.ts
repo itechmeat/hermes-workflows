@@ -361,4 +361,14 @@ describe("validateWorkflow — adopt / task_ref", () => {
       "non_ancestor_task_ref",
     );
   });
+
+  test("accepts an adopt node with a review_profile", () => {
+    expect(
+      validateWorkflow(adopt({ adopt: true, task_ref: "t_abc123", review_profile: "qa" })).valid,
+    ).toBe(true);
+  });
+
+  test("rejects a review_profile without adopt", () => {
+    expect(codes(adopt({ review_profile: "qa" }))).toContain("review_profile_without_adopt");
+  });
 });

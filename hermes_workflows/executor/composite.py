@@ -48,3 +48,11 @@ class CompositeExecutor:
         if adopt is None:
             raise ValueError("adopt requires a Kanban-backed (project) scope")
         return adopt(task_id, assignee=assignee)
+
+    def send_to_review(self, task_id: str, *, reviewer: str) -> None:
+        """Route a driven card through the native review stage via the scope
+        backend. Raises if the scope executor has no review stage."""
+        send = getattr(self.scope, "send_to_review", None)
+        if send is None:
+            raise ValueError("native review requires a Kanban-backed (project) scope")
+        send(task_id, reviewer=reviewer)

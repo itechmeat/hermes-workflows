@@ -34,6 +34,7 @@ function migrate(db: Database): void {
     "telemetry_json",
     "review_note",
     "driven_task_ids",
+    "reviewed_task_ids",
   ]);
 }
 

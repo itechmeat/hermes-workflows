@@ -347,6 +347,9 @@ function parseAgentTask(value: Rec, base: { id: string }, id: string): AgentTask
   if (value["task_ref"] !== undefined) {
     node.task_ref = str(value["task_ref"], `node '${id}'.task_ref`);
   }
+  if (value["review_profile"] !== undefined) {
+    node.review_profile = str(value["review_profile"], `node '${id}'.review_profile`);
+  }
   return node;
 }
 

@@ -331,8 +331,13 @@ class Engine:
             handles = _node_handles(node)
             if not handles:
                 continue
+            review_profile = (task_params.get(node_id) or {}).get("review_profile")
             completions = [executor.poll(handle) for handle in handles]
-            if all(c.settled and c.outcome is not None for c in completions):
+            terminal = [
+                self._card_terminal(executor, node, handle, completion, review_profile)
+                for handle, completion in zip(handles, completions)
+            ]
+            if all(terminal):
                 seq += 1
                 node["status"] = "completed"
                 node["outcome"] = (
@@ -712,6 +717,34 @@ class Engine:
         node["status"] = "scheduled"
         # Subscribe the primary driven card to its terminal events for the origin.
         self._subscribe_card(executor, run, driven[0], params)
+
+    def _card_terminal(
+        self,
+        executor: NodeExecutor,
+        node: dict,
+        handle: str,
+        completion: Any,
+        review_profile: Optional[str],
+    ) -> bool:
+        """Whether a driven/backing card counts as terminal for node settlement.
+
+        Without a review_profile (or for a failed card), a settled card is
+        terminal. With a review_profile, the FIRST successful completion is routed
+        once through the native review stage (done -> review) and is NOT terminal
+        yet; it becomes terminal only when it settles again after review (tracked
+        by reviewed_task_ids so the transition fires exactly once)."""
+        if not (completion.settled and completion.outcome is not None):
+            return False
+        if not review_profile or completion.outcome == "failure":
+            return True
+        if handle in (node.get("reviewed_task_ids") or []):
+            return True
+        send = getattr(executor, "send_to_review", None)
+        if send is None:
+            return True  # backend has no review stage; accept the completion as-is
+        send(handle, reviewer=review_profile)
+        node.setdefault("reviewed_task_ids", []).append(handle)
+        return False
 
     def _schedule_node(
         self,

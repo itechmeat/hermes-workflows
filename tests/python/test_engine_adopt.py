@@ -45,9 +45,12 @@ def _status(board: sqlite3.Connection, task_id: str) -> str:
     return board.execute("SELECT status FROM tasks WHERE id = ?", (task_id,)).fetchone()["status"]
 
 
-def _adopt_spec(task_ref: str, *, collect: bool = False) -> dict:
-    nodes = [{"id": "drive", "type": "agent_task", "prompt": "drive", "profile": "worker",
-              "adopt": True, "task_ref": task_ref}]
+def _adopt_spec(task_ref: str, *, collect: bool = False, review_profile: str | None = None) -> dict:
+    drive = {"id": "drive", "type": "agent_task", "prompt": "drive", "profile": "worker",
+             "adopt": True, "task_ref": task_ref}
+    if review_profile is not None:
+        drive["review_profile"] = review_profile
+    nodes = [drive]
     edges = [{"from": "drive", "to": "done"}]
     if collect:
         nodes.insert(0, {"id": "collect", "type": "agent_task", "prompt": "find", "profile": "scout"})
@@ -119,6 +122,35 @@ def test_adopt_fails_loud_on_a_missing_card(tmp_path: Path) -> None:
         assert node["status"] == "completed"
         assert node["outcome"] == "failure"
         assert "adopt failed" in (node["output"] or "")
+    finally:
+        board.close()
+
+
+def test_adopt_routes_a_driven_card_through_native_review(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        target = kb.create_task(board, title="impl", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec(target, review_profile="reviewer"))
+
+        run = eng.run(spec, "r")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [target]
+
+        # Worker finishes the card -> the node routes it once through the native
+        # review stage instead of settling, and stays active.
+        _complete(board, target)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] in ("scheduled", "running")
+        assert run["nodes"]["drive"]["reviewed_task_ids"] == [target]
+        assert _status(board, target) == "review"
+        row = board.execute("SELECT assignee FROM tasks WHERE id = ?", (target,)).fetchone()
+        assert row["assignee"] == "reviewer"
+
+        # The reviewer completes the review (review -> done): now the node settles.
+        _complete(board, target)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "completed"
+        assert run["nodes"]["drive"]["outcome"] == "success"
     finally:
         board.close()
 

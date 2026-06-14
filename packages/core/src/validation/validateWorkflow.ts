@@ -267,6 +267,12 @@ function validateAdopt(
     if (task_ref !== undefined && adopt !== true) {
       err("task_ref_without_adopt", `node '${node.id}' has a task_ref but adopt is not set`);
     }
+    if (node.review_profile !== undefined && adopt !== true) {
+      err(
+        "review_profile_without_adopt",
+        `node '${node.id}' has a review_profile but is not an adopt node`,
+      );
+    }
     if (adopt === true && task_ref === undefined) {
       err("adopt_without_task_ref", `adopt node '${node.id}' has no task_ref to drive`);
       continue;

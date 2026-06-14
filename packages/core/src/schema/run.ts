@@ -77,6 +77,12 @@ export interface NodeRunState {
    * first id (for telemetry / subscription); the gating reads this list.
    */
   driven_task_ids?: string[];
+  /**
+   * Driven cards already routed through the native review stage (adopt nodes with
+   * a `review_profile`), so the done->review transition fires exactly once per
+   * card and the node settles on the post-review terminal state.
+   */
+  reviewed_task_ids?: string[];
   /** Set once the node reaches a terminal state. */
   outcome?: NodeOutcome;
   /** Decision recorded for a human_review node. */

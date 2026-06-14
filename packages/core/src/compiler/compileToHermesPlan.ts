@@ -32,6 +32,8 @@ export interface CompiledKanbanTask {
   adopt?: boolean;
   /** The id (or `{{nodes.<id>.output.task_ids}}` reference) to drive when adopting. */
   task_ref?: string;
+  /** Reviewer profile for a native review stage on a driven card (see AgentTaskNode). */
+  review_profile?: string;
 }
 
 /** A script node compiled for local execution by the plugin's ScriptExecutor.
@@ -106,6 +108,7 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     if (node.input_mapping !== undefined) task.input_mapping = node.input_mapping;
     if (node.adopt !== undefined) task.adopt = node.adopt;
     if (node.task_ref !== undefined) task.task_ref = node.task_ref;
+    if (node.review_profile !== undefined) task.review_profile = node.review_profile;
     if (node.model !== undefined) task.model = node.model;
     if (node.skills !== undefined) task.skills = node.skills;
     if (node.workspace !== undefined) task.workspace = node.workspace.type;

@@ -45,6 +45,14 @@ export interface AgentTaskNode {
    * task ids an upstream node surfaced. Only meaningful with `adopt`.
    */
   task_ref?: string;
+  /**
+   * Reviewer profile for a native post-implementation review stage on a driven
+   * card: once the card reaches `done`, it is routed through Hermes' own `review`
+   * status (assigned to this profile, claimed via `claim_review_task`) and the
+   * node settles only when the review reaches terminal. Optional; only meaningful
+   * with `adopt`. Absent leaves the driven card settling on first `done`.
+   */
+  review_profile?: string;
 }
 
 /**

@@ -144,6 +144,18 @@ def adopt_task(conn: sqlite3.Connection, task_id: str, *, assignee: str) -> str:
     return task_id
 
 
+def route_to_review(conn: sqlite3.Connection, task_id: str, *, reviewer: str) -> None:
+    """Route a just-completed driven card through Hermes' native review stage:
+    assign the reviewer and transition ``done -> review`` so the gateway hands it
+    to the reviewer via ``claim_review_task`` (``review -> running``). A card not
+    in ``done`` is left untouched (only a freshly completed card is reviewable)."""
+    kb.assign_task(conn, task_id, reviewer)
+    conn.execute(
+        "UPDATE tasks SET status = 'review' WHERE id = ? AND status = 'done'", (task_id,)
+    )
+    conn.commit()
+
+
 @dataclass
 class NodeCompletion:
     found: bool
