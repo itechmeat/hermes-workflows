@@ -121,6 +121,11 @@ playback: run the workflow you are editing and watch it play on the canvas.
   channel distinct from a work node's `.output`.
 - `hermes-workflows cancel <run_id>`: cancel a run and its active nodes from the
   shell (wraps the core `run-cancel`; idempotent on terminal runs).
+- A native `/workflow` in-chat slash command (registered via
+  `ctx.register_command`, so it works in the CLI and gateway/messenger sessions,
+  with an args hint for native pickers): `list`, `run <id> [project]`,
+  `status <run>`, `review <run> <node> <decision> [note]`, `cancel <run>`,
+  `explain <id>` — a thin front-end over the same tools the model uses.
 - Node-type icons on canvas nodes, from a shared icon map also used by the
   header's add-node menu, so the picker and placed nodes match.
 - The node inspector opens during a run in a fully read-only (disabled) state, so

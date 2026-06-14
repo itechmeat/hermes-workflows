@@ -147,6 +147,8 @@ validation (`approved` / `rejected` / `needs_changes`, and only while the node
 is actually awaiting review):
 
 - the `workflow_review` model tool,
+- the `/workflow review <run> <node> <decision> [note]` chat slash command (CLI
+  and gateway/messenger sessions),
 - the CLI: `hermes-workflows review <run_id> <node_id> <decision> [--note "…"]`,
 - the dashboard: `POST /api/plugins/workflows/runs/{run_id}/review`.
 
