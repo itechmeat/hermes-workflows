@@ -116,10 +116,11 @@ def adopt_task(conn: sqlite3.Connection, task_id: str, *, assignee: str) -> str:
     the dispatch lane so the gateway dispatcher claims and runs it. Returns the
     same ``task_id`` as the handle (no card is created).
 
-    Native ordering: assign BEFORE promote, because assigning a ``ready`` card
-    drops it to ``todo`` (kanban_db). A ``triage`` card takes the native
-    ``triage -> todo`` step first, then ``promote_task(force=True)`` raises it to
-    ``ready`` regardless of unrelated parent deps (the workflow owns the gating).
+    Native ordering: assign BEFORE promote. A ``triage`` card takes the native
+    ``triage -> todo`` step first, then ``promote_task(force=True)`` raises a
+    ``todo`` / ``blocked`` card to ``ready`` regardless of unrelated parent deps
+    (the workflow owns the gating). A card already ``ready`` stays ready (assign
+    does not change status), so promotion is simply skipped.
 
     Idempotent: a card already ``running`` / ``review`` is being driven, and a
     ``done`` / ``archived`` card has nothing to drive, so both are a no-op."""
