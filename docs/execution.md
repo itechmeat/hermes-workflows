@@ -88,8 +88,24 @@ A `script` node runs an operator-authored shell command, so its mitigations
   `execution.script_env_allowlist` (comma-separated), intersected with the
   node's own `env` list — never the full process env. The allowlist is empty by
   default, so a command runs with no inherited environment: add `PATH` (and any
-  of `HOME` / `LANG` / `CI` it needs) to the allowlist, or commands that resolve
-  a binary by `PATH` will fail to find it.
+  of `LANG` / `CI` it needs) to the allowlist, or commands that resolve a binary
+  by `PATH` will fail to find it.
+- **HOME is always provided.** `HOME` (the orchestrator's own home directory) is
+  passed to every script command regardless of the allowlist, because
+  HOME-credential CLIs (`claude`, `codex`, `gh`, `rclone`, …) resolve their
+  config and credentials from it (`~/.claude`, `~/.config`, …) — without it such
+  a command fails (e.g. `claude -p` returns "Not logged in"). HOME is the home
+  directory, not a secret, so this does not widen secret exposure.
+
+> **Agent bash-tool HOME caveat.** The HOME guarantee above covers `script`
+> nodes. An `agent_task` node's worker shells out through the *Hermes agent's*
+> bash tool, whose environment (including `HOME`) is owned by the host, not by
+> this plugin. A hermes-kind agent's bash tool may run with a non-login `HOME`
+> (e.g. a per-session sandbox), so a HOME-credential CLI invoked from inside an
+> agent prompt can fail to resolve credentials even though the same CLI works for
+> the login user. That is a host-side contract: ensure the agent runtime exposes
+> the intended `HOME`, or have the node call a wrapper that sets it. This plugin
+> does not (and cannot) override the host agent's bash-tool environment.
 - **Workdir and a timeout.** The command runs in its `workdir` and is killed on
   `timeout_seconds` (settling `failure`). Set a `workdir` to contain the command
   to a known directory — with none, it runs in the orchestrator's working

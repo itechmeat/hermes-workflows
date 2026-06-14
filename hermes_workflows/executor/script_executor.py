@@ -121,9 +121,20 @@ class ScriptExecutor:
 
     def _build_env(self, requested: Optional[Sequence[str]]) -> dict:
         """The command sees only vars whose names are both requested by the node
-        and permitted by the settings allowlist — defense in depth."""
+        and permitted by the settings allowlist — defense in depth.
+
+        ``HOME`` is always provided (the orchestrator's own HOME): HOME-credential
+        CLIs (claude, codex, gh, rclone, …) resolve ``~/.config``, ``~/.claude``,
+        etc. from it, so without it such a command fails (e.g. "Not logged in").
+        HOME is the login user's home directory, not a secret-bearing variable, so
+        passing it through does not widen the allowlist's secret exposure. See
+        docs/execution.md for the full HOME contract and the agent bash-tool
+        caveat (a separate, host-owned environment)."""
         names = self.env_allowlist if requested is None else self.env_allowlist & set(requested)
-        return {name: os.environ[name] for name in names if name in os.environ}
+        env = {name: os.environ[name] for name in names if name in os.environ}
+        if "HOME" in os.environ:
+            env.setdefault("HOME", os.environ["HOME"])
+        return env
 
 def _clean(text: Optional[str]) -> str:
     return clip_output(redact_secrets(text))

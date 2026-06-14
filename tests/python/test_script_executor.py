@@ -89,6 +89,16 @@ def test_only_allowlisted_env_is_visible(tmp_path, monkeypatch) -> None:
     assert "nope" not in out
 
 
+def test_home_is_always_provided_for_credential_clis(tmp_path, monkeypatch) -> None:
+    # HOME-credential CLIs (claude, codex, gh, ...) need HOME to find ~/.config,
+    # ~/.claude, etc. It is provided even when not in the allowlist.
+    monkeypatch.setenv("HOME", "/home/login-user")
+    ex = _executor(tmp_path, allowlist=["PATH"])  # HOME deliberately not listed
+    handle = _schedule(ex, {"command": "echo HOME=$HOME", "workdir": str(tmp_path)})
+    out = ex.poll(handle).output or ""
+    assert "HOME=/home/login-user" in out
+
+
 def test_secret_shaped_output_is_redacted(tmp_path) -> None:
     ex = _executor(tmp_path)
     token = "sk-ABCDEFGHIJKLMNOP0123456789"
