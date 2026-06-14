@@ -38,6 +38,11 @@ _REVIEW_SCHEMA = {
         "run_id": {"type": "string"},
         "node_id": {"type": "string"},
         "decision": {"type": "string", "enum": ["approved", "rejected", "needs_changes"]},
+        "note": {
+            "type": "string",
+            "description": "Optional operator payload (e.g. the picked option or instructions), "
+            "consumable downstream as {{nodes.<gate>.review_note}}.",
+        },
     },
     "required": ["run_id", "node_id", "decision"],
     "additionalProperties": False,
@@ -163,6 +168,7 @@ def _handle_review(args: dict, **_kwargs: Any) -> str:
             engine=_build_engine(),
             roots=config.spec_roots(),
             core_cli=config.core_cli(),
+            note=args.get("note"),
         )
     )
 

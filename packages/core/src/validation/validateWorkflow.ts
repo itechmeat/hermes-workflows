@@ -26,8 +26,9 @@ const CRON_TOKEN = /^(\*|\?|\*\/\d+|\d+(-\d+)?(\/\d+)?(,\d+(-\d+)?(\/\d+)?)*)$/;
 // it from escaping the storage root via path traversal.
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
-// An input_mapping value references exactly one prior node's captured output.
-const INPUT_REF_PATTERN = /^\{\{nodes\.([A-Za-z0-9_-]+)\.output\}\}$/;
+// An input_mapping value references one prior node's captured output, or a
+// human_review gate's operator note (a distinct channel from `.output`).
+const INPUT_REF_PATTERN = /^\{\{nodes\.([A-Za-z0-9_-]+)\.(output|review_note)\}\}$/;
 
 // An event_mapping value references a path into the trigger event payload.
 const EVENT_REF_PATTERN = /^\{event\.[A-Za-z0-9_.]+\}$/;
@@ -217,17 +218,24 @@ function validateInputMappings(
       if (!match) {
         err(
           "invalid_input_mapping_ref",
-          `node '${node.id}'.input_mapping.${key} must be of the form '{{nodes.<id>.output}}', got '${ref}'`,
+          `node '${node.id}'.input_mapping.${key} must be of the form '{{nodes.<id>.output}}' or '{{nodes.<id>.review_note}}', got '${ref}'`,
         );
         continue;
       }
       const source = match[1] as string;
+      const channel = match[2] as string;
       if (!nodes.has(source)) {
         err(
           "unknown_input_mapping_node",
           `node '${node.id}'.input_mapping.${key} references unknown node '${source}'`,
         );
         continue;
+      }
+      if (channel === "review_note" && nodes.get(source)?.type !== "human_review") {
+        err(
+          "review_note_source",
+          `node '${node.id}'.input_mapping.${key} reads '.review_note' from '${source}', which is not a human_review node`,
+        );
       }
       if (source === node.id || !reachableFrom(workflow, source).has(node.id)) {
         err(

@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS workflow_node_runs (
   hermes_task_id  TEXT,
   outcome         TEXT,
   review_decision TEXT,
+  -- Optional operator free-text payload attached when resolving a human_review
+  -- gate, consumable downstream as {{nodes.<gate>.review_note}}. Added after the
+  -- initial schema, so connection.ts ALTERs pre-existing databases.
+  review_note     TEXT,
   seq             INTEGER,
   output_json     TEXT,
   error           TEXT,

@@ -130,12 +130,15 @@ def review_workflow(
     engine: Any,
     roots: Sequence[str],
     core_cli: Sequence[str],
+    note: Optional[str] = None,
 ) -> dict:
     """Resolve a human_review node and advance the run. Channel-agnostic: the
-    same resolution the CLI and dashboard use. Invalid decisions raise."""
+    same resolution the CLI and dashboard use. An optional ``note`` is the
+    operator's free-text payload, consumable downstream as
+    ``{{nodes.<gate>.review_note}}``. Invalid decisions raise."""
     run = engine.status(run_id)
     path = _resolve_spec_path(run["workflow_id"], roots, core_cli)
-    resolved = engine.decide_review(path, run_id, node_id, decision)
+    resolved = engine.decide_review(path, run_id, node_id, decision, note=note)
     return {"run_id": run_id, "status": resolved["status"], "decision": decision}
 
 

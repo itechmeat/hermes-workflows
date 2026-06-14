@@ -171,7 +171,7 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
         return engine.cancel(args.run_id)
     if args.command == "review":
         spec = _spec_path_for_run(engine, args.run_id)
-        return engine.decide_review(spec, args.run_id, args.node_id, args.decision)
+        return engine.decide_review(spec, args.run_id, args.node_id, args.decision, note=args.note)
     raise SystemExit(f"unknown command '{args.command}'")
 
 
@@ -198,6 +198,8 @@ def _parser() -> argparse.ArgumentParser:
     p_review.add_argument("run_id")
     p_review.add_argument("node_id")
     p_review.add_argument("decision")
+    # Optional operator payload, consumable downstream as {{nodes.<gate>.review_note}}.
+    p_review.add_argument("--note", default=None)
 
     return parser
 

@@ -30,7 +30,7 @@ export function openRunsDatabase(path: string): Database {
  */
 function migrate(db: Database): void {
   addMissingTextColumns(db, "workflow_runs", ["origin", "notified"]);
-  addMissingTextColumns(db, "workflow_node_runs", ["telemetry_json"]);
+  addMissingTextColumns(db, "workflow_node_runs", ["telemetry_json", "review_note"]);
 }
 
 function addMissingTextColumns(db: Database, table: string, names: string[]): void {

@@ -104,6 +104,7 @@ interface NodeRow {
   hermes_task_id: string | null;
   outcome: string | null;
   review_decision: string | null;
+  review_note: string | null;
   seq: number | null;
   output_json: string | null;
   error: string | null;
@@ -226,13 +227,14 @@ export class RunRepository {
     this.db
       .query(
         `INSERT INTO workflow_node_runs
-           (id, run_id, node_id, status, hermes_task_id, outcome, review_decision, seq, output_json, error, telemetry_json)
-         VALUES ($id, $run, $node, $status, $task, $outcome, $review, $seq, $output, $error, $telemetry)
+           (id, run_id, node_id, status, hermes_task_id, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
+         VALUES ($id, $run, $node, $status, $task, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            hermes_task_id = excluded.hermes_task_id,
            outcome = excluded.outcome,
            review_decision = excluded.review_decision,
+           review_note = excluded.review_note,
            seq = excluded.seq,
            output_json = excluded.output_json,
            error = excluded.error,
@@ -246,6 +248,7 @@ export class RunRepository {
         $task: node.hermes_task_id ?? null,
         $outcome: node.outcome ?? null,
         $review: node.review_decision ?? null,
+        $reviewNote: node.review_note ?? null,
         $seq: node.seq ?? null,
         $output: node.output ?? null,
         $error: node.error ?? null,
@@ -273,6 +276,7 @@ export class RunRepository {
       if (n.outcome !== null) node.outcome = n.outcome as NodeRunState["outcome"];
       if (n.review_decision !== null)
         node.review_decision = n.review_decision as NodeRunState["review_decision"];
+      if (n.review_note !== null) node.review_note = n.review_note;
       if (n.seq !== null) node.seq = n.seq;
       if (n.output_json !== null) node.output = n.output_json;
       if (n.error !== null) node.error = n.error;

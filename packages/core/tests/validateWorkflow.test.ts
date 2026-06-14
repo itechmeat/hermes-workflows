@@ -289,4 +289,30 @@ describe("validateWorkflow — input_mapping", () => {
       "unused_input_mapping",
     );
   });
+
+  // gate(human_review) -> b, with b consuming the gate's review_note.
+  function gateIm(mapping: Record<string, string>): Workflow {
+    return wf(
+      base({
+        nodes: [
+          { id: "gate", type: "human_review" },
+          { id: "b", type: "agent_task", prompt: "note: {{n}}", input_mapping: mapping },
+          { id: "done", type: "finish" },
+        ],
+        edges: [
+          { from: "gate", to: "b" },
+          { from: "b", to: "done" },
+        ],
+      }),
+    );
+  }
+
+  test("accepts a review_note reference from a human_review ancestor", () => {
+    expect(validateWorkflow(gateIm({ n: "{{nodes.gate.review_note}}" })).valid).toBe(true);
+  });
+
+  test("rejects a review_note reference from a non-human_review node", () => {
+    // 'a' (agent_task) has no review_note channel.
+    expect(codes(im({ data: "{{nodes.a.review_note}}" }))).toContain("review_note_source");
+  });
 });

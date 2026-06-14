@@ -54,6 +54,28 @@ def test_schedule_resolves_input_mapping_into_prompt(tmp_path: Path) -> None:
     assert run["nodes"]["b"]["hermes_task_id"] == "fake:b"
 
 
+def test_schedule_resolves_review_note_channel(tmp_path: Path) -> None:
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {
+        "workflow_id": "w",
+        "origin": None,
+        "nodes": {
+            "gate": {"status": "completed", "review_decision": "approved", "review_note": "use 1"},
+            "b": {"status": "pending"},
+        },
+    }
+    params = {
+        "node": "b",
+        "kind": "agent",
+        "prompt": "operator said: {{note}}",
+        "input_mapping": {"note": "{{nodes.gate.review_note}}"},
+    }
+    eng._schedule_node(fake, run, "r1", "b", params)
+    assert fake.captured is not None
+    assert fake.captured["prompt"] == "operator said: use 1"
+
+
 def test_schedule_without_mapping_passes_prompt_through(tmp_path: Path) -> None:
     eng = _engine(tmp_path)
     fake = FakeExec()

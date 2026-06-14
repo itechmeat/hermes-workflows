@@ -75,6 +75,13 @@ export interface NodeRunState {
   outcome?: NodeOutcome;
   /** Decision recorded for a human_review node. */
   review_decision?: ReviewOption;
+  /**
+   * Optional free-text payload the operator attached when resolving a
+   * human_review gate (e.g. which option they picked, or instructions). Lands in
+   * run state and is consumable downstream as `{{nodes.<gate>.review_note}}`,
+   * a channel distinct from a work node's `.output`.
+   */
+  review_note?: string;
   /** Captured node output (e.g. the worker's completion summary). */
   output?: string;
   error?: string;

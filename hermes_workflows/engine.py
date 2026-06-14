@@ -152,7 +152,14 @@ class Engine:
         semantics. Idempotent — an already-terminal run is returned unchanged."""
         return self._core(["run-cancel", "--db", self.db_path, "--id", run_id])
 
-    def decide_review(self, spec_path: str, run_id: str, node_id: str, decision: str) -> dict:
+    def decide_review(
+        self,
+        spec_path: str,
+        run_id: str,
+        node_id: str,
+        decision: str,
+        note: Optional[str] = None,
+    ) -> dict:
         if decision not in REVIEW_OPTIONS:
             raise ValueError(
                 f"invalid review decision '{decision}'; expected one of {sorted(REVIEW_OPTIONS)}"
@@ -164,6 +171,10 @@ class Engine:
         if node.get("status") != "waiting_for_review":
             raise ValueError(f"node '{node_id}' is not awaiting review")
         node["review_decision"] = decision
+        # Optional operator payload, consumable downstream as
+        # {{nodes.<gate>.review_note}}. Blank/whitespace is treated as no note.
+        if note is not None and note.strip() != "":
+            node["review_note"] = note
         node["seq"] = _max_seq(run) + 1
         self._save(run)
         # The decision is recorded before the advance step loads its snapshot,
@@ -566,8 +577,11 @@ class Engine:
         mapping = params.get("input_mapping")
         if not mapping:
             return params
-        outputs = {nid: node.get("output") for nid, node in run["nodes"].items()}
-        resolved_prompt = resolve_input_mapping(params.get("prompt", ""), mapping, outputs)
+        channels = {
+            nid: {"output": node.get("output"), "review_note": node.get("review_note")}
+            for nid, node in run["nodes"].items()
+        }
+        resolved_prompt = resolve_input_mapping(params.get("prompt", ""), mapping, channels)
         resolved = dict(params)
         resolved["prompt"] = resolved_prompt
         return resolved

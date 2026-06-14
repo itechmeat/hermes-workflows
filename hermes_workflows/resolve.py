@@ -23,20 +23,25 @@ from __future__ import annotations
 import re
 from typing import Mapping, Optional
 
-_REF = re.compile(r"^\{\{nodes\.([A-Za-z0-9_-]+)\.output\}\}$")
+# A reference reads one channel of one prior node: a work node's free-text
+# ``output``, or a human_review gate's operator ``review_note``. The channel set
+# mirrors the core ``validateWorkflow`` INPUT_REF_PATTERN.
+_REF = re.compile(r"^\{\{nodes\.([A-Za-z0-9_-]+)\.(output|review_note)\}\}$")
 
 
 class UnresolvedInput(ValueError):
-    """A node's ``input_mapping`` references an output that is not available."""
+    """A node's ``input_mapping`` references a value that is not available."""
 
 
 def resolve_input_mapping(
     prompt: str,
     input_mapping: Optional[Mapping[str, str]],
-    node_outputs: Mapping[str, Optional[str]],
+    node_channels: Mapping[str, Mapping[str, Optional[str]]],
 ) -> str:
-    """Return ``prompt`` with every declared placeholder replaced by its source
-    node's output. ``prompt`` is returned unchanged when there is no mapping."""
+    """Return ``prompt`` with every declared placeholder replaced by the value of
+    its referenced node channel. ``node_channels`` maps each node id to its
+    available channels (``output``, ``review_note``). ``prompt`` is returned
+    unchanged when there is no mapping."""
     if not input_mapping:
         return prompt
     # Resolve every placeholder's value first (failing loud on any unsatisfiable
@@ -50,16 +55,16 @@ def resolve_input_mapping(
         if not match:
             raise UnresolvedInput(
                 f"input_mapping[{placeholder!r}] is not of the form "
-                f"'{{{{nodes.<id>.output}}}}': {ref!r}"
+                f"'{{{{nodes.<id>.output}}}}' or '{{{{nodes.<id>.review_note}}}}': {ref!r}"
             )
-        source = match.group(1)
-        output = node_outputs.get(source)
-        if output is None:
+        source, channel = match.group(1), match.group(2)
+        value = node_channels.get(source, {}).get(channel)
+        if value is None:
             raise UnresolvedInput(
-                f"input_mapping[{placeholder!r}] references node {source!r}, "
-                "which has produced no output"
+                f"input_mapping[{placeholder!r}] references {channel!r} of node "
+                f"{source!r}, which has no such value"
             )
-        values[placeholder] = output
+        values[placeholder] = value
     # `values` is non-empty here: input_mapping was truthy and every entry above
     # either populated it or raised, so the alternation is never an empty regex.
     token = re.compile("|".join(re.escape("{{" + key + "}}") for key in values))
