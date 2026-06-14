@@ -15,6 +15,10 @@ export interface NodeInspectorProps {
   /** Skill catalog from the host `/api/skills` (the same catalog the host's
    *  cron modals use). The node's current skills not in it are still shown. */
   skills?: string[];
+  /** Render every control disabled (pure inspection). Used while a run is in
+   *  progress so the operator can review a node's configuration at any moment
+   *  without risking an edit to a live run. */
+  readOnly?: boolean;
 }
 
 /** Parse a number input: blank clears the field (undefined), otherwise the
@@ -91,6 +95,7 @@ export function NodeInspector({
   profiles = [],
   modelGroups = [],
   skills = [],
+  readOnly = false,
 }: NodeInspectorProps): React.ReactElement {
   if (node === null) {
     return <p className="hw-note">Select a node to edit.</p>;
@@ -98,8 +103,11 @@ export function NodeInspector({
 
   const wf = node.data.node;
 
+  // A disabled <fieldset> natively disables every descendant control - native
+  // inputs/textareas and the Base UI select/checkbox button widgets alike - so
+  // read-only inspection cannot miss a field as the form grows.
   return (
-    <div className="hw-form">
+    <fieldset className="hw-form hw-form--inspector" disabled={readOnly}>
       <Field label="Title">
         <Input
           aria-label="Title"
@@ -142,6 +150,7 @@ export function NodeInspector({
                 <Checkbox
                   key={skill}
                   checked={current.includes(skill)}
+                  disabled={readOnly}
                   onCheckedChange={(on) => onChange({ skills: toggleSkill(current, skill, on) })}
                 >
                   {skill}
@@ -240,6 +249,7 @@ export function NodeInspector({
               <Checkbox
                 key={option}
                 checked={checked}
+                disabled={readOnly}
                 onCheckedChange={(on) => onChange({ options: toggleOption(current, option, on) })}
               >
                 {option}
@@ -259,7 +269,7 @@ export function NodeInspector({
           />
         </Field>
       )}
-    </div>
+    </fieldset>
   );
 }
 

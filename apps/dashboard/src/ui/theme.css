@@ -797,6 +797,19 @@ a.hw-o2b:focus-visible {
   flex-direction: column;
   gap: 12px;
 }
+/* The inspector form root is a <fieldset> (so `disabled` makes it fully
+   read-only); strip the element's default chrome so it lays out like a plain
+   stack. `min-inline-size: 0` defeats the fieldset min-content default. */
+.hw-form--inspector {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+/* A read-only inspector is visibly inert, not just non-interactive. */
+.hw-form--inspector:disabled {
+  opacity: 0.7;
+}
 .hw-fieldset {
   display: flex;
   flex-direction: column;

@@ -22,6 +22,37 @@ describe("NodeInspector", () => {
     expect(screen.getByText(/select a node/i)).toBeInTheDocument();
   });
 
+  it("disables every control when readOnly (inspecting a running node)", () => {
+    const node = flowNode({ id: "build", type: "agent_task", prompt: "p", profile: "dev" });
+    render(
+      <NodeInspector
+        node={node}
+        onChange={() => {}}
+        profiles={["dev", "qa-engineer"]}
+        skills={["lint"]}
+        readOnly
+      />,
+    );
+
+    // The whole form is wrapped in a disabled fieldset, so every native input,
+    // textarea, the Base UI select trigger, and the checkboxes report disabled.
+    expect(screen.getByLabelText("Title")).toBeDisabled();
+    expect(screen.getByLabelText("Prompt")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Profile" })).toBeDisabled();
+    // The Base UI checkbox is a role=checkbox span (not a native control), so it
+    // reports disabled via aria-disabled rather than the disabled attribute.
+    expect(screen.getByRole("checkbox", { name: "lint" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
+  it("leaves controls enabled by default (editing a node)", () => {
+    const node = flowNode({ id: "build", type: "agent_task", prompt: "p", profile: "dev" });
+    render(<NodeInspector node={node} onChange={() => {}} profiles={["dev"]} />);
+    expect(screen.getByLabelText("Prompt")).not.toBeDisabled();
+  });
+
   it("edits an agent_task prompt and profile", async () => {
     const onChange = vi.fn();
     const node = flowNode({ id: "build", type: "agent_task", prompt: "old", profile: "dev" });

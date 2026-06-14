@@ -198,8 +198,16 @@ export function FlowEditor({
 
   // While a run plays the canvas renders the run pipeline: the same nodes at
   // their live positions, retyped for RunNodeView and tagged with run status.
+  // Each run node carries `onSelect` so the operator can open it in a read-only
+  // inspector mid-run (pure inspection; editing stays locked) - ReactFlow does
+  // not pass React context into custom nodes, so the opener rides on node data.
   const canvasNodes =
-    playing && playback.run !== null ? overlayRunStatus(ctrl.nodes, playback.run) : ctrl.nodes;
+    playing && playback.run !== null
+      ? overlayRunStatus(ctrl.nodes, playback.run).map((node) => ({
+          ...node,
+          data: { ...node.data, onSelect: openNode },
+        }))
+      : ctrl.nodes;
 
   const addItems: MenuItem[] = NODE_TYPES.map((type) => ({
     key: type,
@@ -336,7 +344,7 @@ export function FlowEditor({
           onClose={closeEditor}
           footer={
             <Button variant="primary" onClick={closeEditor}>
-              Done
+              {playing ? "Close" : "Done"}
             </Button>
           }
         >
@@ -346,6 +354,9 @@ export function FlowEditor({
             profiles={profiles}
             modelGroups={modelGroups}
             skills={skills}
+            // A running workflow opens nodes for inspection only: fully disabled
+            // so the live run can never be edited from here.
+            readOnly={playing}
           />
         </Modal>
       )}
