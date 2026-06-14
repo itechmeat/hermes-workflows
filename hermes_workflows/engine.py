@@ -146,6 +146,40 @@ class Engine:
             raise ValueError(f"unknown run {run_id}")
         return run
 
+    def status_live(self, spec_path: str, run_id: str) -> dict:
+        """Like :meth:`status`, but annotate each active node with a read-only
+        live poll of its backing card, so a manual status read reflects reality
+        between ticks instead of the last persisted tick (the source of repeated
+        "it looks stuck" confusion). Never mutates persisted state; a poll error
+        leaves a node un-annotated. ``run['live']`` lists nodes whose card has
+        already settled but the run has not yet folded in (pending completions).
+        """
+        run = self.status(run_id)
+        try:
+            plan = self._core(["compile-preview", spec_path])
+            executor = self._executor_for(plan["scope"], run)
+        except Exception as exc:  # noqa: BLE001 - status must never fail on a live read
+            run["live"] = {"error": str(exc)}
+            return run
+
+        pending: list[str] = []
+        for node_id, node in run["nodes"].items():
+            if node.get("status") not in ("scheduled", "running") or not node.get("hermes_task_id"):
+                continue
+            try:
+                completion = executor.poll(node["hermes_task_id"])
+            except Exception:  # noqa: BLE001 - one bad poll never fails status
+                continue
+            settled = bool(completion.settled and completion.outcome is not None)
+            live = {"card_status": completion.status, "settled": settled}
+            if completion.outcome is not None:
+                live["outcome"] = completion.outcome
+            node["live"] = live
+            if settled or completion.status == "blocked":
+                pending.append(node_id)
+        run["live"] = {"as_of": "live-poll", "pending_completions": pending}
+        return run
+
     def cancel(self, run_id: str) -> dict:
         """Cancel a run from the shell: mark the run cancelled and cancel its
         still-active nodes, reusing the core ``run-cancel`` (``cancelRun``)
@@ -280,7 +314,8 @@ class Engine:
 
         seq = _max_seq(run)
         settled_cards: list[str] = []
-        for node in run["nodes"].values():
+        blocked_nodes: list[str] = []
+        for node_id, node in run["nodes"].items():
             if node.get("status") in ("scheduled", "running") and node.get("hermes_task_id"):
                 completion = executor.poll(node["hermes_task_id"])
                 if completion.settled and completion.outcome is not None:
@@ -292,6 +327,13 @@ class Engine:
                         node["output"] = completion.output
                     self._merge_telemetry(node)
                     settled_cards.append(node["hermes_task_id"])
+                elif completion.status == "blocked":
+                    # The underlying card was blocked (e.g. a worker error ran
+                    # `kanban block`). The node stays active so the tick keeps
+                    # polling and auto-recovers when it is unblocked, but we must
+                    # not leave the run silently inert: surface it for an
+                    # operator notice (once, via the notified markers).
+                    blocked_nodes.append(node_id)
                 elif completion.started and node["status"] == "scheduled":
                     # The executor reports the work has visibly begun (e.g. the
                     # Direct runner thread is live) — show a truthful "running"
@@ -306,7 +348,7 @@ class Engine:
             self._schedule_node(executor, run, run_id, node_id, task_params.get(node_id))
 
         run["status"] = decision["run_status"]
-        self._emit_lifecycle(run, decision, plan.get("deliver"))
+        self._emit_lifecycle(run, decision, plan.get("deliver"), blocked_nodes)
         self._emit_memory(run, spec_path)
         if prior is not None:
             self._emit_trace(prior, run)
@@ -382,12 +424,19 @@ class Engine:
 
     # --- lifecycle effects (notifications) --------------------------------
 
-    def _emit_lifecycle(self, run: dict, decision: dict, deliver: Optional[str] = None) -> None:
+    def _emit_lifecycle(
+        self,
+        run: dict,
+        decision: dict,
+        deliver: Optional[str] = None,
+        blocked: Optional[Sequence[str]] = None,
+    ) -> None:
         """Fire run-lifecycle notices once per transition into completed /
-        failed / waiting, tracked by persisted markers so a run that stays in a
-        state across ticks is never re-announced. ``deliver`` is the workflow's
-        declared delivery target (compile-preview), routing the notice and, on a
-        completed run, swapping the terse line for the run's result. Fail-open."""
+        failed / waiting, and once per underlying card that goes blocked, tracked
+        by persisted markers so a run that stays in a state across ticks is never
+        re-announced. ``deliver`` is the workflow's declared delivery target
+        (compile-preview), routing the notice and, on a completed run, swapping
+        the terse line for the run's result. Fail-open."""
         notified = list(run.get("notified") or [])
         seen = set(notified)
 
@@ -403,6 +452,13 @@ class Engine:
         for node_id in decision.get("waiting", []):
             key = f"waiting:{node_id}"
             if key not in seen and self._notify(run, "waiting", node_id=node_id, deliver=deliver):
+                mark(key)
+        # One attention notice per blocked underlying card. The run stays active
+        # (the node is still scheduled/running), so it is not re-announced across
+        # ticks and clears naturally once the card is unblocked and completes.
+        for node_id in blocked or []:
+            key = f"blocked:{node_id}"
+            if key not in seen and self._notify(run, "blocked", node_id=node_id, deliver=deliver):
                 mark(key)
 
         if notified != (run.get("notified") or []):
@@ -642,6 +698,15 @@ def _notice_text(run: dict, event: str, node_id: Optional[str]) -> str:
             f"needs_changes). Resolve it from the dashboard run view, or run: "
             f"hermes-workflows review {run_id} {node_id} <decision> [--note \"...\"]. "
             f"Replying in chat does not reach this run."
+        )
+    if event == "blocked":
+        card = (run.get("nodes") or {}).get(node_id, {}).get("hermes_task_id")
+        card_hint = f" (card {card})" if card else ""
+        return (
+            f"ATTENTION - workflow {workflow_id} run {run_id}: the card for node "
+            f"'{node_id}'{card_hint} is blocked and the run cannot make progress "
+            f"until it is unblocked. Inspect and unblock it on its board, then the "
+            f"next tick resumes the run automatically."
         )
     return f"Workflow {workflow_id} run {run_id}: {event}."
 

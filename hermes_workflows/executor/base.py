@@ -17,6 +17,11 @@ class Completion:
     # engine show a truthful "running" instead of a stale "scheduled" while a
     # long node executes. False on backends that cannot tell.
     started: bool = False
+    # The backing card's live status, when the backend has one (Kanban:
+    # triage/ready/running/blocked/done/...). Lets the tick detect a blocked
+    # card and the `status` command report fresh state. None on backends with no
+    # distinct card status (Direct, Script).
+    status: Optional[str] = None
 
 
 @runtime_checkable

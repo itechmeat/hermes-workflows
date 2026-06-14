@@ -66,6 +66,21 @@ def test_decide_review_rejects_non_waiting_node(engine: Engine) -> None:
         engine.decide_review(SPEC, "r", "plan", "approved")
 
 
+def test_status_live_surfaces_a_pending_completion(engine: Engine) -> None:
+    """status_live read-only-polls active cards so a card that finished between
+    ticks shows as settled (a pending completion), without mutating run state."""
+    run = engine.run(SPEC, "r")
+    card = run["nodes"]["plan"]["hermes_task_id"]
+    # The card finished on the board, but the run has not advanced yet.
+    _complete(engine.kanban.board_conn, card)
+
+    live = engine.status_live(SPEC, "r")
+    assert live["nodes"]["plan"]["live"]["settled"] is True
+    assert "plan" in live["live"]["pending_completions"]
+    # Persisted state is untouched: the node is still scheduled until a tick.
+    assert engine.status("r")["nodes"]["plan"]["status"] == "scheduled"
+
+
 def test_decide_review_records_an_optional_note(engine: Engine) -> None:
     _drive_to_review(engine)
     resolved = engine.decide_review(SPEC, "r", "review", "approved", note="chose option 1")

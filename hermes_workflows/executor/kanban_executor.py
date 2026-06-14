@@ -50,4 +50,5 @@ class KanbanExecutor:
             settled=settled,
             outcome=completion.outcome,
             output=completion.output,
+            status=completion.status,
         )

@@ -166,7 +166,14 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
     if args.command == "advance-all":
         return _advance_all(engine)
     if args.command == "status":
-        return engine.status(args.run_id)
+        # Opportunistic live read: annotate active nodes with their card's live
+        # state so status does not lag the tick. Falls back to the persisted run
+        # if the spec cannot be resolved (e.g. the workflow file was removed).
+        try:
+            spec = _spec_path_for_run(engine, args.run_id)
+        except SystemExit:
+            return engine.status(args.run_id)
+        return engine.status_live(spec, args.run_id)
     if args.command == "cancel":
         return engine.cancel(args.run_id)
     if args.command == "review":

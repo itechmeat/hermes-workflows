@@ -225,3 +225,40 @@ def test_waiting_run_notifies_and_subscribes_the_card(tmp_path: Path) -> None:
         assert len(rec.sent) == before
     finally:
         board.close()
+
+
+def test_blocked_card_delivers_one_attention_notice(tmp_path: Path) -> None:
+    kb = pytest.importorskip("hermes_cli.kanban_db")
+    from hermes_workflows.executor import KanbanExecutor
+
+    rec = _Recorder()
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        eng = Engine(
+            core_cli=["bun", "run", str(CLI)],
+            db_path=str(tmp_path / "runs.db"),
+            kanban=KanbanExecutor(board),
+            sender=rec,
+            default_deliver="fallback:1",
+        )
+        spec = _spec(tmp_path, REVIEW_SPEC)
+        run = eng.run(spec, "r-1", origin="telegram:8:4")
+        work_card = run["nodes"]["work"]["hermes_task_id"]
+
+        # The underlying card is blocked (e.g. a worker error ran `kanban block`).
+        board.execute("UPDATE tasks SET status = 'blocked' WHERE id = ?", (work_card,))
+        board.commit()
+
+        run = eng.advance(spec, "r-1")
+        # The run stays active (the node is still scheduled/running), not inert.
+        assert run["status"] == "running"
+        blocked = [m for _t, m in rec.sent if "ATTENTION" in m and "blocked" in m]
+        assert len(blocked) == 1
+        assert work_card in blocked[0]
+
+        # A second tick while still blocked delivers no duplicate.
+        before = len(rec.sent)
+        eng.advance(spec, "r-1")
+        assert len(rec.sent) == before
+    finally:
+        board.close()
