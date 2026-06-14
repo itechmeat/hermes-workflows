@@ -84,6 +84,60 @@ describe("serializeWorkflow", () => {
     }
   });
 
+  function wfWithPrompt(prompt: string) {
+    return fromObject({
+      id: "b",
+      name: "B",
+      version: 1,
+      scope: { type: "global" },
+      trigger: { type: "manual" },
+      nodes: [
+        { id: "a", type: "agent_task", prompt, profile: "x" },
+        { id: "done", type: "finish" },
+      ],
+      edges: [{ from: "a", to: "done" }],
+    }).workflow;
+  }
+
+  test("emits a multiline string as a readable block scalar", () => {
+    const wf = wfWithPrompt("First line.\nSecond line.\nThird.\n");
+    const text = serializeWorkflow(wf);
+    // Human-readable block scalar, not a one-line quoted "...\n..." string.
+    expect(text).toContain('"prompt": |');
+    expect(text).toContain("    First line.");
+    expect(text).not.toContain('"First line.\\nSecond line.');
+    // And it still round-trips exactly.
+    expect(parseWorkflow(text).workflow).toEqual(wf);
+  });
+
+  test("uses the strip indicator for a multiline string with no trailing newline", () => {
+    const wf = wfWithPrompt("alpha\nbeta");
+    const text = serializeWorkflow(wf);
+    expect(text).toContain('"prompt": |-');
+    expect(parseWorkflow(text).workflow).toEqual(wf);
+  });
+
+  test("round-trips multiline strings with blank interior lines", () => {
+    const wf = wfWithPrompt("para one\n\npara two\n");
+    const text = serializeWorkflow(wf);
+    expect(parseWorkflow(text).workflow).toEqual(wf);
+  });
+
+  test("falls back to a quoted scalar when a block scalar would be lossy", () => {
+    // A trailing space on a content line cannot survive a block scalar, and a
+    // 2+ trailing-newline string is ambiguous to clip/strip - both keep quoting.
+    for (const prompt of ["has trailing space \nnext line\n", "double\n\n", " leading\nspace\n"]) {
+      const wf = wfWithPrompt(prompt);
+      const text = serializeWorkflow(wf);
+      expect(parseWorkflow(text).workflow).toEqual(wf);
+    }
+  });
+
+  test("keeps single-line strings as quoted scalars", () => {
+    const wf = wfWithPrompt("just one line");
+    expect(serializeWorkflow(wf)).toContain('"prompt": "just one line"');
+  });
+
   test("emits valid YAML that re-parses", () => {
     const { workflow, ui } = parseWorkflow(
       [

@@ -8,8 +8,12 @@
  * `parseWorkflow(serializeWorkflow(w, ui))` deep-equals `{ workflow: w, ui }` by
  * construction — multiline prompts and special characters are escaped safely.
  *
- * Known cosmetic limit: multiline strings emit as quoted scalars with `\n`, not
- * `|` block scalars. Acceptable for an editor foundation.
+ * A multiline string in a mapping is emitted as a `|` block scalar so authored
+ * prompts/commands stay hand-readable across the round trip. This is applied
+ * only when it is provably lossless (see {@link blockScalar}); every other
+ * string falls back to the JSON-quoted form, so the round-trip guarantee holds.
+ *
+ * Known limit: YAML comments are not round-tripped (the spec carries none).
  */
 
 import type { Workflow } from "../schema/workflow.ts";
@@ -26,6 +30,60 @@ function scalar(value: unknown): string {
   return JSON.stringify(value);
 }
 
+interface BlockScalar {
+  /** The block indicator: `|` (clip, one trailing newline) or `|-` (strip). */
+  indicator: string;
+  /** Content lines, already prefixed with `contentPad` (blank lines stay "").*/
+  lines: string[];
+}
+
+/**
+ * Render a string as a YAML block scalar at `contentPad` indentation, or return
+ * null when a block scalar could not represent it without loss (so the caller
+ * keeps the quoted form). Lossless only:
+ *  - the string is multiline (a single line is better as a quoted scalar);
+ *  - its trailing newline count is 0 (`|-`) or 1 (`|`); 2+ is ambiguous to clip;
+ *  - the first content line is non-empty and not indented (block scalars infer
+ *    indentation from it, which would eat leading spaces / a blank lead line);
+ *  - no content line has trailing whitespace or a carriage return (block scalars
+ *    drop trailing spaces and normalise line breaks).
+ */
+function blockScalar(value: string, contentPad: string): BlockScalar | null {
+  if (!value.includes("\n") || value.includes("\r")) return null;
+
+  const trailing = (value.match(/\n*$/)?.[0] ?? "").length;
+  let indicator: string;
+  let content: string[];
+  if (trailing === 0) {
+    indicator = "|-";
+    content = value.split("\n");
+  } else if (trailing === 1) {
+    indicator = "|";
+    content = value.slice(0, -1).split("\n");
+  } else {
+    return null; // 2+ trailing newlines: keep quoting (clip/strip can't express it)
+  }
+
+  if (content.length === 0 || content[0] === "" || /^[ \t]/.test(content[0] as string)) {
+    return null; // blank or indented first line breaks YAML indentation inference
+  }
+  for (const line of content) {
+    if (/[ \t]$/.test(line)) return null; // trailing whitespace would be lost
+  }
+
+  return { indicator, lines: content.map((line) => (line === "" ? "" : contentPad + line)) };
+}
+
+/** Emit `key: value` for a scalar, preferring a block scalar for a multiline
+ *  string when lossless, else the quoted form. */
+function emitScalarEntry(pad: string, key: string, value: unknown): string[] {
+  if (typeof value === "string") {
+    const block = blockScalar(value, pad + INDENT);
+    if (block) return [`${pad}${key}: ${block.indicator}`, ...block.lines];
+  }
+  return [`${pad}${key}: ${scalar(value)}`];
+}
+
 function definedEntries(obj: Record<string, unknown>): [string, unknown][] {
   return Object.entries(obj).filter(([, v]) => v !== undefined);
 }
@@ -39,7 +97,7 @@ function emitMapping(obj: Record<string, unknown>, depth: number): string[] {
     // round-trip lossless and prevents a crafted key from injecting YAML.
     const k = scalar(key);
     if (isScalar(value)) {
-      lines.push(`${pad}${k}: ${scalar(value)}`);
+      lines.push(...emitScalarEntry(pad, k, value));
     } else if (Array.isArray(value)) {
       if (value.length === 0) {
         lines.push(`${pad}${k}: []`);
