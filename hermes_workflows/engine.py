@@ -632,7 +632,17 @@ def _notice_text(run: dict, event: str, node_id: Optional[str]) -> str:
     workflow_id = run.get("workflow_id")
     run_id = run.get("run_id")
     if event == "waiting":
-        return f"Workflow {workflow_id} run {run_id}: review needed ({node_id})."
+        # Actionable gate notice: what is needed, the allowed decisions, and how
+        # to resolve it. A chat reply does not reach a paused run (the gateway
+        # consumes it in a fresh session), so the operator is told to use the
+        # dashboard or the CLI explicitly rather than reply here.
+        return (
+            f"ACTION NEEDED - workflow {workflow_id} run {run_id}: review gate "
+            f"'{node_id}' is waiting for your decision (approved / rejected / "
+            f"needs_changes). Resolve it from the dashboard run view, or run: "
+            f"hermes-workflows review {run_id} {node_id} <decision> [--note \"...\"]. "
+            f"Replying in chat does not reach this run."
+        )
     return f"Workflow {workflow_id} run {run_id}: {event}."
 
 

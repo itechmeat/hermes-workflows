@@ -209,10 +209,15 @@ def test_waiting_run_notifies_and_subscribes_the_card(tmp_path: Path) -> None:
         _complete(board, work_card)
         run = eng.advance(spec, "r-1")
         assert run["status"] == "waiting"
-        # The waiting transition delivers a review-needed notice to the origin.
-        review_notices = [(t, m) for t, m in rec.sent if "review needed" in m]
+        # The waiting transition delivers an actionable ACTION NEEDED notice to
+        # the origin: it names the gate, how to resolve, and that chat replies do
+        # not reach the run.
+        review_notices = [(t, m) for t, m in rec.sent if "ACTION NEEDED" in m]
         assert len(review_notices) == 1
         assert review_notices[0][0] == "telegram:8:4"
+        message = review_notices[0][1]
+        assert "hermes-workflows review" in message
+        assert "does not reach" in message
 
         # Advancing again while still waiting delivers no duplicate.
         before = len(rec.sent)

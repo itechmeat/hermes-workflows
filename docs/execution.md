@@ -107,8 +107,26 @@ validation (`approved` / `rejected` / `needs_changes`, and only while the node
 is actually awaiting review):
 
 - the `workflow_review` model tool,
-- the CLI: `hermes-workflows review <run_id> <node_id> <decision>`,
+- the CLI: `hermes-workflows review <run_id> <node_id> <decision> [--note "…"]`,
 - the dashboard: `POST /api/plugins/workflows/runs/{run_id}/review`.
+
+Each surface accepts an optional **note** — a free-text operator payload that
+lands on the gate node as `review_note` and is consumable by a downstream
+`agent_task` via `input_mapping: {x: "{{nodes.<gate>.review_note}}"}` (a channel
+distinct from a work node's `.output`). This is how a gate feeds the operator's
+choice or instructions into the rest of the run.
+
+On entering the gate the run delivers one **ACTION NEEDED** notice to its origin
+naming the gate, the allowed decisions, and how to resolve it.
+
+> **Chat replies do not reach a paused run.** A workflow that asks the operator
+> to "reply in chat" will not receive the reply: on a live gateway the reply is
+> consumed by the normal gateway agent in a fresh session, never by the paused
+> run. Resolve a gate only through the three surfaces above (dashboard or CLI in
+> practice). A native operator→run channel — Telegram inline-keyboard buttons
+> whose callback resolves the gate, or a tagged reply addressing a run id —
+> needs an upstream Hermes event→run binding that does not exist yet, so it is
+> deliberately not stubbed here.
 
 ## Inline mode (`execution.default_mode`)
 
