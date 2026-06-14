@@ -102,6 +102,7 @@ interface NodeRow {
   node_id: string;
   status: string;
   hermes_task_id: string | null;
+  driven_task_ids: string | null;
   outcome: string | null;
   review_decision: string | null;
   review_note: string | null;
@@ -227,11 +228,12 @@ export class RunRepository {
     this.db
       .query(
         `INSERT INTO workflow_node_runs
-           (id, run_id, node_id, status, hermes_task_id, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
-         VALUES ($id, $run, $node, $status, $task, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
+           (id, run_id, node_id, status, hermes_task_id, driven_task_ids, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
+         VALUES ($id, $run, $node, $status, $task, $driven, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            hermes_task_id = excluded.hermes_task_id,
+           driven_task_ids = excluded.driven_task_ids,
            outcome = excluded.outcome,
            review_decision = excluded.review_decision,
            review_note = excluded.review_note,
@@ -246,6 +248,10 @@ export class RunRepository {
         $node: node.node_id,
         $status: node.status,
         $task: node.hermes_task_id ?? null,
+        $driven:
+          node.driven_task_ids && node.driven_task_ids.length > 0
+            ? JSON.stringify(node.driven_task_ids)
+            : null,
         $outcome: node.outcome ?? null,
         $review: node.review_decision ?? null,
         $reviewNote: node.review_note ?? null,
@@ -273,6 +279,9 @@ export class RunRepository {
         status: n.status as NodeRunState["status"],
       };
       if (n.hermes_task_id !== null) node.hermes_task_id = n.hermes_task_id;
+      if (n.driven_task_ids !== null) {
+        node.driven_task_ids = JSON.parse(n.driven_task_ids) as string[];
+      }
       if (n.outcome !== null) node.outcome = n.outcome as NodeRunState["outcome"];
       if (n.review_decision !== null)
         node.review_decision = n.review_decision as NodeRunState["review_decision"];

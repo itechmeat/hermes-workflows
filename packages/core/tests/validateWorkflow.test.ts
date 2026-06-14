@@ -316,3 +316,49 @@ describe("validateWorkflow — input_mapping", () => {
     expect(codes(im({ data: "{{nodes.a.review_note}}" }))).toContain("review_note_source");
   });
 });
+
+describe("validateWorkflow — adopt / task_ref", () => {
+  function adopt(extra: Record<string, unknown>): Workflow {
+    return wf(
+      base({
+        nodes: [
+          { id: "a", type: "agent_task", prompt: "produce" },
+          { id: "drive", type: "agent_task", prompt: "drive", ...extra },
+          { id: "done", type: "finish" },
+        ],
+        edges: [
+          { from: "a", to: "drive" },
+          { from: "drive", to: "done" },
+        ],
+      }),
+    );
+  }
+
+  test("accepts an adopt node with a literal task id", () => {
+    expect(validateWorkflow(adopt({ adopt: true, task_ref: "t_abc123" })).valid).toBe(true);
+  });
+
+  test("accepts an adopt node with a typed task_ids reference to an ancestor", () => {
+    expect(
+      validateWorkflow(adopt({ adopt: true, task_ref: "{{nodes.a.output.task_ids}}" })).valid,
+    ).toBe(true);
+  });
+
+  test("rejects adopt with no task_ref", () => {
+    expect(codes(adopt({ adopt: true }))).toContain("adopt_without_task_ref");
+  });
+
+  test("rejects a task_ref without adopt", () => {
+    expect(codes(adopt({ task_ref: "t_abc123" }))).toContain("task_ref_without_adopt");
+  });
+
+  test("rejects a malformed task_ref", () => {
+    expect(codes(adopt({ adopt: true, task_ref: "not a ref!" }))).toContain("invalid_task_ref");
+  });
+
+  test("rejects a task_ids reference to a non-ancestor node", () => {
+    expect(codes(adopt({ adopt: true, task_ref: "{{nodes.done.output.task_ids}}" }))).toContain(
+      "non_ancestor_task_ref",
+    );
+  });
+});

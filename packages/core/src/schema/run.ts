@@ -71,6 +71,12 @@ export interface NodeRunState {
   status: NodeStatus;
   /** Kanban task backing this node, when one was created. */
   hermes_task_id?: string;
+  /**
+   * For an `adopt` node, the existing board card(s) it drives. The node settles
+   * only when ALL of these reach a terminal state. `hermes_task_id` mirrors the
+   * first id (for telemetry / subscription); the gating reads this list.
+   */
+  driven_task_ids?: string[];
   /** Set once the node reaches a terminal state. */
   outcome?: NodeOutcome;
   /** Decision recorded for a human_review node. */

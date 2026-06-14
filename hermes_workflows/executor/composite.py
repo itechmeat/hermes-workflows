@@ -40,3 +40,11 @@ class CompositeExecutor:
     def poll(self, handle: str) -> Completion:
         target = self.script if handle.startswith(_HANDLE_PREFIX) else self.scope
         return target.poll(handle)
+
+    def adopt(self, task_id: str, *, assignee: str) -> str:
+        """Drive an existing board card — a scope-backend (Kanban) capability;
+        script nodes never adopt. Raises if the scope executor cannot adopt."""
+        adopt = getattr(self.scope, "adopt", None)
+        if adopt is None:
+            raise ValueError("adopt requires a Kanban-backed (project) scope")
+        return adopt(task_id, assignee=assignee)

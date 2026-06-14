@@ -43,6 +43,11 @@ class KanbanExecutor:
             iteration=iteration,
         )
 
+    def adopt(self, task_id: str, *, assignee: str) -> str:
+        """Drive an existing card on this board (assign + promote into dispatch),
+        returning its id as the handle. See :func:`kanban.adopt_task`."""
+        return kanban.adopt_task(self.board_conn, task_id, assignee=assignee)
+
     def poll(self, handle: str) -> Completion:
         completion = kanban.read_completion(self.board_conn, handle)
         settled = completion.settled and completion.outcome is not None

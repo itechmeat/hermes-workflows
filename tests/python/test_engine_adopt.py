@@ -1,0 +1,161 @@
+"""Adopt mode: an agent_task drives EXISTING board cards (assign + promote into
+dispatch, then poll to terminal) instead of creating new ones, including a typed
+``{{nodes.<id>.output.task_ids}}`` reference that drives every id an upstream
+node surfaced, gating completion on all of them.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from pathlib import Path
+
+import pytest
+
+kb = pytest.importorskip("hermes_cli.kanban_db")
+
+from hermes_workflows.engine import Engine
+from hermes_workflows.executor import KanbanExecutor
+
+ROOT = Path(__file__).resolve().parents[2]
+CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
+
+
+def _engine(tmp_path: Path, board: sqlite3.Connection) -> Engine:
+    return Engine(core_cli=CLI, db_path=str(tmp_path / "runs.db"), kanban=KanbanExecutor(board))
+
+
+def _spec(tmp_path: Path, obj: dict) -> str:
+    path = tmp_path / f"{obj['id']}.workflow.json"
+    path.write_text(json.dumps(obj))
+    return str(path)
+
+
+def _complete(board: sqlite3.Connection, task_id: str, outcome: str = "completed") -> None:
+    board.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (task_id,))
+    board.execute(
+        "INSERT INTO task_runs (task_id, status, outcome, summary, started_at, ended_at) "
+        "VALUES (?, 'done', ?, 'ok', 1, 2)",
+        (task_id, outcome),
+    )
+    board.commit()
+
+
+def _status(board: sqlite3.Connection, task_id: str) -> str:
+    return board.execute("SELECT status FROM tasks WHERE id = ?", (task_id,)).fetchone()["status"]
+
+
+def _adopt_spec(task_ref: str, *, collect: bool = False) -> dict:
+    nodes = [{"id": "drive", "type": "agent_task", "prompt": "drive", "profile": "worker",
+              "adopt": True, "task_ref": task_ref}]
+    edges = [{"from": "drive", "to": "done"}]
+    if collect:
+        nodes.insert(0, {"id": "collect", "type": "agent_task", "prompt": "find", "profile": "scout"})
+        edges.insert(0, {"from": "collect", "to": "drive"})
+    nodes.append({"id": "done", "type": "finish", "outcome": "success"})
+    entry = "collect" if collect else "drive"
+    return {
+        "id": f"adopt-{entry}",
+        "name": "Adopt",
+        "version": 1,
+        "scope": {"type": "project"},
+        "trigger": {"type": "manual"},
+        "defaults": {"profile": "worker"},
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+def test_adopt_drives_a_literal_existing_card(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        target = kb.create_task(board, title="real work", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec(target))
+
+        run = eng.run(spec, "r")
+        # The node drives the EXISTING card (no new card created): assigned to the
+        # node profile and promoted into the dispatch lane.
+        assert run["nodes"]["drive"]["driven_task_ids"] == [target]
+        assert run["nodes"]["drive"]["hermes_task_id"] == target
+        assert run["nodes"]["drive"]["status"] == "scheduled"
+        assert _status(board, target) == "ready"
+        row = board.execute("SELECT assignee FROM tasks WHERE id = ?", (target,)).fetchone()
+        assert row["assignee"] == "worker"
+
+        _complete(board, target)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "completed"
+        assert run["nodes"]["drive"]["outcome"] == "success"
+        assert run["status"] == "completed"
+    finally:
+        board.close()
+
+
+def test_adopt_is_idempotent_on_an_already_running_card(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        target = kb.create_task(board, title="busy", created_by="op", triage=True)
+        # The card is already being run by a worker.
+        board.execute("UPDATE tasks SET status = 'running' WHERE id = ?", (target,))
+        board.commit()
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec(target))
+        run = eng.run(spec, "r")
+        # A running card is being driven already: adopt is a no-op, not a re-promote.
+        assert run["nodes"]["drive"]["driven_task_ids"] == [target]
+        assert _status(board, target) == "running"
+    finally:
+        board.close()
+
+
+def test_adopt_fails_loud_on_a_missing_card(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec("t_does_not_exist"))
+        run = eng.run(spec, "r")
+        node = run["nodes"]["drive"]
+        assert node["status"] == "completed"
+        assert node["outcome"] == "failure"
+        assert "adopt failed" in (node["output"] or "")
+    finally:
+        board.close()
+
+
+def test_adopt_drives_typed_task_ids_from_upstream_output(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        t1 = kb.create_task(board, title="one", created_by="op", triage=True)
+        t2 = kb.create_task(board, title="two", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True))
+
+        run = eng.run(spec, "r")
+        collect_card = run["nodes"]["collect"]["hermes_task_id"]
+        # The scout node surfaces the chosen ids in its output (free text); the
+        # typed channel extracts them by their board-id shape.
+        board.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (collect_card,))
+        board.execute(
+            "INSERT INTO task_runs (task_id, status, outcome, summary, started_at, ended_at) "
+            "VALUES (?, 'done', 'completed', ?, 1, 2)",
+            (collect_card, f"scope: drive {t1} and {t2} please"),
+        )
+        board.commit()
+
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [t1, t2]
+        assert _status(board, t1) == "ready"
+        assert _status(board, t2) == "ready"
+
+        # The node gates on ALL driven cards: one done is not enough.
+        _complete(board, t1)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] in ("scheduled", "running")
+
+        _complete(board, t2)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "completed"
+        assert run["nodes"]["drive"]["outcome"] == "success"
+    finally:
+        board.close()

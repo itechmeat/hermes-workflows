@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS workflow_node_runs (
   node_id         TEXT NOT NULL,
   status          TEXT NOT NULL,
   hermes_task_id  TEXT,
+  -- JSON array of existing board card ids an adopt node drives. Added after the
+  -- initial schema, so connection.ts ALTERs pre-existing databases.
+  driven_task_ids TEXT,
   outcome         TEXT,
   review_decision TEXT,
   -- Optional operator free-text payload attached when resolving a human_review

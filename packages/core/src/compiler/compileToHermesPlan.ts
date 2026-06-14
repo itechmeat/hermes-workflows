@@ -28,6 +28,10 @@ export interface CompiledKanbanTask {
   workspace?: "scratch" | "worktree";
   timeout_seconds?: number;
   max_retries?: number;
+  /** Drive an existing card instead of creating one (see AgentTaskNode.adopt). */
+  adopt?: boolean;
+  /** The id (or `{{nodes.<id>.output.task_ids}}` reference) to drive when adopting. */
+  task_ref?: string;
 }
 
 /** A script node compiled for local execution by the plugin's ScriptExecutor.
@@ -100,6 +104,8 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     };
     if (node.title !== undefined) task.title = node.title;
     if (node.input_mapping !== undefined) task.input_mapping = node.input_mapping;
+    if (node.adopt !== undefined) task.adopt = node.adopt;
+    if (node.task_ref !== undefined) task.task_ref = node.task_ref;
     if (node.model !== undefined) task.model = node.model;
     if (node.skills !== undefined) task.skills = node.skills;
     if (node.workspace !== undefined) task.workspace = node.workspace.type;

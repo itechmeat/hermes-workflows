@@ -32,6 +32,19 @@ export interface AgentTaskNode {
   max_retries?: number;
   /** Maps to the native `max_runtime_seconds` column. */
   timeout_seconds?: number;
+  /**
+   * Drive an EXISTING Kanban card (or cards) instead of creating a new one: the
+   * executor assigns the node's `profile`, promotes the card into the dispatch
+   * lane, then polls it to terminal. Requires `task_ref`. The work is the card,
+   * the native way, rather than a parallel workflow-owned card.
+   */
+  adopt?: boolean;
+  /**
+   * Which card(s) an `adopt` node drives: a literal task id, or a
+   * `{{nodes.<id>.output.task_ids}}` reference resolved at schedule time to the
+   * task ids an upstream node surfaced. Only meaningful with `adopt`.
+   */
+  task_ref?: string;
 }
 
 /**

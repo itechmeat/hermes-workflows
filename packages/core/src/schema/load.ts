@@ -340,6 +340,13 @@ function parseAgentTask(value: Rec, base: { id: string }, id: string): AgentTask
       fail(`node '${id}'.timeout_seconds must be a number`);
     node.timeout_seconds = value["timeout_seconds"];
   }
+  if (value["adopt"] !== undefined) {
+    if (typeof value["adopt"] !== "boolean") fail(`node '${id}'.adopt must be a boolean`);
+    node.adopt = value["adopt"];
+  }
+  if (value["task_ref"] !== undefined) {
+    node.task_ref = str(value["task_ref"], `node '${id}'.task_ref`);
+  }
   return node;
 }
 

@@ -14,6 +14,7 @@ the spec is interpreted in exactly one place (TypeScript).
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -36,6 +37,12 @@ _TERMINAL_STATUSES = frozenset({"completed", "failed"})
 # inline-eligible indefinitely, so cap the synchronous steps per call and let
 # the durable tick carry on past the cap.
 _MAX_INLINE_STEPS = 10_000
+
+# task_ref resolution: a literal board id, or a typed reference to the task ids
+# an upstream node surfaced in its output (extracted by the board id shape, so a
+# free-text agent output still yields a typed id list, failing loud on none).
+_TASK_IDS_REF = re.compile(r"^\{\{nodes\.([A-Za-z0-9_-]+)\.output\.task_ids\}\}$")
+_TASK_ID_TOKEN = re.compile(r"\bt_[0-9a-z]+\b")
 
 
 class Engine:
@@ -316,29 +323,39 @@ class Engine:
         settled_cards: list[str] = []
         blocked_nodes: list[str] = []
         for node_id, node in run["nodes"].items():
-            if node.get("status") in ("scheduled", "running") and node.get("hermes_task_id"):
-                completion = executor.poll(node["hermes_task_id"])
-                if completion.settled and completion.outcome is not None:
-                    seq += 1
-                    node["status"] = "completed"
-                    node["outcome"] = completion.outcome
-                    node["seq"] = seq
-                    if completion.output is not None:
-                        node["output"] = completion.output
-                    self._merge_telemetry(node)
-                    settled_cards.append(node["hermes_task_id"])
-                elif completion.status == "blocked":
-                    # The underlying card was blocked (e.g. a worker error ran
-                    # `kanban block`). The node stays active so the tick keeps
-                    # polling and auto-recovers when it is unblocked, but we must
-                    # not leave the run silently inert: surface it for an
-                    # operator notice (once, via the notified markers).
-                    blocked_nodes.append(node_id)
-                elif completion.started and node["status"] == "scheduled":
-                    # The executor reports the work has visibly begun (e.g. the
-                    # Direct runner thread is live) — show a truthful "running"
-                    # instead of a stale "scheduled" while the node executes.
-                    node["status"] = "running"
+            if node.get("status") not in ("scheduled", "running"):
+                continue
+            # An adopt node drives a LIST of existing cards; every other node has
+            # one backing handle. The node settles only when ALL of its cards are
+            # terminal, and fails if any of them did.
+            handles = _node_handles(node)
+            if not handles:
+                continue
+            completions = [executor.poll(handle) for handle in handles]
+            if all(c.settled and c.outcome is not None for c in completions):
+                seq += 1
+                node["status"] = "completed"
+                node["outcome"] = (
+                    "failure" if any(c.outcome == "failure" for c in completions) else "success"
+                )
+                node["seq"] = seq
+                outputs = [c.output for c in completions if c.output is not None]
+                if outputs:
+                    node["output"] = "\n\n".join(outputs)
+                self._merge_telemetry(node)
+                settled_cards.extend(handles)
+            elif any(c.status == "blocked" for c in completions):
+                # An underlying card was blocked (e.g. a worker error ran
+                # `kanban block`). The node stays active so the tick keeps polling
+                # and auto-recovers when it is unblocked, but we must not leave the
+                # run silently inert: surface it for an operator notice (once, via
+                # the notified markers).
+                blocked_nodes.append(node_id)
+            elif any(c.started for c in completions) and node["status"] == "scheduled":
+                # The executor reports the work has visibly begun (e.g. the Direct
+                # runner thread is live) — show a truthful "running" instead of a
+                # stale "scheduled" while the node executes.
+                node["status"] = "running"
 
         decision = self._advance_decision(spec_path, run)
         for node_id, status in decision["node_updates"].items():
@@ -642,6 +659,60 @@ class Engine:
         resolved["prompt"] = resolved_prompt
         return resolved
 
+    def _resolve_task_ref(self, run: dict, task_ref: str) -> list[str]:
+        """The card id(s) an adopt node should drive. A literal id resolves to
+        itself; a ``{{nodes.<id>.output.task_ids}}`` reference extracts the board
+        task ids an upstream node surfaced in its output (by their id shape, so a
+        free-text output still yields a typed list). Fails loud on an empty or
+        unproduced source — never drives zero cards silently."""
+        ref = task_ref.strip()
+        match = _TASK_IDS_REF.match(ref)
+        if not match:
+            return [ref]  # literal board task id
+        source = match.group(1)
+        node = run["nodes"].get(source)
+        output = node.get("output") if node else None
+        if not output:
+            raise UnresolvedInput(
+                f"task_ref references task_ids of node {source!r}, which produced no output"
+            )
+        ids: list[str] = []
+        for token in _TASK_ID_TOKEN.findall(output):
+            if token not in ids:
+                ids.append(token)
+        if not ids:
+            raise UnresolvedInput(
+                f"task_ref node {source!r} output surfaced no task ids to drive"
+            )
+        return ids
+
+    def _adopt_cards(
+        self, executor: NodeExecutor, run: dict, node_id: str, params: dict
+    ) -> None:
+        """Drive the existing board card(s) named by an adopt node's task_ref:
+        resolve the id(s), adopt each (assign + promote), and record them on the
+        node. Gating on their completion happens in the poll loop. A resolution
+        or adopt error settles the node failure loudly rather than scheduling it
+        in a broken state — the same contract as input_mapping resolution."""
+        node = run["nodes"][node_id]
+        try:
+            ids = self._resolve_task_ref(run, params.get("task_ref") or "")
+            adopt = getattr(executor, "adopt", None)
+            if adopt is None:
+                raise ValueError("adopt requires a Kanban-backed (project) scope")
+            driven = [adopt(task_id, assignee=params.get("assignee") or "") for task_id in ids]
+        except (UnresolvedInput, ValueError) as exc:
+            node["status"] = "completed"
+            node["outcome"] = "failure"
+            node["output"] = f"adopt failed: {exc}"
+            node["seq"] = _max_seq(run) + 1
+            return
+        node["driven_task_ids"] = driven
+        node["hermes_task_id"] = driven[0]
+        node["status"] = "scheduled"
+        # Subscribe the primary driven card to its terminal events for the origin.
+        self._subscribe_card(executor, run, driven[0], params)
+
     def _schedule_node(
         self,
         executor: NodeExecutor,
@@ -653,6 +724,11 @@ class Engine:
         if params is None:
             return
         node = run["nodes"][node_id]
+        if params.get("adopt"):
+            # Drive existing card(s) instead of creating one; no prompt/input_mapping
+            # resolution (the work is the card's own).
+            self._adopt_cards(executor, run, node_id, params)
+            return
         try:
             params = self._resolve_inputs(run, params)
         except UnresolvedInput as exc:
@@ -744,9 +820,19 @@ def _first(items: Optional[Sequence[str]]) -> Optional[str]:
     return items[0] if items else None
 
 
+def _node_handles(node: dict) -> list[str]:
+    """Backing card handles to poll for a node: an adopt node's full driven list,
+    else its single hermes_task_id (empty when it has neither)."""
+    driven = node.get("driven_task_ids")
+    if driven:
+        return list(driven)
+    handle = node.get("hermes_task_id")
+    return [handle] if handle else []
+
+
 def _has_open_card(run: dict) -> bool:
     return any(
-        node.get("status") in ("scheduled", "running") and node.get("hermes_task_id")
+        node.get("status") in ("scheduled", "running") and _node_handles(node)
         for node in run["nodes"].values()
     )
 

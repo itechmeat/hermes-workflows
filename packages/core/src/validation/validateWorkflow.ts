@@ -33,6 +33,11 @@ const INPUT_REF_PATTERN = /^\{\{nodes\.([A-Za-z0-9_-]+)\.(output|review_note)\}\
 // An event_mapping value references a path into the trigger event payload.
 const EVENT_REF_PATTERN = /^\{event\.[A-Za-z0-9_.]+\}$/;
 
+// A task_ref is either a literal board task id (slug) or a typed reference to an
+// upstream node's surfaced task ids.
+const TASK_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const TASK_IDS_REF_PATTERN = /^\{\{nodes\.([A-Za-z0-9_-]+)\.output\.task_ids\}\}$/;
+
 function isValidCron(expr: string): boolean {
   const parts = expr.trim().split(/\s+/);
   return parts.length === 5 && parts.every((p) => CRON_TOKEN.test(p));
@@ -141,6 +146,7 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
   }
 
   validateInputMappings(workflow, nodes, err);
+  validateAdopt(workflow, nodes, err);
 
   // Exactly one entry node; at least one finish; reachability.
   const entries = entryNodes(workflow);
@@ -243,6 +249,48 @@ function validateInputMappings(
           `node '${node.id}'.input_mapping.${key} references '${source}', which is not an ancestor of '${node.id}'`,
         );
       }
+    }
+  }
+}
+
+// adopt / task_ref: only an adopt node may carry a task_ref, an adopt node must
+// carry one, and the ref is either a literal board id or a typed reference to an
+// ancestor node's surfaced task ids.
+function validateAdopt(
+  workflow: Workflow,
+  nodes: ReturnType<typeof nodeMap>,
+  err: (code: string, message: string) => void,
+): void {
+  for (const node of workflow.nodes) {
+    if (node.type !== "agent_task") continue;
+    const { adopt, task_ref } = node;
+    if (task_ref !== undefined && adopt !== true) {
+      err("task_ref_without_adopt", `node '${node.id}' has a task_ref but adopt is not set`);
+    }
+    if (adopt === true && task_ref === undefined) {
+      err("adopt_without_task_ref", `adopt node '${node.id}' has no task_ref to drive`);
+      continue;
+    }
+    if (task_ref === undefined) continue;
+    const refMatch = TASK_IDS_REF_PATTERN.exec(task_ref);
+    if (refMatch) {
+      const source = refMatch[1] as string;
+      if (!nodes.has(source)) {
+        err(
+          "unknown_task_ref_node",
+          `node '${node.id}'.task_ref references unknown node '${source}'`,
+        );
+      } else if (source === node.id || !reachableFrom(workflow, source).has(node.id)) {
+        err(
+          "non_ancestor_task_ref",
+          `node '${node.id}'.task_ref references '${source}', which is not an ancestor of '${node.id}'`,
+        );
+      }
+    } else if (!TASK_ID_PATTERN.test(task_ref)) {
+      err(
+        "invalid_task_ref",
+        `node '${node.id}'.task_ref must be a board task id or '{{nodes.<id>.output.task_ids}}', got '${task_ref}'`,
+      );
     }
   }
 }
