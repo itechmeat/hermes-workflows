@@ -4,6 +4,7 @@ Subcommands:
   run <workflow_id> [--project P]   start a run and advance it once
   advance-all                        advance every active run (the tick body)
   status <run_id>                    print a run's current state
+  cancel <run_id>                    cancel a run and its still-active nodes
   review <run_id> <node_id> <dec>    resolve a human_review node
 
 Each prints a JSON document to stdout. The installed wrapper (``bin/hermes-
@@ -166,6 +167,8 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
         return _advance_all(engine)
     if args.command == "status":
         return engine.status(args.run_id)
+    if args.command == "cancel":
+        return engine.cancel(args.run_id)
     if args.command == "review":
         spec = _spec_path_for_run(engine, args.run_id)
         return engine.decide_review(spec, args.run_id, args.node_id, args.decision)
@@ -187,6 +190,9 @@ def _parser() -> argparse.ArgumentParser:
 
     p_status = sub.add_parser("status", help="print a run's state")
     p_status.add_argument("run_id")
+
+    p_cancel = sub.add_parser("cancel", help="cancel a run (and its active nodes)")
+    p_cancel.add_argument("run_id")
 
     p_review = sub.add_parser("review", help="resolve a human_review node")
     p_review.add_argument("run_id")

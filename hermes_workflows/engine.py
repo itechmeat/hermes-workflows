@@ -146,6 +146,12 @@ class Engine:
             raise ValueError(f"unknown run {run_id}")
         return run
 
+    def cancel(self, run_id: str) -> dict:
+        """Cancel a run from the shell: mark the run cancelled and cancel its
+        still-active nodes, reusing the core ``run-cancel`` (``cancelRun``)
+        semantics. Idempotent — an already-terminal run is returned unchanged."""
+        return self._core(["run-cancel", "--db", self.db_path, "--id", run_id])
+
     def decide_review(self, spec_path: str, run_id: str, node_id: str, decision: str) -> dict:
         if decision not in REVIEW_OPTIONS:
             raise ValueError(

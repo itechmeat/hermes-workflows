@@ -62,6 +62,25 @@ def test_unknown_workflow_exits(home: Path) -> None:
         cli.main(["run", "no-such-workflow"])
 
 
+def test_cancel_marks_the_run_and_active_nodes(home: Path, capsys) -> None:
+    """`cancel <run_id>` stops a run from the shell: the run and its active
+    nodes go cancelled, and a second cancel is an idempotent no-op."""
+    run = _invoke(capsys, "run", "feature-development")
+    run_id = run["run_id"]
+    assert run["nodes"]["plan"]["status"] == "scheduled"
+
+    cancelled = _invoke(capsys, "cancel", run_id)
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["nodes"]["plan"]["status"] == "cancelled"
+
+    # Idempotent: cancelling an already-terminal run leaves it cancelled.
+    again = _invoke(capsys, "cancel", run_id)
+    assert again["status"] == "cancelled"
+
+    # The persisted run reflects the cancellation.
+    assert _invoke(capsys, "status", run_id)["status"] == "cancelled"
+
+
 def test_wrapper_script_is_executable() -> None:
     wrapper = ROOT / "bin" / "hermes-workflows"
     assert wrapper.is_file()
