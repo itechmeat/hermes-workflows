@@ -653,10 +653,19 @@ a.hw-o2b:focus-visible {
   gap: 8px;
 }
 .hw-node__type {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-muted-foreground, #9a9a9a);
+}
+/* The node-type glyph matches the picker icon; sized to the small type label. */
+.hw-node__type .hw-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 .hw-node__id {
   text-transform: none;

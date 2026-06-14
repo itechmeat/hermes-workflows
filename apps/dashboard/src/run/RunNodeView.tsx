@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { nodeMetaLine, nodeTypeLabel } from "../editor/graphMapping";
+import { nodeTypeIcon } from "../editor/nodeTypeIcons";
 import { ExpandIcon } from "../ui/icons";
 import type { RunFlowNode } from "./runView";
 
@@ -22,7 +23,8 @@ export function RunNodeView({ data, selected }: NodeProps<RunFlowNode>): React.R
       <Handle type="target" position={Position.Left} />
       <div className="hw-node__head">
         <div className="hw-node__type">
-          {nodeTypeLabel(node.type)} <span className="hw-node__id">{node.id}</span>
+          {nodeTypeIcon(node.type)} {nodeTypeLabel(node.type)}{" "}
+          <span className="hw-node__id">{node.id}</span>
         </div>
         {onSelect && (
           <button

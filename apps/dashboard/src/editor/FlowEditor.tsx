@@ -11,6 +11,7 @@ import { NodeInspector } from "./NodeInspector";
 import { ValidationPanel } from "./ValidationPanel";
 import { CompilePreview } from "./CompilePreview";
 import { nodeTypeLabel, type FlowNode } from "./graphMapping";
+import { nodeTypeIcon } from "./nodeTypeIcons";
 import { NodeOpenProvider } from "./nodeOpenContext";
 import { CANVAS_NODE_TYPES } from "../run/canvasNodeTypes";
 import { overlayRunStatus } from "../run/runView";
@@ -18,18 +19,13 @@ import { Button, Menu, Modal, type MenuItem } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
 import {
   ArrowLeftIcon,
-  BranchIcon,
   CopyIcon,
-  CpuIcon,
-  EyeIcon,
   FileIcon,
-  FlagIcon,
   LayoutIcon,
   PlayIcon,
   PlusIcon,
   SaveIcon,
   ShieldCheckIcon,
-  TerminalIcon,
   WrenchIcon,
 } from "../ui/icons";
 
@@ -46,14 +42,10 @@ export interface FlowEditorProps {
   pollMs?: number;
 }
 
-// Labels come from the shared `nodeTypeLabel` mapping; only the icons live here.
-const NODE_TYPES: { type: NodeType; icon: React.ReactNode }[] = [
-  { type: "agent_task", icon: <CpuIcon /> },
-  { type: "script", icon: <TerminalIcon /> },
-  { type: "condition", icon: <BranchIcon /> },
-  { type: "human_review", icon: <EyeIcon /> },
-  { type: "finish", icon: <FlagIcon /> },
-];
+// Add-menu order. Labels come from the shared `nodeTypeLabel` mapping and icons
+// from the shared `nodeTypeIcon` map (the same one the canvas nodes render), so
+// the picker and a placed node stay visually consistent with no duplicate list.
+const NODE_TYPES: NodeType[] = ["agent_task", "script", "condition", "human_review", "finish"];
 
 /** Which header-tool panel is open in a modal, if any. */
 type Tool = "validate" | "compile" | null;
@@ -209,10 +201,10 @@ export function FlowEditor({
   const canvasNodes =
     playing && playback.run !== null ? overlayRunStatus(ctrl.nodes, playback.run) : ctrl.nodes;
 
-  const addItems: MenuItem[] = NODE_TYPES.map(({ type, icon }) => ({
+  const addItems: MenuItem[] = NODE_TYPES.map((type) => ({
     key: type,
     label: nodeTypeLabel(type),
-    icon,
+    icon: nodeTypeIcon(type),
     onSelect: () => handleAdd(type),
   }));
   const toolItems: MenuItem[] = [

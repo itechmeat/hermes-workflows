@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { FlowNode } from "../graphMapping";
 import { nodeMetaLine, nodeTypeLabel } from "../graphMapping";
+import { nodeTypeIcon } from "../nodeTypeIcons";
 import { useNodeOpen } from "../nodeOpenContext";
 import { ExpandIcon } from "../../ui/icons";
 
@@ -18,7 +19,8 @@ export function WorkflowNodeView({ data, selected }: NodeProps<FlowNode>): React
       <Handle type="target" position={Position.Left} />
       <div className="hw-node__head">
         <div className="hw-node__type">
-          {nodeTypeLabel(node.type)} <span className="hw-node__id">{node.id}</span>
+          {nodeTypeIcon(node.type)} {nodeTypeLabel(node.type)}{" "}
+          <span className="hw-node__id">{node.id}</span>
         </div>
         {openNode && (
           <button
