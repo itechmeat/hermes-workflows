@@ -45,6 +45,30 @@ is used) run at author time in `validateWorkflow`; this runtime path only guards
 the per-run gap. Data therefore flows through the run, not a host file, keeping a
 workflow exportable.
 
+Two further per-node channels ride the same `{{nodes.<id>.…}}` grammar:
+`{{nodes.<gate>.review_note}}` (a human_review gate's operator note — see the
+human_review section) and `{{nodes.<id>.output.task_ids}}` (the board task ids an
+upstream node surfaced in its output, extracted by their id shape) for an adopt
+node's `task_ref`.
+
+## Driving existing cards (adopt)
+
+An `agent_task` with `adopt: true` drives EXISTING board card(s) instead of
+creating one — the native Kanban flow where the work *is* the card. `task_ref`
+names them: a literal id, or `{{nodes.<id>.output.task_ids}}` resolved at the
+scheduling seam to the ids an upstream node chose. The executor assigns the
+node's `profile` and promotes each card into the dispatch lane (assign before
+promote, since assigning a `ready` card drops it to `todo`; a `triage` card takes
+the native `triage -> todo` step first), then polls every driven card; the node
+settles only when ALL are terminal (failure if any failed). Adopting a card that
+is already running / in review or terminal is a no-op (idempotent). A resolution
+or adopt error settles the node `failure` loudly, never a half-adopt.
+
+With `review_profile`, a driven card that reaches `done` is routed once through
+Hermes' native `review` status (assigned to the reviewer, claimed via
+`claim_review_task`); the node then settles on the post-review outcome. The work
+is the real board card throughout — no parallel workflow-owned card.
+
 ## Boards (project scope)
 
 A project run's cards live on the **project's own board** — the board slug is

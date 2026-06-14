@@ -115,6 +115,19 @@ deep-link resolution are host surfaces pending upstream Hermes support.
     max_retries: 1
     timeout_seconds: 3600
   ```
+  An agent_task can instead **drive an existing board card** rather than create
+  one — the native Kanban flow where the work is the card:
+  ```yaml
+  - id: drive
+    type: agent_task
+    profile: fullstack-engineer
+    adopt: true
+    task_ref: "{{nodes.lock-scope.output.task_ids}}"  # or a literal id, e.g. t_abc123
+    review_profile: qa-engineer   # optional native review stage after each card is done
+    prompt: ""                    # unused when adopting (the card carries its own)
+  ```
+  `task_ref` resolves to the card id(s) to drive; the node settles only when all
+  of them are terminal. See `execution.md` ("Driving existing cards").
 - **script** — a deterministic shell command run with no LLM (lint, tests, a
   build step). It settles `success`/`failure` by exit code, so it branches on
   `node_status` like any work node. It runs locally in the plugin in any scope.
@@ -130,6 +143,8 @@ deep-link resolution are host surfaces pending upstream Hermes support.
   exposes only `execution.script_env_allowlist` vars — see `execution.md`.
 - **condition** — a routing-only node; its outgoing edges carry the conditions.
 - **human_review** — pauses the run; `options: [approved, rejected, needs_changes]`.
+  The resolution may carry an optional operator note, consumable downstream as
+  `{{nodes.<gate>.review_note}}` (see `execution.md`).
 - **finish** — terminal; `outcome: success | failure`.
 
 The entry node is the one with no incoming edge (exactly one is required).

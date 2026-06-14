@@ -107,6 +107,24 @@ playback: run the workflow you are editing and watch it play on the canvas.
     direct delivery; no local stub is added.)
   - The Schedules page tags each row as a `Workflow` schedule, distinct from
     blueprint cron jobs, and README positions the two tiers.
+- Drive existing Kanban cards: an `agent_task` with `adopt: true` + `task_ref`
+  drives one or more EXISTING board cards (assign the node profile, promote into
+  the dispatch lane, poll to terminal) instead of creating a new card — the
+  native flow where the work is the card. `task_ref` is a literal id or a typed
+  `{{nodes.<id>.output.task_ids}}` reference that extracts the ids an upstream
+  node surfaced; the node gates on all driven cards, idempotent on a card already
+  running, and fails loud on a missing card. An optional `review_profile` routes
+  each completed driven card once through Hermes' native `review` stage.
+- `human_review` resolution carries an optional operator note (`review` CLI
+  `--note`, the `workflow_review` tool, the dashboard), landing on the gate as
+  `review_note` and consumable downstream as `{{nodes.<gate>.review_note}}` — a
+  channel distinct from a work node's `.output`.
+- `hermes-workflows cancel <run_id>`: cancel a run and its active nodes from the
+  shell (wraps the core `run-cancel`; idempotent on terminal runs).
+- Node-type icons on canvas nodes, from a shared icon map also used by the
+  header's add-node menu, so the picker and placed nodes match.
+- The node inspector opens during a run in a fully read-only (disabled) state, so
+  a node's configuration can be inspected mid-run without risking an edit.
 
 ### Changed
 
@@ -117,6 +135,21 @@ playback: run the workflow you are editing and watch it play on the canvas.
 - The dashboard test suite runs test files sequentially with a 30s per-test
   timeout, so the in-suite bundle build cannot starve interaction tests on a
   loaded machine.
+- The tick detects a blocked underlying card and delivers one ATTENTION notice
+  per card (naming it and how to recover) instead of leaving the run silently
+  inert; the run stays active and resumes when the card is unblocked.
+- `hermes-workflows status` opportunistically read-only-polls each active node's
+  card and reports live state and pending completions, so it no longer lags the
+  tick (the "looks stuck" confusion).
+- The on-disk spec serializer emits `|` block scalars for multiline strings
+  (prompts/commands) when lossless, keeping a hand-authored spec readable across
+  the round trip instead of one-line quoted `"...\n..."` strings.
+- The `human_review` waiting notice is now an actionable ACTION NEEDED message
+  (the gate, the allowed decisions, how to resolve) and states that chat replies
+  do not reach a paused run; the chat-reply gap is documented as an upstream ask.
+- Script-node commands always receive `HOME` so HOME-credential CLIs (claude,
+  codex, gh, …) resolve their config; the agent bash-tool HOME caveat is
+  documented.
 
 ### Removed
 
