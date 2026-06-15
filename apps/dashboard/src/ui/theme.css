@@ -1134,6 +1134,33 @@ a.hw-o2b:focus-visible {
 .hw-handle--else {
   background: var(--color-muted-foreground, #9a9a9a);
 }
+/* The add-branch ("+") affordance: revealed on node hover at the bottom-right
+   corner; adds the next unused outcome handle, disabled when all are shown. */
+.hw-node__add-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 50%;
+  border: 1px solid var(--color-border, #3a3a3a);
+  background: var(--color-muted, #262626);
+  color: var(--color-foreground, #ededed);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.hw-node:hover .hw-node__add-handle {
+  opacity: 1;
+}
+.hw-node:hover .hw-node__add-handle:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 
 /* Edge stroke tone by branch meaning; a plain edge keeps the ReactFlow default. */
 .hw-edge--success {

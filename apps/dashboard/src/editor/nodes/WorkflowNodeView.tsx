@@ -40,7 +40,11 @@ export function WorkflowNodeView({ data, selected }: NodeProps<FlowNode>): React
       </div>
       {node.title !== undefined && <div className="hw-node__title">{node.title}</div>}
       {meta !== "" && <div className="hw-node__meta">{meta}</div>}
-      <SourceHandles nodeType={node.type} />
+      <SourceHandles
+        nodeType={node.type}
+        usedHandles={(data.usedHandles as string[] | undefined) ?? []}
+        editable={data.branchEditable === true}
+      />
     </div>
   );
 }

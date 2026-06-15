@@ -6,6 +6,9 @@ import {
   edgeSourceHandle,
   edgeConditionLabel,
   sourceHandlesFor,
+  defaultHandleIds,
+  shownHandleSpecs,
+  nextAddableHandleId,
   WORKFLOW_EDGE_TYPE,
 } from "../src/editor/graphMapping";
 import type { Workflow, UiLayout } from "../src/api/types";
@@ -173,5 +176,36 @@ describe("conditional-edge handle mapping", () => {
       "out",
     ]);
     expect(sourceHandlesFor("finish")).toEqual([]);
+  });
+});
+
+describe("dynamic handle set (default 2 + add-on-demand)", () => {
+  it("defaults to the two primary outcomes per type", () => {
+    expect(defaultHandleIds("agent_task")).toEqual(["success", "failure"]);
+    expect(defaultHandleIds("human_review")).toEqual(["approved", "rejected"]);
+    expect(defaultHandleIds("finish")).toEqual([]);
+  });
+
+  it("shows defaults, plus used and added, in canonical order without duplicates", () => {
+    expect(shownHandleSpecs("agent_task").map((h) => h.id)).toEqual(["success", "failure"]);
+    // A used "else" edge keeps its handle visible even though it is not a default.
+    expect(shownHandleSpecs("agent_task", ["else"]).map((h) => h.id)).toEqual([
+      "success",
+      "failure",
+      "else",
+    ]);
+    // An added "out" appears; a used/added duplicate of a default does not double it.
+    expect(shownHandleSpecs("agent_task", ["success"], ["out"]).map((h) => h.id)).toEqual([
+      "success",
+      "failure",
+      "out",
+    ]);
+  });
+
+  it("offers the next unused outcome, then nothing once all are shown", () => {
+    expect(nextAddableHandleId("agent_task", ["success", "failure"])).toBe("else");
+    expect(nextAddableHandleId("agent_task", ["success", "failure", "else"])).toBe("out");
+    expect(nextAddableHandleId("agent_task", ["success", "failure", "else", "out"])).toBeNull();
+    expect(nextAddableHandleId("human_review", ["approved", "rejected"])).toBe("needs_changes");
   });
 });

@@ -103,12 +103,23 @@ export function RunInspector({
   const inspectorError = pollError ?? actionError;
 
   const { nodes, edges } = applyRunStatus(detail, run);
+  // Source handles each node uses (by an outgoing edge), so the run canvas
+  // renders the handles its conditioned/fallback edges leave from and the edges
+  // stay anchored.
+  const usedHandlesByNode: Record<string, string[]> = {};
+  for (const edge of edges) {
+    (usedHandlesByNode[edge.source] ??= []).push(edge.sourceHandle ?? "out");
+  }
   // Carry the open-detail handler on each node's data: ReactFlow does not
   // propagate React context into custom node components, so a context provider
   // would never reach RunNodeView's open button.
   const canvasNodes = nodes.map((node) => ({
     ...node,
-    data: { ...node.data, onSelect: setSelectedNodeId },
+    data: {
+      ...node.data,
+      onSelect: setSelectedNodeId,
+      usedHandles: usedHandlesByNode[node.id] ?? [],
+    },
   }));
   const selected = selectedNodeId === null ? undefined : run.nodes[selectedNodeId];
   const terminal = isTerminalRun(run.status);

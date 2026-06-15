@@ -79,13 +79,46 @@ const REVIEW_HANDLES: SourceHandleSpec[] = [
   { id: "out", label: "always", tone: "plain" },
 ];
 
-/** The source handles a node type exposes. A `human_review` branches on its
- *  review decision; every other non-terminal node branches on its own
- *  success/failure outcome. `finish` is terminal and has none. */
+/** The source handles a node type CAN expose (full ordered set). A `human_review`
+ *  branches on its review decision; every other non-terminal node branches on its
+ *  own success/failure outcome. `finish` is terminal and has none. */
 export function sourceHandlesFor(type: string): SourceHandleSpec[] {
   if (type === "finish") return [];
   if (type === "human_review") return REVIEW_HANDLES;
   return STATUS_HANDLES;
+}
+
+/** The handles a node shows BY DEFAULT: its two primary outcomes (success/failure,
+ *  or approved/rejected). The rest (the other review decision, "else", "always")
+ *  are added on demand. */
+export function defaultHandleIds(type: string): SourceHandleKind[] {
+  return sourceHandlesFor(type)
+    .slice(0, 2)
+    .map((h) => h.id);
+}
+
+/** The handles a node actually renders: its defaults, plus any already used by an
+ *  outgoing edge (so an existing conditioned/fallback/plain edge stays anchored),
+ *  plus any the operator added via the "+" affordance - in canonical order, no
+ *  duplicates. */
+export function shownHandleSpecs(
+  type: string,
+  used: Iterable<string> = [],
+  added: Iterable<string> = [],
+): SourceHandleSpec[] {
+  const show = new Set<string>([...defaultHandleIds(type), ...used, ...added]);
+  return sourceHandlesFor(type).filter((h) => show.has(h.id));
+}
+
+/** The next outcome a node could add (first canonical handle not already shown),
+ *  or null when every outcome is shown - so the "+" affordance disables and a
+ *  handle can never be added twice. */
+export function nextAddableHandleId(
+  type: string,
+  shownIds: Iterable<string>,
+): SourceHandleKind | null {
+  const shown = new Set<string>([...shownIds]);
+  return sourceHandlesFor(type).find((h) => !shown.has(h.id))?.id ?? null;
 }
 
 /** The source handle that displays an edge's condition/fallback. A cross-node

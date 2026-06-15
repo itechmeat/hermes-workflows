@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -234,13 +234,33 @@ export function FlowEditor({
   // Each run node carries `onSelect` so the operator can open it in a read-only
   // inspector mid-run (pure inspection; editing stays locked) - ReactFlow does
   // not pass React context into custom nodes, so the opener rides on node data.
-  const canvasNodes =
+  // Which source handles each node uses (by an outgoing edge), so a node always
+  // renders the handles its edges leave from - keeping conditioned/fallback/plain
+  // edges anchored even when they are not in the default success/failure pair.
+  const usedHandlesByNode = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const edge of ctrl.edges) {
+      (map[edge.source] ??= []).push(edge.sourceHandle ?? "out");
+    }
+    return map;
+  }, [ctrl.edges]);
+
+  const canvasNodes = (
     playing && playback.run !== null
       ? overlayRunStatus(ctrl.nodes, playback.run).map((node) => ({
           ...node,
           data: { ...node.data, onSelect: openNode },
         }))
-      : ctrl.nodes;
+      : ctrl.nodes
+  ).map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      usedHandles: usedHandlesByNode[node.id] ?? [],
+      // The "+" add-branch affordance is editor-only; a playing run is read-only.
+      branchEditable: !playing,
+    },
+  }));
 
   const addItems: MenuItem[] = NODE_TYPES.map((type) => ({
     key: type,
