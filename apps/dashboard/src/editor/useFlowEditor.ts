@@ -66,6 +66,7 @@ function freshId(nodes: readonly FlowNode[]): string {
 function blankNode(type: NodeType, id: string): WorkflowNode {
   if (type === "agent_task") return { id, type, prompt: "", max_retries: 3 };
   if (type === "script") return { id, type, command: "" };
+  if (type === "wait") return { id, type, wait_for: { github_pr_merged: "" } };
   return { id, type };
 }
 

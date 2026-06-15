@@ -17,6 +17,23 @@ function wf(nodes: unknown[], edges: unknown[]): Workflow {
   }).workflow;
 }
 
+describe("compileToHermesPlan — wait nodes", () => {
+  test("a wait node compiles to a wait_step, not a Kanban task", () => {
+    const workflow = wf(
+      [
+        { id: "merge", type: "wait", wait_for: { github_pr_merged: "123" }, timeout_seconds: 600 },
+        { id: "done", type: "finish" },
+      ],
+      [{ from: "merge", to: "done" }],
+    );
+    const plan = compileToHermesPlan(workflow);
+    expect(plan.kanban_tasks).toHaveLength(0);
+    expect(plan.wait_steps).toEqual([
+      { node: "merge", kind: "wait", wait_for: { github_pr_merged: "123" }, timeout_seconds: 600 },
+    ]);
+  });
+});
+
 describe("compileToHermesPlan", () => {
   test("feature-development compiles to Kanban tasks with no cron", async () => {
     const { workflow } = await loadExample("feature-development.workflow.yaml");

@@ -96,6 +96,8 @@ export interface NodeRunState {
   review_note?: string;
   /** Captured node output (e.g. the worker's completion summary). */
   output?: string;
+  /** Epoch seconds a `wait` node first began polling, for its optional timeout. */
+  wait_started_at?: number;
   error?: string;
   /**
    * Monotonic completion order within the run, assigned by the bridge each time

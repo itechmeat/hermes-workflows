@@ -1,0 +1,108 @@
+"""Worker-free wait node end to end through the engine: it parks active and the
+tick polls its predicate (no Kanban card, no executor), settling success on
+MERGED, failure on CLOSED, and failure on timeout."""
+
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+import pytest
+
+from hermes_workflows.engine import Engine
+from hermes_workflows.executor import Completion
+
+ROOT = Path(__file__).resolve().parents[2]
+CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
+
+
+class FakeExec:
+    """A scope executor that is never actually used by a wait-only workflow."""
+
+    def schedule(self, **_kwargs) -> str:
+        return "fake"
+
+    def poll(self, _handle) -> Completion:
+        return Completion(settled=False)
+
+
+def _spec(tmp_path: Path, obj: dict) -> str:
+    path = tmp_path / f"{obj['id']}.workflow.json"
+    path.write_text(json.dumps(obj))
+    return str(path)
+
+
+def _engine(tmp_path: Path) -> Engine:
+    return Engine(core_cli=CLI, db_path=str(tmp_path / "runs.db"), direct=FakeExec())
+
+
+def _spec_obj(spec_id: str, *, timeout: int | None = None) -> dict:
+    merge: dict = {"id": "merge", "type": "wait", "wait_for": {"github_pr_merged": "123"}}
+    if timeout is not None:
+        merge["timeout_seconds"] = timeout
+    return {
+        "id": spec_id,
+        "name": "Merge wait",
+        "version": 1,
+        "scope": {"type": "global"},
+        "trigger": {"type": "manual"},
+        "defaults": {"profile": "p"},
+        "nodes": [
+            merge,
+            {"id": "ok", "type": "finish", "outcome": "success"},
+            {"id": "bad", "type": "finish", "outcome": "failure"},
+        ],
+        "edges": [
+            {"from": "merge", "to": "ok", "condition": {"type": "node_status", "node": "merge", "equals": "success"}},
+            {"from": "merge", "to": "bad", "condition": {"type": "node_status", "node": "merge", "equals": "failure"}},
+        ],
+    }
+
+
+def test_wait_parks_then_settles_success_on_merged(tmp_path: Path, monkeypatch) -> None:
+    eng = _engine(tmp_path)
+    spec = _spec(tmp_path, _spec_obj("merge-wait-ok"))
+
+    run = eng.run(spec, "r")
+    # The wait node parks active (no card, no executor) — nothing scheduled.
+    assert run["nodes"]["merge"]["status"] == "running"
+    assert run["nodes"]["merge"].get("hermes_task_id") is None
+
+    monkeypatch.setattr("hermes_workflows.wait.github_pr_state", lambda _ref: "OPEN")
+    run = eng.advance(spec, "r")
+    assert run["nodes"]["merge"]["status"] == "running"  # still waiting
+
+    monkeypatch.setattr("hermes_workflows.wait.github_pr_state", lambda _ref: "MERGED")
+    run = eng.advance(spec, "r")
+    assert run["nodes"]["merge"]["status"] == "completed"
+    assert run["nodes"]["merge"]["outcome"] == "success"
+    assert run["status"] == "completed"
+
+
+def test_wait_fails_on_closed(tmp_path: Path, monkeypatch) -> None:
+    eng = _engine(tmp_path)
+    spec = _spec(tmp_path, _spec_obj("merge-wait-closed"))
+    eng.run(spec, "r")
+    monkeypatch.setattr("hermes_workflows.wait.github_pr_state", lambda _ref: "CLOSED")
+    run = eng.advance(spec, "r")
+    assert run["nodes"]["merge"]["outcome"] == "failure"
+    assert run["status"] == "failed"
+
+
+def test_wait_fails_on_timeout(tmp_path: Path, monkeypatch) -> None:
+    eng = _engine(tmp_path)
+    spec = _spec(tmp_path, _spec_obj("merge-wait-timeout", timeout=1))
+    eng.run(spec, "r")
+    monkeypatch.setattr("hermes_workflows.wait.github_pr_state", lambda _ref: "OPEN")
+
+    base = time.time()
+    run = eng.advance(spec, "r")  # records wait_started_at ~ base, still OPEN
+    assert run["nodes"]["merge"]["status"] == "running"
+
+    # Travel past the timeout; the next poll settles the node failure.
+    monkeypatch.setattr(time, "time", lambda: base + 10)
+    run = eng.advance(spec, "r")
+    assert run["nodes"]["merge"]["outcome"] == "failure"
+    assert "timed out" in (run["nodes"]["merge"]["output"] or "")
+    assert run["status"] == "failed"

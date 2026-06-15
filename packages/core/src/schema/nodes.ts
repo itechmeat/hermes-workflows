@@ -5,7 +5,7 @@
  * uses it) so loading is parse + validate with no field remapping layer.
  */
 
-export type NodeType = "agent_task" | "script" | "condition" | "human_review" | "finish";
+export type NodeType = "agent_task" | "script" | "condition" | "human_review" | "finish" | "wait";
 
 export type ReviewOption = "approved" | "rejected" | "needs_changes";
 
@@ -102,9 +102,39 @@ export interface FinishNode {
   outcome?: "success" | "failure";
 }
 
+/**
+ * What a `wait` node polls for, worker-free, inside the engine tick. One known
+ * condition today: `github_pr_merged`. Additive — a new condition is a new key.
+ */
+export interface WaitCondition {
+  /**
+   * Wait until the referenced GitHub PR is merged. The value is the PR (a URL or
+   * number) or a `{{nodes.<id>.output}}` reference resolved at poll time. The
+   * node settles `success` on MERGED, `failure` on CLOSED-not-merged, and keeps
+   * waiting while OPEN.
+   */
+  github_pr_merged: string;
+}
+
+/**
+ * A worker-free wait for an external signal: the engine evaluates `wait_for` in
+ * its periodic tick (no Kanban card, no LLM worker) and settles the node when
+ * the condition resolves, branching on `node_status` like any work node.
+ */
+export interface WaitNode {
+  id: string;
+  type: "wait";
+  title?: string;
+  description?: string;
+  wait_for: WaitCondition;
+  /** Optional cap: settle `failure` if the condition is not met within this long. */
+  timeout_seconds?: number;
+}
+
 export type WorkflowNode =
   | AgentTaskNode
   | ScriptNode
   | ConditionNode
   | HumanReviewNode
-  | FinishNode;
+  | FinishNode
+  | WaitNode;

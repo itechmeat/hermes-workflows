@@ -45,7 +45,14 @@ export interface FlowEditorProps {
 // Add-menu order. Labels come from the shared `nodeTypeLabel` mapping and icons
 // from the shared `nodeTypeIcon` map (the same one the canvas nodes render), so
 // the picker and a placed node stay visually consistent with no duplicate list.
-const NODE_TYPES: NodeType[] = ["agent_task", "script", "condition", "human_review", "finish"];
+const NODE_TYPES: NodeType[] = [
+  "agent_task",
+  "script",
+  "condition",
+  "human_review",
+  "wait",
+  "finish",
+];
 
 /** Which header-tool panel is open in a modal, if any. */
 type Tool = "validate" | "compile" | null;

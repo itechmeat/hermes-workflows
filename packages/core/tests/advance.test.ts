@@ -224,3 +224,61 @@ describe("advance — inline eligibility with agent and mixed steps", () => {
     expect(result.inline_eligible).toBe(false);
   });
 });
+
+describe("advance — wait nodes", () => {
+  const waitWf = fromObject({
+    id: "w",
+    name: "W",
+    version: 1,
+    scope: { type: "global" },
+    trigger: { type: "manual" },
+    defaults: { profile: "p" },
+    nodes: [
+      { id: "merge", type: "wait", wait_for: { github_pr_merged: "123" } },
+      { id: "ok", type: "finish", outcome: "success" },
+      { id: "bad", type: "finish", outcome: "failure" },
+    ],
+    edges: [
+      {
+        from: "merge",
+        to: "ok",
+        condition: { type: "node_status", node: "merge", equals: "success" },
+      },
+      {
+        from: "merge",
+        to: "bad",
+        condition: { type: "node_status", node: "merge", equals: "failure" },
+      },
+    ],
+  }).workflow;
+
+  test("a wait entry node parks active (running), not scheduled", () => {
+    const result = advance(waitWf, createRunState(waitWf, "r"));
+    expect(result.schedule).toEqual([]);
+    expect(result.node_updates["merge"]).toBe("running");
+    expect(result.run_status).toBe("running");
+  });
+
+  test("a running wait node is not re-activated (idempotent)", () => {
+    const run = createRunState(waitWf, "r");
+    run.status = "running";
+    run.nodes["merge"] = { node_id: "merge", status: "running" };
+    const result = advance(waitWf, run);
+    expect(result.schedule).toEqual([]);
+    expect(result.node_updates["merge"]).toBeUndefined();
+  });
+
+  test("a settled wait node routes on its outcome", () => {
+    const run = createRunState(waitWf, "r");
+    run.status = "running";
+    run.nodes["merge"] = { node_id: "merge", status: "completed", outcome: "success", seq: 1 };
+    const ok = advance(waitWf, run);
+    expect(ok.node_updates["ok"]).toBe("completed");
+    expect(ok.run_status).toBe("completed");
+
+    run.nodes["merge"] = { node_id: "merge", status: "completed", outcome: "failure", seq: 1 };
+    const bad = advance(waitWf, run);
+    expect(bad.node_updates["bad"]).toBe("completed");
+    expect(bad.run_status).toBe("failed");
+  });
+});

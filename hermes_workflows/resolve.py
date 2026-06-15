@@ -65,6 +65,26 @@ def resolve_input_mapping(
                 f"{source!r}, which has no such value"
             )
         values[placeholder] = value
+    return _substitute(prompt, values)
+
+
+def resolve_ref(ref: str, node_channels: Mapping[str, Mapping[str, Optional[str]]]) -> str:
+    """Resolve a single value that is either a literal or one
+    ``{{nodes.<id>.<channel>}}`` reference (output / review_note). A literal is
+    returned unchanged; an unsatisfiable reference fails loud."""
+    match = _REF.match((ref or "").strip())
+    if not match:
+        return ref
+    source, channel = match.group(1), match.group(2)
+    value = node_channels.get(source, {}).get(channel)
+    if value is None:
+        raise UnresolvedInput(
+            f"reference {ref!r} points at {channel!r} of node {source!r}, which has no value"
+        )
+    return value
+
+
+def _substitute(prompt: str, values: dict) -> str:
     # `values` is non-empty here: input_mapping was truthy and every entry above
     # either populated it or raised, so the alternation is never an empty regex.
     token = re.compile("|".join(re.escape("{{" + key + "}}") for key in values))

@@ -4,7 +4,7 @@
 // separately by `nodeTypeLabel` in graphMapping; that module is deliberately
 // React-free, so the JSX icon map lives here next to it rather than inside it.
 import type { NodeType } from "../api/types";
-import { BranchIcon, CpuIcon, EyeIcon, FlagIcon, TerminalIcon } from "../ui/icons";
+import { BranchIcon, ClockIcon, CpuIcon, EyeIcon, FlagIcon, TerminalIcon } from "../ui/icons";
 
 export const NODE_TYPE_ICON: Record<NodeType, React.ReactElement> = {
   agent_task: <CpuIcon />,
@@ -12,6 +12,7 @@ export const NODE_TYPE_ICON: Record<NodeType, React.ReactElement> = {
   condition: <BranchIcon />,
   human_review: <EyeIcon />,
   finish: <FlagIcon />,
+  wait: <ClockIcon />,
 };
 
 /** The icon for a node type. Falls back to the agent_task glyph for an unknown

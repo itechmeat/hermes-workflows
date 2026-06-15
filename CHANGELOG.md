@@ -130,6 +130,14 @@ playback: run the workflow you are editing and watch it play on the canvas.
   header's add-node menu, so the picker and placed nodes match.
 - The node inspector opens during a run in a fully read-only (disabled) state, so
   a node's configuration can be inspected mid-run without risking an edit.
+- A worker-free `wait` node: it parks active and the engine tick polls its
+  `wait_for` predicate (no Kanban card, no LLM worker), settling success/failure
+  and branching on `node_status`. The first condition is `github_pr_merged`
+  (`gh pr view --json state`: success on MERGED, failure on CLOSED, keep waiting
+  on OPEN), with an optional `timeout_seconds`. Replaces the agent_task poll-loop
+  stopgap so "merge the PR → release publishes" costs zero workers and no chat.
+  (An instant GitHub-webhook resolution is the optimal form but needs upstream
+  Hermes event→run wiring; the tick-poll works today.)
 
 ### Changed
 

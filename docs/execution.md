@@ -182,6 +182,27 @@ Telegram inline-keyboard buttons whose callback resolves the gate are a possible
 future enhancement on top of this channel (they need host support for plugin
 button callbacks); the tagged-reply route here needs none.
 
+## Wait nodes (worker-free external waits)
+
+A `wait` node blocks the run on an external signal without spending a worker. It
+parks active and the engine evaluates its `wait_for` predicate inside the
+periodic tick — no Kanban card, no LLM worker — settling the node `success` /
+`failure` (then it branches on `node_status` like any work node). The one
+condition today is `github_pr_merged`: the tick runs `gh pr view <ref> --json
+state` and settles `success` on MERGED, `failure` on CLOSED-not-merged, and
+keeps waiting on OPEN; a transient `gh` error just retries next tick. The `<ref>`
+is a literal PR url/number or a `{{nodes.<id>.output}}` reference resolved at
+poll time. `gh` resolves its credentials from the tick process's own HOME (it
+runs as the login user). An optional `timeout_seconds` settles the node `failure`
+if the signal has not arrived in time.
+
+This replaces the agent_task poll-loop stopgap (a worker per poll window) with a
+zero-worker wait, so "merge the PR → release publishes" runs at no polling cost
+and with no chat. A GitHub webhook that resolves the node instantly (no polling)
+is the optimal form but needs an upstream Hermes event→run binding that does not
+exist yet (the same wiring the chat-reply channel would use), so it is not
+stubbed; the tick-poll above works today.
+
 ## Inline mode (`execution.default_mode`)
 
 A run advances one node per tick (durable mode) unless inline mode is enabled.

@@ -145,6 +145,18 @@ deep-link resolution are host surfaces pending upstream Hermes support.
 - **human_review** — pauses the run; `options: [approved, rejected, needs_changes]`.
   The resolution may carry an optional operator note, consumable downstream as
   `{{nodes.<gate>.review_note}}` (see `execution.md`).
+- **wait** — a worker-free wait for an external signal, polled in the engine
+  tick (no Kanban card, no LLM worker). It settles `success`/`failure` and
+  branches on `node_status` like any work node.
+  ```yaml
+  - id: merge
+    type: wait
+    wait_for:
+      github_pr_merged: "{{nodes.open_pr.output}}"  # PR url/number, or a node ref
+    timeout_seconds: 86400        # optional; failure on expiry
+  ```
+  Today one condition exists: `github_pr_merged` (success on MERGED, failure on
+  CLOSED-not-merged, keep waiting on OPEN). See `execution.md`.
 - **finish** — terminal; `outcome: success | failure`.
 
 The entry node is the one with no incoming edge (exactly one is required).

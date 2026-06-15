@@ -47,6 +47,26 @@ describe("NodeInspector", () => {
     );
   });
 
+  it("edits a wait node's PR reference and timeout", () => {
+    const onChange = vi.fn();
+    const node = flowNode({
+      id: "merge",
+      type: "wait",
+      wait_for: { github_pr_merged: "" },
+    });
+    render(<NodeInspector node={node} onChange={onChange} />);
+
+    fireEvent.change(screen.getByLabelText("PR reference"), {
+      target: { value: "{{nodes.pr.output}}" },
+    });
+    expect(onChange).toHaveBeenCalledWith({
+      wait_for: { github_pr_merged: "{{nodes.pr.output}}" },
+    });
+
+    fireEvent.change(screen.getByLabelText("Timeout (seconds)"), { target: { value: "3600" } });
+    expect(onChange).toHaveBeenCalledWith({ timeout_seconds: 3600 });
+  });
+
   it("leaves controls enabled by default (editing a node)", () => {
     const node = flowNode({ id: "build", type: "agent_task", prompt: "p", profile: "dev" });
     render(<NodeInspector node={node} onChange={() => {}} profiles={["dev"]} />);

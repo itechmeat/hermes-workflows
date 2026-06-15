@@ -35,6 +35,7 @@ function migrate(db: Database): void {
     "review_note",
     "driven_task_ids",
     "reviewed_task_ids",
+    "wait_started_at",
   ]);
 }
 

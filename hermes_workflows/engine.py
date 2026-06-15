@@ -17,12 +17,13 @@ import json
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
-from . import cli_bridge, notifications, telemetry
+from . import cli_bridge, notifications, telemetry, wait
 from .executor import CompositeExecutor, NodeExecutor
-from .resolve import UnresolvedInput, resolve_input_mapping
+from .resolve import UnresolvedInput, resolve_input_mapping, resolve_ref
 
 # Statuses that still need future advances — the tick's liveness condition,
 # shared with the CLI/dashboard start paths that arm the tick.
@@ -322,6 +323,9 @@ class Engine:
         # routes them to the script backend by their `kind` tag.
         for step in plan.get("script_steps", []):
             task_params[step["node"]] = step
+        # wait nodes are polled worker-free in this tick (no executor); keep them
+        # in their own map so the schedule/poll paths never treat them as cards.
+        wait_params = {step["node"]: step for step in plan.get("wait_steps", [])}
         executor = self._executor_for(plan["scope"], run)
 
         seq = _max_seq(run)
@@ -366,6 +370,23 @@ class Engine:
                 # runner thread is live) — show a truthful "running" instead of a
                 # stale "scheduled" while the node executes.
                 node["status"] = "running"
+
+        # Worker-free wait nodes: poll each active one's predicate in this tick.
+        if wait_params:
+            channels = {
+                nid: {"output": n.get("output"), "review_note": n.get("review_note")}
+                for nid, n in run["nodes"].items()
+            }
+            for node_id, node in run["nodes"].items():
+                step = wait_params.get(node_id)
+                if step is None or node.get("status") != "running":
+                    continue
+                outcome = self._evaluate_wait(node, step, channels)
+                if outcome is not None:
+                    seq += 1
+                    node["status"] = "completed"
+                    node["outcome"] = outcome
+                    node["seq"] = seq
 
         decision = self._advance_decision(spec_path, run)
         for node_id, status in decision["node_updates"].items():
@@ -750,6 +771,31 @@ class Engine:
         send(handle, reviewer=review_profile)
         node.setdefault("reviewed_task_ids", []).append(handle)
         return False
+
+    def _evaluate_wait(self, node: dict, step: dict, channels: dict) -> Optional[str]:
+        """Poll a wait node's predicate once. Returns ``"success"`` / ``"failure"``
+        to settle it, or ``None`` to keep waiting. Records the first-poll time for
+        the optional timeout, resolves a ``{{nodes.X.output}}`` ref, fails loud on
+        an unresolvable ref or unknown condition, and fails on timeout."""
+        if node.get("wait_started_at") is None:
+            node["wait_started_at"] = int(time.time())
+        wait_for = dict(step.get("wait_for") or {})
+        try:
+            if "github_pr_merged" in wait_for:
+                wait_for["github_pr_merged"] = resolve_ref(wait_for["github_pr_merged"], channels)
+            outcome = wait.evaluate(wait_for)
+        except UnresolvedInput as exc:
+            node["output"] = f"wait input resolution failed: {exc}"
+            return "failure"
+        except ValueError as exc:
+            node["output"] = f"wait misconfigured: {exc}"
+            return "failure"
+        if outcome is None:
+            timeout = step.get("timeout_seconds")
+            if timeout is not None and int(time.time()) - int(node["wait_started_at"]) >= int(timeout):
+                node["output"] = f"wait timed out after {timeout}s"
+                return "failure"
+        return outcome
 
     def _schedule_node(
         self,

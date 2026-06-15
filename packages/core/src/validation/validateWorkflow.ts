@@ -147,6 +147,7 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
 
   validateInputMappings(workflow, nodes, err);
   validateAdopt(workflow, nodes, err);
+  validateWait(workflow, nodes, err);
 
   // Exactly one entry node; at least one finish; reachability.
   const entries = entryNodes(workflow);
@@ -296,6 +297,46 @@ function validateAdopt(
       err(
         "invalid_task_ref",
         `node '${node.id}'.task_ref must be a board task id or '{{nodes.<id>.output.task_ids}}', got '${task_ref}'`,
+      );
+    }
+  }
+}
+
+// wait nodes: the github_pr_merged ref is a non-empty literal or a typed
+// `{{nodes.<id>.output}}` reference to an ancestor (resolved at poll time).
+const WAIT_OUTPUT_REF = /^\{\{nodes\.([A-Za-z0-9_-]+)\.output\}\}$/;
+
+function validateWait(
+  workflow: Workflow,
+  nodes: ReturnType<typeof nodeMap>,
+  err: (code: string, message: string) => void,
+): void {
+  for (const node of workflow.nodes) {
+    if (node.type !== "wait") continue;
+    const ref = node.wait_for.github_pr_merged;
+    if (ref.trim() === "") {
+      err("empty_wait_ref", `wait node '${node.id}'.wait_for.github_pr_merged is empty`);
+      continue;
+    }
+    if (!ref.startsWith("{{")) continue; // a literal PR ref (url/number)
+    const match = WAIT_OUTPUT_REF.exec(ref);
+    if (!match) {
+      err(
+        "invalid_wait_ref",
+        `wait node '${node.id}'.wait_for.github_pr_merged must be a PR ref or '{{nodes.<id>.output}}', got '${ref}'`,
+      );
+      continue;
+    }
+    const source = match[1] as string;
+    if (!nodes.has(source)) {
+      err(
+        "unknown_wait_ref_node",
+        `wait node '${node.id}'.wait_for references unknown node '${source}'`,
+      );
+    } else if (source === node.id || !reachableFrom(workflow, source).has(node.id)) {
+      err(
+        "non_ancestor_wait_ref",
+        `wait node '${node.id}'.wait_for references '${source}', which is not an ancestor of '${node.id}'`,
       );
     }
   }

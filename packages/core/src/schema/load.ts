@@ -25,6 +25,7 @@ import type {
   HumanReviewNode,
   FinishNode,
   ReviewOption,
+  WaitNode,
 } from "./nodes.ts";
 import { parseUi } from "./ui.ts";
 import type { UiLayout } from "./ui.ts";
@@ -39,7 +40,7 @@ export interface LoadResult {
   ui?: UiLayout;
 }
 
-const NODE_TYPES = new Set(["agent_task", "script", "condition", "human_review", "finish"]);
+const NODE_TYPES = new Set(["agent_task", "script", "condition", "human_review", "finish", "wait"]);
 const SCOPE_TYPES = new Set(["global", "project", "projects"]);
 const REVIEW_OPTIONS = new Set(["approved", "rejected", "needs_changes"]);
 const MEMORY_PROVIDERS = new Set(["auto", "open_second_brain", "none"]);
@@ -288,9 +289,30 @@ function parseNode(value: unknown, index: number): WorkflowNode {
       return { ...base, type: "condition" };
     case "human_review":
       return parseHumanReview(value, base, id);
+    case "wait":
+      return parseWait(value, base, id);
     default:
       return parseFinish(value, base);
   }
+}
+
+function parseWait(value: Rec, base: { id: string }, id: string): WaitNode {
+  const raw = value["wait_for"];
+  if (!isRecord(raw)) fail(`node '${id}'.wait_for must be a mapping`);
+  if (typeof raw["github_pr_merged"] !== "string") {
+    fail(`node '${id}'.wait_for must declare a string 'github_pr_merged' (the PR ref)`);
+  }
+  const node: WaitNode = {
+    ...base,
+    type: "wait",
+    wait_for: { github_pr_merged: raw["github_pr_merged"] },
+  };
+  if (value["timeout_seconds"] !== undefined) {
+    if (typeof value["timeout_seconds"] !== "number")
+      fail(`node '${id}'.timeout_seconds must be a number`);
+    node.timeout_seconds = value["timeout_seconds"];
+  }
+  return node;
 }
 
 function optionalText(value: Rec, id: string): { title?: string; description?: string } {

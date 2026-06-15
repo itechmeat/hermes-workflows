@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS workflow_node_runs (
   -- initial schema, so connection.ts ALTERs pre-existing databases.
   driven_task_ids TEXT,
   reviewed_task_ids TEXT,
+  -- Epoch seconds a wait node began polling (for its optional timeout). Added
+  -- after the initial schema, so connection.ts ALTERs pre-existing databases.
+  wait_started_at TEXT,
   outcome         TEXT,
   review_decision TEXT,
   -- Optional operator free-text payload attached when resolving a human_review

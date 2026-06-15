@@ -5,6 +5,7 @@
  */
 
 import type { Workflow, Trigger, MemoryProviderKind, Scope } from "../schema/workflow.ts";
+import type { WaitCondition } from "../schema/nodes.ts";
 import { entryNodes } from "../schema/graph.ts";
 import { catalogEntry } from "../templates/params.ts";
 import type { WorkflowParam, CatalogEntry } from "../templates/params.ts";
@@ -47,6 +48,15 @@ export interface CompiledScript {
   env?: string[];
 }
 
+/** A wait node compiled for worker-free polling by the engine tick. Peer of
+ *  CompiledKanbanTask / CompiledScript; routed by the `kind` discriminator. */
+export interface CompiledWait {
+  node: string;
+  kind: "wait";
+  wait_for: WaitCondition;
+  timeout_seconds?: number;
+}
+
 export interface CompiledCronJob {
   schedule: string;
   timezone?: string;
@@ -69,6 +79,7 @@ export interface HermesPlan {
   first_node: string | null;
   kanban_tasks: CompiledKanbanTask[];
   script_steps: CompiledScript[];
+  wait_steps: CompiledWait[];
   cron_jobs: CompiledCronJob[];
   profiles: string[];
   skills: string[];
@@ -80,6 +91,7 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
 
   const kanban_tasks: CompiledKanbanTask[] = [];
   const script_steps: CompiledScript[] = [];
+  const wait_steps: CompiledWait[] = [];
   const profiles = new Set<string>();
   const skills = new Set<string>();
 
@@ -92,6 +104,12 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
       if (node.timeout_seconds !== undefined) step.timeout_seconds = node.timeout_seconds;
       if (node.env !== undefined) step.env = node.env;
       script_steps.push(step);
+      continue;
+    }
+    if (node.type === "wait") {
+      const step: CompiledWait = { node: node.id, kind: "wait", wait_for: node.wait_for };
+      if (node.timeout_seconds !== undefined) step.timeout_seconds = node.timeout_seconds;
+      wait_steps.push(step);
       continue;
     }
     if (node.type !== "agent_task") continue;
@@ -156,6 +174,7 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     first_node: entry ? entry.id : null,
     kanban_tasks,
     script_steps,
+    wait_steps,
     cron_jobs,
     profiles: [...profiles],
     skills: [...skills],

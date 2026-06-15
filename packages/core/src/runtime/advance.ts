@@ -104,6 +104,13 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
         setStatus(id, "waiting_for_review");
         waiting.push(id);
         break;
+      case "wait":
+        // Worker-free external wait: no executor, no card. The node parks active
+        // (`running`) and the Python tick polls its `wait_for` predicate each
+        // tick, settling it `completed` with an outcome — at which point it
+        // routes like any work node. Not added to `schedule` (nothing to run).
+        setStatus(id, "running");
+        break;
       case "condition":
         setStatus(id, "completed"); // routing-only, resolves instantly
         routeQueue.push(id);

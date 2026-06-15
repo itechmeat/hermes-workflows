@@ -47,6 +47,7 @@ export const NODE_TYPE_LABEL: Record<string, string> = {
   condition: "Condition",
   human_review: "Human review",
   finish: "Finish",
+  wait: "Wait",
 };
 
 export function nodeTypeLabel(type: string): string {

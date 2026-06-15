@@ -259,6 +259,27 @@ export function NodeInspector({
         </fieldset>
       )}
 
+      {wf.type === "wait" && (
+        <>
+          <Field label="Wait for PR merge (URL/number, or {{nodes.<id>.output}})">
+            <Input
+              aria-label="PR reference"
+              value={wf.wait_for?.github_pr_merged ?? ""}
+              onChange={(e) => onChange({ wait_for: { github_pr_merged: e.target.value } })}
+            />
+          </Field>
+          <Field label="Timeout (seconds)">
+            <Input
+              aria-label="Timeout (seconds)"
+              type="number"
+              min={0}
+              value={wf.timeout_seconds ?? ""}
+              onChange={(e) => onChange({ timeout_seconds: numberOrUndefined(e.target.value) })}
+            />
+          </Field>
+        </>
+      )}
+
       {wf.type === "finish" && (
         <Field label="Outcome">
           <Select

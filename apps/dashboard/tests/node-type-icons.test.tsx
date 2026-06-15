@@ -7,7 +7,14 @@ import { WorkflowNodeView } from "../src/editor/nodes/WorkflowNodeView";
 import { RunNodeView } from "../src/run/RunNodeView";
 import type { NodeType } from "../src/api/types";
 
-const ALL_TYPES: NodeType[] = ["agent_task", "script", "condition", "human_review", "finish"];
+const ALL_TYPES: NodeType[] = [
+  "agent_task",
+  "script",
+  "condition",
+  "human_review",
+  "finish",
+  "wait",
+];
 
 // The node views render @xyflow `Handle`s, which need the ReactFlow store.
 function renderNode(ui: ReactElement) {
