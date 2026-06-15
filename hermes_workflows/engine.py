@@ -1051,10 +1051,12 @@ def _notice_text(run: dict, event: str, node_id: Optional[str]) -> str:
         # dashboard / CLI.
         return (
             f"ACTION NEEDED - workflow {workflow_id} run {run_id}: review gate "
-            f"'{node_id}' is waiting for your decision (approved / rejected / "
-            f"needs_changes). Reply in this chat with one of those words "
-            f"(optionally followed by a note), or resolve it from the dashboard "
-            f"or with: hermes-workflows review {run_id} {node_id} <decision> [--note \"...\"]."
+            f"'{node_id}' is waiting for your decision. Reply in this chat with "
+            f"'approved', 'rejected', or 'needs_changes' (optionally followed by a "
+            f"note) - or, if the gate offered choices, just reply with your pick "
+            f"(e.g. a number or a name), which is taken as approval with your reply "
+            f"as the note. You can also resolve it from the dashboard or with: "
+            f"hermes-workflows review {run_id} {node_id} <decision> [--note \"...\"]."
         )
     if event == "blocked":
         card = (run.get("nodes") or {}).get(node_id, {}).get("hermes_task_id")

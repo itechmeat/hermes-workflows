@@ -4,17 +4,23 @@ A workflow that parks on a `human_review` gate notifies the run's origin chat
 (see engine `_notice_text`). Without this, a reply in that chat is consumed by
 the normal gateway agent in a fresh session and never reaches the paused run.
 
-This is the native operator->run channel (t_64a30497): a `pre_gateway_dispatch`
-hook inspects each inbound message and, when it is exactly a review decision and
-the chat has exactly one run waiting on a gate, resolves that gate through the
-same `decide_review` path the CLI/tool/dashboard use, then returns
+This is the native operator->run channel (t_64a30497, t_dc40e698): a
+`pre_gateway_dispatch` hook inspects each inbound message and, when the chat has
+exactly one run waiting on a gate, resolves that gate through the same
+`decide_review` path the CLI/tool/dashboard use, then returns
 ``{"action": "skip"}`` so the gateway agent does not also process the reply.
 
-Deterministic and language-agnostic on purpose: only the exact decision enum
-tokens (`approved` / `rejected` / `needs_changes`) are accepted — never NL
-guesses like "yes" or "1" — with any trailing text kept as the operator note
-(`{{nodes.<gate>.review_note}}`). Ambiguity (no waiting gate, or more than one in
-the chat) falls through to normal dispatch rather than guessing.
+Reply contract, anchored on a UNIQUELY waiting gate so the common scope-pick case
+works without forcing the operator to learn a keyword:
+  - an explicit decision token (`approved` / `rejected` / `needs_changes`) is
+    honoured, with any trailing text kept as the operator note;
+  - ANY other non-empty reply is taken as the operator's pick - approved, with
+    the full reply text carried as the note (`{{nodes.<gate>.review_note}}`), so
+    "3", "scope 3", or a scope name resolve the `scope-review` gate as the
+    propose-scopes message instructs.
+Ambiguity (no waiting gate, or more than one in the chat) falls through to normal
+dispatch rather than guessing. Empty messages and slash-commands are cheap-skipped
+(they never target a gate), so only a genuine reply consults the run state.
 """
 
 from __future__ import annotations
@@ -33,6 +39,21 @@ def _decision_and_note(text: str) -> Tuple[Optional[str], Optional[str]]:
         return None, None
     note = parts[1].strip() if len(parts) > 1 else None
     return parts[0], (note or None)
+
+
+def _interpret_reply(text: str) -> Tuple[Optional[str], Optional[str]]:
+    """Interpret a reply that targets a UNIQUELY waiting gate. An explicit
+    decision token is honoured with any trailing text as the note; any other
+    non-empty reply is the operator's pick - approved, with the full reply text
+    as the note (so "3" / "scope 3" / a scope name resolve a scope-review gate).
+    Returns ``(None, None)`` only for empty text."""
+    stripped = (text or "").strip()
+    if not stripped:
+        return None, None
+    decision, note = _decision_and_note(stripped)
+    if decision is not None:
+        return decision, note
+    return "approved", stripped
 
 
 def _waiting_gate(run: dict) -> Optional[str]:
@@ -56,10 +77,7 @@ def resolve_gate_reply(
     """Resolve a chat reply against a run waiting on a gate. Returns a
     ``pre_gateway_dispatch`` skip directive when it resolved one, else ``None``
     (not a decision, no origin, or an ambiguous/absent waiting gate)."""
-    if not origin:
-        return None
-    decision, note = _decision_and_note(text)
-    if decision is None:
+    if not origin or not (text or "").strip():
         return None
 
     from . import tools
@@ -75,6 +93,12 @@ def resolve_gate_reply(
         return None  # nothing waiting here, or ambiguous — let normal dispatch run
 
     run, node_id = candidates[0]
+    # A run is uniquely waiting in this chat: interpret the reply as a gate reply
+    # (an explicit decision, or otherwise the operator's pick approved with the
+    # reply text as the note).
+    decision, note = _interpret_reply(text)
+    if decision is None:
+        return None
     run_id = run["run_id"]
     try:
         # Resolve inside the guard: a spec-lookup failure must surface as a gate
@@ -111,13 +135,17 @@ def _send_confirmation(origin: str, message: str) -> None:
 def route_chat_reply(
     event: Any = None, gateway: Any = None, session_store: Any = None, **_kwargs: Any
 ) -> Optional[dict]:
-    """``pre_gateway_dispatch`` hook: forward an operator's decision reply to a
-    paused run. Fast-paths out unless the message is exactly a decision token, so
-    ordinary chatter never builds an engine. Never raises into dispatch."""
+    """``pre_gateway_dispatch`` hook: forward an operator's reply to a paused run.
+    Cheap-skips empty messages and slash-commands (they never target a gate); any
+    other reply consults the run state and resolves only when exactly one gate is
+    waiting in this chat. Never raises into dispatch."""
     try:
         text = getattr(event, "text", "") or ""
-        if _decision_and_note(text)[0] is None:
-            return None  # cheap guard: not a decision, do nothing
+        stripped = text.strip()
+        # Cheap guards: empty input and slash-commands are never a gate reply, so
+        # they never build an engine. Everything else consults the run state.
+        if not stripped or stripped.startswith("/"):
+            return None
         origin = build_origin(getattr(event, "source", None))
         if origin is None:
             return None

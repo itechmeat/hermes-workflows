@@ -89,10 +89,40 @@ def test_bare_decision_has_no_note() -> None:
     assert engine.calls[0][3:] == ("rejected", None)
 
 
-def test_non_decision_text_is_ignored() -> None:
-    result, engine = _resolve("how is it going?", [_waiting_run()])
-    assert result is None
-    assert engine.calls == []
+def test_interpret_reply() -> None:
+    assert gate_reply._interpret_reply("approved ship it") == ("approved", "ship it")
+    assert gate_reply._interpret_reply("rejected") == ("rejected", None)
+    assert gate_reply._interpret_reply("needs_changes fix lints") == ("needs_changes", "fix lints")
+    # A bare pick (number, "scope N", or a name) is approved, text kept as note.
+    assert gate_reply._interpret_reply("3") == ("approved", "3")
+    assert gate_reply._interpret_reply("scope 3") == ("approved", "scope 3")
+    assert gate_reply._interpret_reply("Native Obsidian views") == (
+        "approved",
+        "Native Obsidian views",
+    )
+    assert gate_reply._interpret_reply("   ") == (None, None)
+
+
+def test_bare_pick_resolves_single_gate_as_approved() -> None:
+    # The common scope-pick case: a non-decision reply against a uniquely waiting
+    # gate resolves it as approved, with the full reply text as the note.
+    result, engine = _resolve("3", [_waiting_run()])
+    assert result is not None and result["action"] == "skip"
+    assert len(engine.calls) == 1
+    assert engine.calls[0][3:] == ("approved", "3")
+
+
+def test_scope_pick_reply_resolves_scope_review_gate() -> None:
+    # Acceptance (t_dc40e698): a run waiting on a gate in thread 952, operator
+    # replies "3" -> the gate resolves approved with note "3" and the gateway
+    # agent does not also process it (action: skip).
+    run = _waiting_run(origin="telegram:-C:952")
+    engine = StubEngine([run])
+    result = gate_reply.resolve_gate_reply(
+        "telegram:-C:952", "3", engine=engine, roots=ROOTS, core_cli=CLI
+    )
+    assert result is not None and result["action"] == "skip"
+    assert engine.calls[0][3:] == ("approved", "3")
 
 
 def test_reply_from_another_chat_is_ignored() -> None:
@@ -116,18 +146,22 @@ def test_no_waiting_gate_falls_through() -> None:
     assert engine.calls == []
 
 
-def test_hook_fast_paths_non_decision_without_engine(monkeypatch: pytest.MonkeyPatch) -> None:
-    # A plain message must not build an engine (cheap guard on every message).
-    def _boom():
-        raise AssertionError("build_engine must not be called for non-decision text")
+def test_hook_does_not_build_engine_for_empty_or_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Empty input and slash-commands never target a gate: a cheap guard skips them
+    # before any engine is built. (A genuine reply DOES consult the run state.)
+    calls: list[int] = []
+    monkeypatch.setattr("hermes_workflows.cli.build_engine", lambda: calls.append(1) or object())
 
-    monkeypatch.setattr("hermes_workflows.cli.build_engine", _boom)
+    for text in ("", "   ", "/workflow status"):
 
-    class _Event:
-        text = "good morning"
-        source = object()
+        class _Event:
+            pass
 
-    assert gate_reply.route_chat_reply(event=_Event()) is None
+        event = _Event()
+        event.text = text
+        event.source = object()
+        assert gate_reply.route_chat_reply(event=event) is None
+    assert calls == []
 
 
 def test_hook_returns_none_without_a_source() -> None:
