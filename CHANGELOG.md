@@ -23,8 +23,29 @@ of polling forever, and the plugin version shown in the dashboard header.
   referenced cards one at a time (promote, run to terminal including review,
   then the next), so workers build on prior committed work on a shared branch.
   Default stays concurrent.
-- **Plugin version in the header.** The dashboard top bar shows the current
-  plugin version on the left.
+- **Plugin version and build number in the header.** The dashboard top bar shows
+  the current plugin version plus a monotonic build counter as `vX.Y.Z-bN` (e.g.
+  `v0.3.0-b1`); the counter lives in `apps/dashboard/build-number.json`, is bumped
+  per committed dashboard build, and resets to 0 on release.
+- **Conditional branching in the editor.** Each non-terminal node exposes labeled
+  source handles per outcome (success/failure, approved/rejected/needs_changes,
+  plus "else" and a plain "always"); the handle an edge leaves from encodes its
+  condition, so a branch is authorable by dragging and visible at a glance. A
+  custom edge type colors and labels a conditioned edge, an edge inspector sets or
+  clears the branch (including branching on another node's status), and the
+  `condition` node finally has a usable inspector.
+- **Per-node completion-notification toggle.** An `agent_task` node can opt its
+  card's "done" ping in or out (`notify_completion`) independently of the
+  workflow-level `subscribe_cards` default; surfaced as a tri-state control in the
+  node inspector.
+- **`/workflow` natural-language entry.** Free text after `/workflow` that is not
+  an explicit subcommand resolves to a workflow id and the operator instruction
+  (the run input), or asks a short clarifying question when the target is
+  ambiguous or unknown.
+- **Floating run-log panel.** The running-workflow page shows a collapsible,
+  timestamped, curated history of the run (started with the operator input, nodes
+  completed/failed, gates entered and resolved, terminal outcome) over the canvas,
+  filtered to user-facing events only.
 
 ### Changed
 
@@ -32,12 +53,21 @@ of polling forever, and the plugin version shown in the dashboard header.
   progress on (a climbing consecutive-failure count while it sits un-run, including
   an unspawnable reviewer profile) settles the node failure with a clear reason and
   an operator notice, instead of polling it forever.
+- A chat reply to a uniquely-waiting gate now accepts a bare pick (a number,
+  "scope 3", or a scope name) as approval with the reply text as the note, not only
+  the literal `approved`/`rejected`/`needs_changes` tokens. The operator input is
+  no longer shown as a page-header string; it appears as the first run-log entry.
 
 ### Fixed
 
 - `bin/hermes-workflows` no longer claims a `~/.hermes/bin` symlink that is not
   created; the header and docs describe the actual resolution (optional installed
   symlink, falling back to the in-repo wrapper).
+- An `adopt` node drives board cards from a typed `task_ids` channel captured from
+  its resolved input, not by shape-matching ids in the worker's prose output, so a
+  node that summarises in prose still drives the right cards. An adopt that resolves
+  zero cards now fails the run closed instead of falling through to a downstream
+  build/PR with an empty branch.
 
 ## 0.2.0 - 2026-06-15
 
