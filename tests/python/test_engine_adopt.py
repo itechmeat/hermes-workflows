@@ -220,6 +220,60 @@ def test_adopt_drives_typed_task_ids_from_upstream_output(tmp_path: Path) -> Non
         board.close()
 
 
+def test_adopt_bounds_a_stuck_card_instead_of_polling_forever(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        target = kb.create_task(board, title="unspawnable", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec(target))
+
+        run = eng.run(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "scheduled"
+
+        # The dispatcher cannot spawn a worker: the card bounces back to ready
+        # with a climbing consecutive_failures and never reaches terminal.
+        board.execute(
+            "UPDATE tasks SET status = 'ready', consecutive_failures = 5 WHERE id = ?",
+            (target,),
+        )
+        board.commit()
+
+        run = eng.advance(spec, "r")
+        node = run["nodes"]["drive"]
+        # Bounded: the node settles failure loudly instead of polling forever.
+        assert node["status"] == "completed"
+        assert node["outcome"] == "failure"
+        assert "stuck" in (node["output"] or "")
+        # And it is surfaced for an operator (notice marker recorded once).
+        assert "stuck:drive" in (run.get("notified") or [])
+    finally:
+        board.close()
+
+
+def test_adopt_does_not_settle_a_running_card_with_prior_failures(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        target = kb.create_task(board, title="recovering", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec(target))
+
+        run = eng.run(spec, "r")
+        # A worker is actively on the card now (running), even though it failed
+        # to spawn a few times earlier: it is making progress, do not kill it.
+        board.execute(
+            "UPDATE tasks SET status = 'running', consecutive_failures = 9 WHERE id = ?",
+            (target,),
+        )
+        board.commit()
+
+        run = eng.advance(spec, "r")
+        node = run["nodes"]["drive"]
+        assert node["status"] in ("scheduled", "running")
+        assert node.get("outcome") is None
+    finally:
+        board.close()
+
+
 def _surface_ids(board: sqlite3.Connection, collect_card: str, ids: list[str]) -> None:
     """Make the collect node terminal, surfacing the given task ids in its output."""
     board.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (collect_card,))

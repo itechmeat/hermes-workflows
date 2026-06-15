@@ -61,4 +61,5 @@ class KanbanExecutor:
             outcome=completion.outcome,
             output=completion.output,
             status=completion.status,
+            consecutive_failures=completion.consecutive_failures,
         )

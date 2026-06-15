@@ -34,6 +34,14 @@ REVIEW_OPTIONS = frozenset({"approved", "rejected", "needs_changes"})
 # Terminal run statuses that warrant a single run-lifecycle notice.
 _TERMINAL_STATUSES = frozenset({"completed", "failed"})
 
+# Card statuses where a climbing consecutive-failure counter means the card is
+# parked awaiting dispatch (not actively being worked): the dispatcher keeps
+# failing to make progress on it. `running` is excluded (a worker is on it).
+_STUCK_CARD_STATUSES = frozenset({"ready", "triage", "todo", "review"})
+# How many consecutive dispatch failures on a parked driven card before an adopt
+# node settles failure rather than polling it forever.
+_ADOPT_STUCK_FAILURES = 3
+
 # Backstop for the inline drain: a cyclic script-only workflow could stay
 # inline-eligible indefinitely, so cap the synchronous steps per call and let
 # the durable tick carry on past the cap.
@@ -342,6 +350,7 @@ class Engine:
         seq = _max_seq(run)
         settled_cards: list[str] = []
         blocked_nodes: list[str] = []
+        stuck_nodes: list[str] = []
         for node_id, node in run["nodes"].items():
             if node.get("status") not in ("scheduled", "running"):
                 continue
@@ -357,6 +366,37 @@ class Engine:
                 self._card_terminal(executor, node, handle, completion, review_profile)
                 for handle, completion in zip(handles, completions)
             ]
+            # Bound the wait: a driven card the dispatcher cannot make progress on
+            # (consecutive_failures climbing while it sits un-run) would otherwise
+            # be polled forever - the silent-hang this guards against. Settle the
+            # node failure loudly and surface it. Excludes a card that is actively
+            # running (a worker is on it) and terminal cards (handled below). This
+            # also catches an unspawnable review worker: a card parked in `review`
+            # with a climbing counter (e.g. a reviewer profile with an unknown
+            # skill) fails the node instead of bouncing silently.
+            stuck = [
+                (h, c)
+                for h, c in zip(handles, completions)
+                if not c.settled
+                and c.status in _STUCK_CARD_STATUSES
+                and (c.consecutive_failures or 0) >= _ADOPT_STUCK_FAILURES
+            ]
+            if stuck and not all(terminal):
+                handle, comp = stuck[0]
+                seq += 1
+                node["status"] = "completed"
+                node["outcome"] = "failure"
+                node["seq"] = seq
+                node["output"] = (
+                    f"adopt stuck: card {handle} could not be dispatched after "
+                    f"{comp.consecutive_failures} consecutive worker failures "
+                    f"(status {comp.status}); settling the node failure instead of "
+                    f"polling forever. Check the card's profile/reviewer skills."
+                )
+                self._merge_telemetry(node)
+                settled_cards.extend(handles)
+                stuck_nodes.append(node_id)
+                continue
             if all(terminal):
                 batch_failed = any(c.outcome == "failure" for c in completions)
                 batch_outputs = [c.output for c in completions if c.output is not None]
@@ -439,7 +479,7 @@ class Engine:
             )
 
         run["status"] = decision["run_status"]
-        self._emit_lifecycle(run, decision, plan.get("deliver"), blocked_nodes)
+        self._emit_lifecycle(run, decision, plan.get("deliver"), blocked_nodes, stuck_nodes)
         self._emit_memory(run, spec_path)
         if prior is not None:
             self._emit_trace(prior, run)
@@ -521,13 +561,15 @@ class Engine:
         decision: dict,
         deliver: Optional[str] = None,
         blocked: Optional[Sequence[str]] = None,
+        stuck: Optional[Sequence[str]] = None,
     ) -> None:
         """Fire run-lifecycle notices once per transition into completed /
-        failed / waiting, and once per underlying card that goes blocked, tracked
-        by persisted markers so a run that stays in a state across ticks is never
-        re-announced. ``deliver`` is the workflow's declared delivery target
-        (compile-preview), routing the notice and, on a completed run, swapping
-        the terse line for the run's result. Fail-open."""
+        failed / waiting, once per underlying card that goes blocked, and once
+        per adopt node settled failed because its driven card was un-dispatchable,
+        tracked by persisted markers so a run that stays in a state across ticks
+        is never re-announced. ``deliver`` is the workflow's declared delivery
+        target (compile-preview), routing the notice and, on a completed run,
+        swapping the terse line for the run's result. Fail-open."""
         notified = list(run.get("notified") or [])
         seen = set(notified)
 
@@ -550,6 +592,13 @@ class Engine:
         for node_id in blocked or []:
             key = f"blocked:{node_id}"
             if key not in seen and self._notify(run, "blocked", node_id=node_id, deliver=deliver):
+                mark(key)
+        # One attention notice per adopt node settled failed because its driven
+        # card could not be dispatched (the bounded-wait escape from a silent
+        # hang). The node is terminal, so this fires exactly once.
+        for node_id in stuck or []:
+            key = f"stuck:{node_id}"
+            if key not in seen and self._notify(run, "stuck", node_id=node_id, deliver=deliver):
                 mark(key)
 
         if notified != (run.get("notified") or []):
@@ -949,6 +998,17 @@ def _notice_text(run: dict, event: str, node_id: Optional[str]) -> str:
             f"'{node_id}'{card_hint} is blocked and the run cannot make progress "
             f"until it is unblocked. Inspect and unblock it on its board, then the "
             f"next tick resumes the run automatically."
+        )
+    if event == "stuck":
+        node = (run.get("nodes") or {}).get(node_id, {})
+        card = node.get("hermes_task_id")
+        card_hint = f" (card {card})" if card else ""
+        return (
+            f"ATTENTION - workflow {workflow_id} run {run_id}: node '{node_id}'"
+            f"{card_hint} was settled FAILED because its driven card could not be "
+            f"dispatched (repeated worker spawn/exec failures); the run stopped "
+            f"polling it instead of hanging. Check the card's profile/reviewer "
+            f"skills on its board."
         )
     return f"Workflow {workflow_id} run {run_id}: {event}."
 

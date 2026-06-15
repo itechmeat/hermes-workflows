@@ -22,6 +22,11 @@ class Completion:
     # card and the `status` command report fresh state. None on backends with no
     # distinct card status (Direct, Script).
     status: Optional[str] = None
+    # The native dispatcher's consecutive-failure counter for the backing card
+    # (Kanban). Climbs when a worker repeatedly fails to spawn / exits non-zero.
+    # Lets an adopt node bound its wait on a card it can never make progress on
+    # instead of polling forever. 0 on backends with no such counter.
+    consecutive_failures: int = 0
 
 
 @runtime_checkable

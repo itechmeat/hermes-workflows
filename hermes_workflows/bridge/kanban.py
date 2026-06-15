@@ -169,15 +169,21 @@ class NodeCompletion:
     status: Optional[str] = None
     outcome: Optional[str] = None  # "success" | "failure" | None
     output: Optional[str] = None
+    # Native dispatcher's consecutive-failure counter for this card; climbs when
+    # a worker repeatedly fails to spawn / exits non-zero. 0 when unset.
+    consecutive_failures: int = 0
 
 
 def read_completion(conn: sqlite3.Connection, task_id: str) -> NodeCompletion:
     """Read the current completion state of a node's Kanban task."""
-    task = conn.execute("SELECT status, result FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    task = conn.execute(
+        "SELECT status, result, consecutive_failures FROM tasks WHERE id = ?", (task_id,)
+    ).fetchone()
     if task is None:
         return NodeCompletion(found=False)
 
     status = task["status"]
+    failures = task["consecutive_failures"] or 0
     run = conn.execute(
         "SELECT outcome, summary, metadata FROM task_runs WHERE task_id = ? ORDER BY id DESC LIMIT 1",
         (task_id,),
@@ -202,6 +208,7 @@ def read_completion(conn: sqlite3.Connection, task_id: str) -> NodeCompletion:
         status=status,
         outcome=outcome,
         output=output,
+        consecutive_failures=failures,
     )
 
 
