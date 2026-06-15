@@ -227,6 +227,31 @@ def test_waiting_run_notifies_and_subscribes_the_card(tmp_path: Path) -> None:
         board.close()
 
 
+def test_subscribe_cards_opt_out_skips_per_card_subscription(tmp_path: Path) -> None:
+    kb = pytest.importorskip("hermes_cli.kanban_db")
+    from hermes_workflows.executor import KanbanExecutor
+
+    rec = _Recorder()
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        eng = Engine(
+            core_cli=["bun", "run", str(CLI)],
+            db_path=str(tmp_path / "runs.db"),
+            kanban=KanbanExecutor(board),
+            sender=rec,
+            default_deliver="fallback:1",
+        )
+        spec = _spec(tmp_path, {**REVIEW_SPEC, "notifications": {"subscribe_cards": False}})
+        run = eng.run(spec, "r-1", origin="telegram:8:4")
+        work_card = run["nodes"]["work"]["hermes_task_id"]
+        # The opt-out means no per-card subscription is created, even though the
+        # run has an origin (run-level lifecycle notices still use it).
+        assert kb.list_notify_subs(board, work_card) == []
+        assert run.get("origin") == "telegram:8:4"
+    finally:
+        board.close()
+
+
 def test_blocked_card_delivers_one_attention_notice(tmp_path: Path) -> None:
     kb = pytest.importorskip("hermes_cli.kanban_db")
     from hermes_workflows.executor import KanbanExecutor

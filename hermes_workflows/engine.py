@@ -392,8 +392,11 @@ class Engine:
         for node_id, status in decision["node_updates"].items():
             run["nodes"][node_id]["status"] = status
 
+        subscribe_cards = plan.get("subscribe_cards", True)
         for node_id in decision["schedule"]:
-            self._schedule_node(executor, run, run_id, node_id, task_params.get(node_id))
+            self._schedule_node(
+                executor, run, run_id, node_id, task_params.get(node_id), subscribe_cards
+            )
 
         run["status"] = decision["run_status"]
         self._emit_lifecycle(run, decision, plan.get("deliver"), blocked_nodes)
@@ -624,11 +627,22 @@ class Engine:
         except Exception as exc:  # noqa: BLE001 - fail-open
             print(f"hermes-workflows: memory-retro failed: {exc}", file=sys.stderr)
 
-    def _subscribe_card(self, executor: NodeExecutor, run: dict, handle: str, params: Optional[dict]) -> None:
+    def _subscribe_card(
+        self,
+        executor: NodeExecutor,
+        run: dict,
+        handle: str,
+        params: Optional[dict],
+        subscribe_cards: bool = True,
+    ) -> None:
         """Subscribe the run's origin to a Kanban card's terminal events via the
         native notifier, so durable project runs close the loop out-of-process
         (where direct delivery cannot reach). No-op for local script handles and
-        when there is no origin or board connection. Fail-open."""
+        when there is no origin or board connection, and when the spec opted out
+        (`notifications.subscribe_cards: false`) to silence per-card pings while
+        keeping run-level lifecycle notices. Fail-open."""
+        if not subscribe_cards:
+            return
         origin = run.get("origin")
         if not origin or (params and params.get("kind") == "script"):
             return
@@ -718,7 +732,7 @@ class Engine:
         return ids
 
     def _adopt_cards(
-        self, executor: NodeExecutor, run: dict, node_id: str, params: dict
+        self, executor: NodeExecutor, run: dict, node_id: str, params: dict, subscribe_cards: bool = True
     ) -> None:
         """Drive the existing board card(s) named by an adopt node's task_ref:
         resolve the id(s), adopt each (assign + promote), and record them on the
@@ -742,7 +756,7 @@ class Engine:
         node["hermes_task_id"] = driven[0]
         node["status"] = "scheduled"
         # Subscribe the primary driven card to its terminal events for the origin.
-        self._subscribe_card(executor, run, driven[0], params)
+        self._subscribe_card(executor, run, driven[0], params, subscribe_cards)
 
     def _card_terminal(
         self,
@@ -804,6 +818,7 @@ class Engine:
         run_id: str,
         node_id: str,
         params: Optional[dict],
+        subscribe_cards: bool = True,
     ) -> None:
         if params is None:
             return
@@ -811,7 +826,7 @@ class Engine:
         if params.get("adopt"):
             # Drive existing card(s) instead of creating one; no prompt/input_mapping
             # resolution (the work is the card's own).
-            self._adopt_cards(executor, run, node_id, params)
+            self._adopt_cards(executor, run, node_id, params, subscribe_cards)
             return
         try:
             params = self._resolve_inputs(run, params)
@@ -834,7 +849,7 @@ class Engine:
         )
         node["hermes_task_id"] = handle
         node["status"] = "scheduled"
-        self._subscribe_card(executor, run, handle, params)
+        self._subscribe_card(executor, run, handle, params, subscribe_cards)
 
 
 def _board_conn(executor: NodeExecutor):

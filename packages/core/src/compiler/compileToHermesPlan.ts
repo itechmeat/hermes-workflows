@@ -71,6 +71,9 @@ export interface HermesPlan {
    *  absent leaves run-lifecycle notices unchanged. Preview only — the engine
    *  reads this to route the terminal notice; the gateway validates it. */
   deliver?: string;
+  /** Whether Kanban-backed node cards subscribe the origin to their terminal
+   *  events (the native per-card "done" ping). Defaults true; a spec opts out. */
+  subscribe_cards: boolean;
   /** Typed template parameters (when this workflow is a template). */
   params?: WorkflowParam[];
   /** The per-surface renderings (form fields, /workflow command, deep-link)
@@ -169,6 +172,7 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     scope: workflow.scope,
     trigger: workflow.trigger,
     ...(workflow.deliver !== undefined ? { deliver: workflow.deliver } : {}),
+    subscribe_cards: workflow.notifications?.subscribe_cards ?? true,
     ...(workflow.params !== undefined ? { params: workflow.params } : {}),
     ...(catalog !== undefined ? { catalog } : {}),
     first_node: entry ? entry.id : null,

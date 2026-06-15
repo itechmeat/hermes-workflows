@@ -15,6 +15,7 @@ import type {
   EventTrigger,
   EventTriggerType,
   Defaults,
+  NotificationDefaults,
   MemoryProviderKind,
 } from "./workflow.ts";
 import { EVENT_TRIGGER_TYPES } from "./workflow.ts";
@@ -92,6 +93,10 @@ export function fromObject(raw: unknown): LoadResult {
   // Where the run result is delivered (DeliveryTarget syntax or "origin"). Any
   // non-empty string is structurally valid; the gateway validates the platform.
   if (rest["deliver"] !== undefined) workflow.deliver = str(rest["deliver"], "deliver");
+  // Notification policy (per-card Kanban subscription opt-out).
+  if (rest["notifications"] !== undefined) {
+    workflow.notifications = parseNotifications(rest["notifications"]);
+  }
   // Typed template parameters (single source of truth for the surface emitters).
   if (rest["params"] !== undefined) workflow.params = parseParams(rest["params"]);
   const ui = parseUi(rawUi);
@@ -236,6 +241,18 @@ function parseEventTrigger(value: Rec, type: EventTriggerType): EventTrigger {
     trigger.event_mapping = mapping;
   }
   return trigger;
+}
+
+function parseNotifications(value: unknown): NotificationDefaults {
+  if (!isRecord(value)) fail("notifications must be a mapping");
+  const out: NotificationDefaults = {};
+  if (value["subscribe_cards"] !== undefined) {
+    if (typeof value["subscribe_cards"] !== "boolean") {
+      fail("notifications.subscribe_cards must be a boolean");
+    }
+    out.subscribe_cards = value["subscribe_cards"];
+  }
+  return out;
 }
 
 function parseDefaults(value: unknown): Defaults | undefined {

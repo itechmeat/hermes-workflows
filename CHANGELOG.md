@@ -135,6 +135,10 @@ hand-authored specs readable.
   header's add-node menu, so the picker and placed nodes match.
 - The node inspector opens during a run in a fully read-only (disabled) state, so
   a node's configuration can be inspected mid-run without risking an edit.
+- `notifications.subscribe_cards: false` (default true): a spec-level opt-out for
+  the per-card Kanban completion subscriptions, silencing the native `✔ Kanban …
+  done` ping per node on a long autonomous workflow while keeping run-level
+  lifecycle notices and explicit `hermes send` messages.
 - A worker-free `wait` node: it parks active and the engine tick polls its
   `wait_for` predicate (no Kanban card, no LLM worker), settling success/failure
   and branching on `node_status`. The first condition is `github_pr_merged`

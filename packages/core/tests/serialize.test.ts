@@ -138,6 +138,22 @@ describe("serializeWorkflow", () => {
     expect(serializeWorkflow(wf)).toContain('"prompt": "just one line"');
   });
 
+  test("round-trips the notifications.subscribe_cards opt-out", () => {
+    const wf = fromObject({
+      id: "n",
+      name: "N",
+      version: 1,
+      scope: { type: "global" },
+      trigger: { type: "manual" },
+      notifications: { subscribe_cards: false },
+      nodes: [{ id: "done", type: "finish" }],
+      edges: [],
+    }).workflow;
+    const round = parseWorkflow(serializeWorkflow(wf)).workflow;
+    expect(round).toEqual(wf);
+    expect(round.notifications?.subscribe_cards).toBe(false);
+  });
+
   test("emits valid YAML that re-parses", () => {
     const { workflow, ui } = parseWorkflow(
       [

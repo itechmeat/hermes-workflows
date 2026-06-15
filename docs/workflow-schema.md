@@ -81,6 +81,19 @@ nothing-to-report run stays quiet. Any non-empty string is accepted — the
 gateway validates the platform downstream. Left unset, run-lifecycle notices
 behave exactly as before.
 
+## Notifications
+
+```yaml
+notifications:
+  subscribe_cards: false   # optional; default true
+```
+
+Each Kanban-backed node card subscribes the run's origin to its native terminal
+event (the `✔ Kanban … done` ping per card). On a long autonomous workflow that
+floods the chat. `notifications.subscribe_cards: false` silences the per-card
+pings while keeping run-level lifecycle notices (run failed / completed) and any
+explicit `hermes send` calls in node prompts. Absent means `true` (unchanged).
+
 ## Template parameters
 
 A workflow used as a template can declare typed parameters (mirroring Hermes

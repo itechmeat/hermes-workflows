@@ -17,6 +17,27 @@ function wf(nodes: unknown[], edges: unknown[]): Workflow {
   }).workflow;
 }
 
+describe("compileToHermesPlan — notifications", () => {
+  test("subscribe_cards defaults to true and reflects the opt-out", () => {
+    const base = {
+      id: "n",
+      name: "N",
+      version: 1,
+      scope: { type: "global" },
+      trigger: { type: "manual" },
+      defaults: { profile: "p" },
+      nodes: [
+        { id: "a", type: "agent_task", prompt: "x" },
+        { id: "done", type: "finish" },
+      ],
+      edges: [{ from: "a", to: "done" }],
+    };
+    expect(compileToHermesPlan(fromObject(base).workflow).subscribe_cards).toBe(true);
+    const off = fromObject({ ...base, notifications: { subscribe_cards: false } }).workflow;
+    expect(compileToHermesPlan(off).subscribe_cards).toBe(false);
+  });
+});
+
 describe("compileToHermesPlan — wait nodes", () => {
   test("a wait node compiles to a wait_step, not a Kanban task", () => {
     const workflow = wf(

@@ -65,6 +65,17 @@ export interface Defaults {
   memory?: MemoryDefaults;
 }
 
+export interface NotificationDefaults {
+  /**
+   * Whether each Kanban-backed node card subscribes the run's origin to its
+   * terminal events (the native `✔ Kanban … done` ping per card). Absent means
+   * `true` (unchanged behaviour). Set `false` to silence the per-card pings on a
+   * long autonomous workflow while keeping run-level lifecycle notices (the run
+   * failed / completed delivery via `origin`).
+   */
+  subscribe_cards?: boolean;
+}
+
 /** Branch on whether a referenced node finished with success or failure. */
 export interface NodeStatusCondition {
   type: "node_status";
@@ -116,6 +127,8 @@ export interface Workflow {
    * host blueprint `deliver` slot, which is non-strict).
    */
   deliver?: string;
+  /** Notification policy (per-card Kanban subscription opt-out). Absent = defaults. */
+  notifications?: NotificationDefaults;
   nodes: WorkflowNode[];
   edges: Edge[];
 }
