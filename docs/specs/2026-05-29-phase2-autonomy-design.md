@@ -67,8 +67,10 @@ accumulate.
 
 ## 4. `hermes-workflows` command
 
-A stable installed entrypoint (`~/.hermes/bin/hermes-workflows`) wrapping the Bun
-core CLI and the Python orchestrator. Cron triggers and the tick invoke it;
+A stable in-repo entrypoint (`bin/hermes-workflows`, optionally symlinked at
+`~/.hermes/bin/hermes-workflows`) wrapping the Bun
+core CLI and the Python orchestrator. Cron triggers and the tick invoke it
+(via `config.command_path()`, which falls back to the in-repo wrapper);
 `run`, `advance`, `advance-all`, `status`, and `review` are its subcommands.
 Manual runs already work through the `workflow_run` model tool.
 

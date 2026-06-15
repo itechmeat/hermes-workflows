@@ -83,9 +83,10 @@ tick ensured when active, torn down when drained.
 ## P4 — Command + cron wiring
 
 ### P4.1 `hermes-workflows` entrypoint
-**Objective:** Installed wrapper (`~/.hermes/bin/hermes-workflows`) exposing
-`run`, `advance-all`, `status`, `review`; delegates to the Python orchestrator.
-**Files:** `bin/hermes-workflows` (in-repo, symlinked on install),
+**Objective:** In-repo wrapper (`bin/hermes-workflows`, optionally symlinked at
+`~/.hermes/bin/hermes-workflows`) exposing `run`, `advance-all`, `status`,
+`review`; delegates to the Python orchestrator.
+**Files:** `bin/hermes-workflows` (in-repo; optional symlink on install, else resolved in place),
 `hermes_workflows/cli.py`, `tests/python/test_py_cli.py`.
 **Acceptance:** `status <run>` and `advance-all` run through the wrapper on a temp HOME.
 **Deps:** P3.1.

@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Entrypoint for the Hermes Workflows orchestrator. Installed as a symlink at
-# ~/.hermes/bin/hermes-workflows; cron trigger/tick jobs invoke it. Resolves the
-# repo (this script's parent) and the Hermes install so both packages import.
+# Entrypoint for the Hermes Workflows orchestrator. This in-repo wrapper is the
+# canonical path; cron trigger/tick jobs invoke whatever config.command_path()
+# resolves, which prefers an optional installed symlink at
+# ~/.hermes/bin/hermes-workflows when present and otherwise falls back to this
+# wrapper (there is no required symlink, and HERMES_WORKFLOWS_BIN overrides
+# both). Resolves the repo (this script's parent) and the Hermes install so both
+# packages import.
 set -euo pipefail
 
 self="$(readlink -f "${BASH_SOURCE[0]:-$0}")"
