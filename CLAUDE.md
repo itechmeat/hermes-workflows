@@ -39,11 +39,21 @@ Individual steps:
 | Core tests | `bun test packages/core` (single file: `bun test packages/core/tests/<f>.test.ts`) |
 | Python tests | `python3 -m pytest` (single: `python3 -m pytest tests/python/test_<x>.py -k <name>`) |
 | Dashboard typecheck/test/build | `bun run dashboard:typecheck` / `dashboard:test` / `dashboard:build` |
+| Dashboard bump+rebuild | `bun run dashboard:rebuild` (bump the build number, then build) |
 | Dashboard dist drift guard | `bun run dashboard:check` |
 
 The dashboard builds to the committed `dashboard/dist`. After any dashboard change, rebuild
-(`bun run dashboard:build`) and commit the regenerated `dist` - `dashboard:check` fails the
-gate on drift. A build-free change must still pass `dashboard:typecheck`.
+with `bun run dashboard:rebuild` and commit the regenerated `dist` together with the bumped
+`apps/dashboard/build-number.json` - `dashboard:check` fails the gate on drift. A build-free
+change must still pass `dashboard:typecheck`.
+
+The header shows the plugin version plus a monotonic build counter as `vX.Y.Z-bN` (e.g.
+`v0.3.0-b1`). The counter lives in `apps/dashboard/build-number.json` and is baked into the
+bundle at build time. It is bumped deliberately by `dashboard:bump` (which `dashboard:rebuild`
+runs first), never inside `vite build`: the plain `dashboard:build` must stay deterministic so
+the `dashboard:check` drift guard keeps passing when CI rebuilds from the committed counter.
+Bump it by one for each committed dashboard build; reset it to 0 on release (the release
+rebuild then makes it 1, shown as `-b1`).
 
 CLI entry: `bin/hermes-workflows` (Python bridge) exposes `run`, `status`, `advance-all`,
 `review`, `cancel`. The TypeScript engine CLI is `packages/core/src/cli.ts`.
@@ -78,7 +88,9 @@ workflow.
   every commit; a green formatter and linter is a precondition for the commit, not cleanup.
 - Python: 3.11+, tests in `tests/python`, the bridge stays dependency-free.
 - The version appears in `package.json`, `apps/dashboard/package.json`, `pyproject.toml`, and
-  `plugin.yaml`. Bump the user-facing ones together on release.
+  `plugin.yaml`. Bump the user-facing ones together on release, and reset
+  `apps/dashboard/build-number.json` to 0 in the same release commit (the release rebuild
+  takes the header to `vX.Y.Z-b1`).
 - Prose style for any docs, comments, and release copy: neutral and measured. No exclamation
   marks. Use a regular hyphen, colon, or a reworded sentence instead of a long (em) dash.
 - TDD: write the failing test first, implement to green, commit the atomic unit as a

@@ -12,6 +12,13 @@ const { version: PLUGIN_VERSION } = JSON.parse(
   readFileSync(resolve(here, "package.json"), "utf8"),
 ) as { version: string };
 
+// Monotonic build counter, bumped deliberately by `dashboard:bump` (never inside
+// this build, which must stay deterministic for the dist drift guard). Baked in
+// alongside the version and shown in the header as `vX.Y.Z-bN`.
+const { build: PLUGIN_BUILD } = JSON.parse(
+  readFileSync(resolve(here, "build-number.json"), "utf8"),
+) as { build: number };
+
 // Single self-executing bundle for the Hermes dashboard plugin loader.
 //
 // The host SPA exposes its own React 19 on `window.__HERMES_PLUGIN_SDK__.React`
@@ -48,6 +55,7 @@ export default defineConfig({
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
     __PLUGIN_VERSION__: JSON.stringify(PLUGIN_VERSION),
+    __PLUGIN_BUILD__: JSON.stringify(PLUGIN_BUILD),
   },
   build: {
     outDir: resolve(here, "../../dashboard/dist"),

@@ -10,6 +10,10 @@ const { version: PLUGIN_VERSION } = JSON.parse(
   readFileSync(resolve(here, "package.json"), "utf8"),
 ) as { version: string };
 
+const { build: PLUGIN_BUILD } = JSON.parse(
+  readFileSync(resolve(here, "build-number.json"), "utf8"),
+) as { build: number };
+
 // Standalone test config. Deliberately does NOT alias `react` to the host shim:
 // tests run against the real React from node_modules. The shim only applies in
 // the production build (vite.config.ts), which the bundle-load test exercises by
@@ -21,6 +25,7 @@ const { version: PLUGIN_VERSION } = JSON.parse(
 export default defineConfig({
   define: {
     __PLUGIN_VERSION__: JSON.stringify(PLUGIN_VERSION),
+    __PLUGIN_BUILD__: JSON.stringify(PLUGIN_BUILD),
   },
   resolve: {
     alias: [

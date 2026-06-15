@@ -20,6 +20,8 @@
     "dashboard:typecheck": "bun run --filter='@hermes-workflows/dashboard' typecheck",
     "dashboard:test": "bun run --filter='@hermes-workflows/dashboard' test",
     "dashboard:build": "bun run --filter='@hermes-workflows/dashboard' build",
+    "dashboard:bump": "bun run apps/dashboard/scripts/bump-build.ts",
+    "dashboard:rebuild": "bun run dashboard:bump && bun run dashboard:build",
     "dashboard:check": "git diff --exit-code -- dashboard/dist",
     "validate": "bun run typecheck && bun run lint && bun run test && bun run test:py && bun run dashboard:typecheck && bun run dashboard:test && bun run dashboard:build && bun run dashboard:check"
   },
