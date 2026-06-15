@@ -1089,67 +1089,46 @@ a.hw-o2b:focus-visible {
 /* --- Conditional branching: labeled source handles + colored edges --------- */
 
 /* A node's outgoing branch points are anchored on its right EDGE (ReactFlow's
-   default for a Right handle) and spread vertically, each with a label just
-   inside the edge. The right padding reserves room for the labels; the
-   min-height gives several handles space to spread without crowding. */
+   default for a Right handle) and spread vertically. They are unlabeled - the
+   dot's color carries the meaning - and absolutely positioned, so they never
+   push or resize the node's content. */
 .hw-node {
   position: relative;
 }
-.hw-node__handle-anchor {
-  /* The label is positioned against the node; the Handle keeps ReactFlow's own
-     absolute right-edge anchoring (we only set its vertical `top`). */
-  display: contents;
-}
-.hw-node__handle-label {
-  position: absolute;
-  right: 12px;
-  transform: translateY(-50%);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--color-muted-foreground, #9a9a9a);
-  pointer-events: none;
-}
-/* Editor nodes carry labeled handles: reserve a right gutter and enough height. */
-.hw-node:not(.hw-node--run) {
-  min-height: 92px;
-  padding-right: 64px;
-}
 .hw-handle.react-flow__handle {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--color-border, #6b7280);
   border: 1px solid var(--color-card, #1d1d1d);
 }
+/* Only success/failure are color-coded; every other branch point keeps the
+   neutral default dot. */
 .hw-handle--success {
   background: #2ea44f;
 }
 .hw-handle--failure {
   background: var(--color-destructive, #c0392b);
 }
-.hw-handle--review {
-  background: var(--color-warning, #d6b25e);
-}
-.hw-handle--else {
-  background: var(--color-muted-foreground, #9a9a9a);
-}
-/* The add-branch ("+") affordance: revealed on node hover at the bottom-right
-   corner; adds the next unused outcome handle, disabled when all are shown. */
+/* The add-branch ("+") affordance: revealed on node hover, nested in the
+   bottom-right corner with the node's own corner radius, the glyph centered.
+   Adds the next unused outcome handle; disabled when all are shown. */
 .hw-node__add-handle {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 16px;
-  height: 16px;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  line-height: 14px;
-  text-align: center;
-  border-radius: 50%;
   border: 1px solid var(--color-border, #3a3a3a);
+  border-radius: 0 0 var(--radius-md, 6px) 0;
   background: var(--color-muted, #262626);
   color: var(--color-foreground, #ededed);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1;
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.1s ease;

@@ -56,7 +56,6 @@ export function RunNodeView({ data, selected }: NodeProps<RunFlowNode>): React.R
       <SourceHandles
         nodeType={node.type}
         usedHandles={(data.usedHandles as string[] | undefined) ?? []}
-        labels={false}
       />
     </div>
   );
