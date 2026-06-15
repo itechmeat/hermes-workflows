@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 const here = import.meta.dirname;
+
+// Mirror the build's __PLUGIN_VERSION__ inject (vite.config.ts) so components
+// that render the version (the plugin header) resolve the global under test too.
+const { version: PLUGIN_VERSION } = JSON.parse(
+  readFileSync(resolve(here, "package.json"), "utf8"),
+) as { version: string };
 
 // Standalone test config. Deliberately does NOT alias `react` to the host shim:
 // tests run against the real React from node_modules. The shim only applies in
@@ -12,6 +19,9 @@ const here = import.meta.dirname;
 // (validation, schema, graph helpers) as real runtime values — used to assert a
 // seeded spec actually passes the canonical validator rather than a copy of it.
 export default defineConfig({
+  define: {
+    __PLUGIN_VERSION__: JSON.stringify(PLUGIN_VERSION),
+  },
   resolve: {
     alias: [
       {

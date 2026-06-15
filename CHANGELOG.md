@@ -4,6 +4,41 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.0 - 2026-06-15
+
+Operator control and run resilience: a free-form run input that overrides node
+prompts at the highest priority, an opt-in sequential mode for driving shared-
+branch cards one at a time, a bounded wait that fails a stuck adopt node instead
+of polling forever, and the plugin version shown in the dashboard header.
+
+### Added
+
+- **Run-level operator input.** `hermes-workflows run <id> --input "<prompt>"`
+  (and `/workflow run <id> --input ...`) layers a free-form instruction above
+  every `agent_task` node's prompt at the highest priority: it overrides
+  conflicting node instructions and otherwise binds as an additional constraint.
+  Persisted on the run, applied to every node across ticks, shown read-only in
+  the run inspector.
+- **Sequential adopt mode.** An `adopt` node with `sequential: true` drives its
+  referenced cards one at a time (promote, run to terminal including review,
+  then the next), so workers build on prior committed work on a shared branch.
+  Default stays concurrent.
+- **Plugin version in the header.** The dashboard top bar shows the current
+  plugin version on the left.
+
+### Changed
+
+- An `adopt` node now bounds its wait: a driven card the dispatcher cannot make
+  progress on (a climbing consecutive-failure count while it sits un-run, including
+  an unspawnable reviewer profile) settles the node failure with a clear reason and
+  an operator notice, instead of polling it forever.
+
+### Fixed
+
+- `bin/hermes-workflows` no longer claims a `~/.hermes/bin` symlink that is not
+  created; the header and docs describe the actual resolution (optional installed
+  symlink, falling back to the in-repo wrapper).
+
 ## 0.2.0 - 2026-06-15
 
 A visual overhaul of the dashboard plugin on a shared component kit, richer

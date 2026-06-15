@@ -1,8 +1,16 @@
 import { defineConfig } from "vite";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
+
+// Single source of truth for the displayed plugin version: this package's
+// manifest (kept in sync with the other manifests on release). Inlined at build
+// time via `define` so the bundle ships the literal, not a runtime lookup.
+const { version: PLUGIN_VERSION } = JSON.parse(
+  readFileSync(resolve(here, "package.json"), "utf8"),
+) as { version: string };
 
 // Single self-executing bundle for the Hermes dashboard plugin loader.
 //
@@ -39,6 +47,7 @@ export default defineConfig({
   // `process` reference and dead-code-eliminates the dev builds.
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
+    __PLUGIN_VERSION__: JSON.stringify(PLUGIN_VERSION),
   },
   build: {
     outDir: resolve(here, "../../dashboard/dist"),

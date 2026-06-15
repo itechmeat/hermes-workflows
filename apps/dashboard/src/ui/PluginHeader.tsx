@@ -56,6 +56,10 @@ export function PluginHeader({
 }: PluginHeaderProps): React.ReactElement {
   return (
     <header className="hw-pluginbar">
+      <span className="hw-pluginbar__brand" title={`Hermes Workflows v${__PLUGIN_VERSION__}`}>
+        <span className="hw-pluginbar__brand-name">Workflows</span>
+        <span className="hw-pluginbar__version">v{__PLUGIN_VERSION__}</span>
+      </span>
       <div className="hw-pluginbar__left" ref={leftRef} />
       <div className="hw-pluginbar__actions" ref={actionsRef} />
       <div className="hw-pluginbar__right">

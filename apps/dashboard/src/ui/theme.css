@@ -296,6 +296,23 @@
   min-height: 44px;
   border-bottom: 1px solid var(--color-border, #2a2a2a);
 }
+.hw-pluginbar__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: none;
+  padding-right: 4px;
+}
+.hw-pluginbar__brand-name {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-text, #e6edf3);
+}
+.hw-pluginbar__version {
+  font-size: 0.78em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted, #8b949e);
+}
 .hw-pluginbar__left {
   display: flex;
   align-items: center;
