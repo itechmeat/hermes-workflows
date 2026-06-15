@@ -62,10 +62,25 @@ def test_decision_and_note_parsing() -> None:
 def test_reply_resolves_the_single_waiting_gate() -> None:
     result, engine = _resolve("approved ship it", [_waiting_run()])
     assert result is not None and result["action"] == "skip"
+    # The operator gets a confirmation back (not a silent resolve).
+    assert "approved" in result["reply"] and "r1" in result["reply"]
     assert len(engine.calls) == 1
     spec, run_id, node_id, decision, note = engine.calls[0]
     assert spec.endswith("feature-development.workflow.yaml")
     assert (run_id, node_id, decision, note) == ("r1", "review", "approved", "ship it")
+
+
+def test_decide_review_error_is_reported_back() -> None:
+    class RaisingEngine(StubEngine):
+        def decide_review(self, *args, **kwargs):
+            super().decide_review(*args, **kwargs)
+            raise ValueError("node moved")
+
+    engine = RaisingEngine([_waiting_run()])
+    result = gate_reply.resolve_gate_reply("telegram:8:4", "approved", engine=engine, roots=ROOTS, core_cli=CLI)
+    assert result is not None and result["action"] == "skip"
+    assert "Could not resolve" in result["reply"] and "node moved" in result["reply"]
+    assert len(engine.calls) == 1  # the attempt was made
 
 
 def test_bare_decision_has_no_note() -> None:
@@ -121,3 +136,33 @@ def test_hook_returns_none_without_a_source() -> None:
         source = None
 
     assert gate_reply.route_chat_reply(event=_Event()) is None
+
+
+def test_hook_sends_confirmation_then_skips(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[tuple] = []
+    monkeypatch.setattr(gate_reply, "_send_confirmation", lambda origin, msg: sent.append((origin, msg)))
+    monkeypatch.setattr(
+        gate_reply,
+        "resolve_gate_reply",
+        lambda origin, text, **kw: {"action": "skip", "reason": "r", "reply": "Gate done."},
+    )
+    monkeypatch.setattr("hermes_workflows.cli.build_engine", lambda: object())
+    monkeypatch.setattr("hermes_workflows.config.spec_roots", lambda: [])
+    monkeypatch.setattr("hermes_workflows.config.core_cli", lambda: [])
+
+    class _Platform:
+        value = "telegram"
+
+    class _Src:
+        platform = _Platform()
+        chat_id = "8"
+        thread_id = "4"
+
+    class _Event:
+        text = "approved"
+        source = _Src()
+
+    result = gate_reply.route_chat_reply(event=_Event(), gateway=object())
+    # The reply is sent to the origin, and the directive returned drops the reply key.
+    assert result == {"action": "skip", "reason": "r"}
+    assert sent == [("telegram:8:4", "Gate done.")]

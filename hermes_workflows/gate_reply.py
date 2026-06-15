@@ -75,12 +75,35 @@ def resolve_gate_reply(
         return None  # nothing waiting here, or ambiguous — let normal dispatch run
 
     run, node_id = candidates[0]
+    run_id = run["run_id"]
     spec_path = tools._resolve_spec_path(run["workflow_id"], roots, core_cli)
-    engine.decide_review(spec_path, run["run_id"], node_id, decision, note=note)
+    try:
+        engine.decide_review(spec_path, run_id, node_id, decision, note=note)
+    except Exception as exc:  # noqa: BLE001 - report the failure to the operator
+        # Still skip (the message was a gate reply, not chatter for the agent),
+        # but tell the operator it did not take rather than resolving silently.
+        return {
+            "action": "skip",
+            "reason": f"gate resolution failed for {run_id}",
+            "reply": f"Could not resolve gate '{node_id}' of run {run_id}: {exc}",
+        }
     return {
         "action": "skip",
-        "reason": f"resolved gate {node_id} of {run['run_id']} as {decision}",
+        "reason": f"resolved gate {node_id} of {run_id} as {decision}",
+        "reply": f"Gate '{node_id}' of run {run_id} resolved as {decision}.",
     }
+
+
+def _send_confirmation(origin: str, message: str) -> None:
+    """Deliver a confirmation/error line back to the operator's chat through the
+    native delivery router (the same path run-lifecycle notices use). Fail-open:
+    a delivery error never affects dispatch."""
+    try:
+        from .notify_sender import make_sender
+
+        make_sender()(origin, message)
+    except Exception:  # noqa: BLE001 - confirmation is best-effort
+        pass
 
 
 def route_chat_reply(
@@ -99,12 +122,20 @@ def route_chat_reply(
         from . import config
         from .cli import build_engine
 
-        return resolve_gate_reply(
+        result = resolve_gate_reply(
             origin,
             text,
             engine=build_engine(),
             roots=config.spec_roots(),
             core_cli=config.core_cli(),
         )
+        if result is None:
+            return None
+        # Always confirm back so the operator knows the gate resolved (or why it
+        # did not) — otherwise `skip` would swallow the reply with no feedback.
+        reply = result.pop("reply", None)
+        if reply:
+            _send_confirmation(origin, reply)
+        return result
     except Exception:  # noqa: BLE001 - a routing failure must never break dispatch
         return None
