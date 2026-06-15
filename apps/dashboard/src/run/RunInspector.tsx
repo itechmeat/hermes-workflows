@@ -9,6 +9,8 @@ import { applyRunStatus, isTerminalRun } from "./runView";
 import { CANVAS_NODE_TYPES } from "./canvasNodeTypes";
 import { errorMessage, RUN_POLL_MS, useRunPolling } from "./useRunPolling";
 import { TelemetryDetail } from "./TelemetryDetail";
+import { RunLogPanel } from "./RunLogPanel";
+import { deriveRunLogEvents, mergeRunLog, type LoggedRunEvent } from "./runLog";
 import { Badge, Button, Modal } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
 
@@ -32,7 +34,15 @@ export function RunInspector({
   // Cancel/retry failure; cleared by the next attempt, shown next to the title.
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [log, setLog] = useState<LoggedRunEvent[]>([]);
   const slots = useHeaderSlots();
+
+  // Append any newly-observed run-lifecycle events to the curated run log,
+  // stamping each with the time it was first seen (kept on later polls).
+  useEffect(() => {
+    if (run === null) return;
+    setLog((prev) => mergeRunLog(prev, deriveRunLogEvents(run), Date.now()));
+  }, [run]);
 
   // The workflow graph is static for the run's life: load it once the run
   // reveals its workflow id.
@@ -137,12 +147,6 @@ export function RunInspector({
         </div>
       )}
 
-      {run.input ? (
-        <p className="hw-run-input">
-          <strong>Operator input</strong> (highest priority for this run): {run.input}
-        </p>
-      ) : null}
-
       <div className="hw-shell">
         <div className="hw-editor-body">
           <div className="hw-canvas">
@@ -159,6 +163,7 @@ export function RunInspector({
               <Background />
               <Controls />
             </ReactFlow>
+            <RunLogPanel events={log} />
           </div>
         </div>
       </div>

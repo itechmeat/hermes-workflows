@@ -532,6 +532,56 @@ a.hw-o2b:focus-visible {
 .hw-canvas {
   flex: 1;
   min-height: 0;
+  /* Anchor for the floating run-log panel. */
+  position: relative;
+}
+
+/* Floating, collapsible run-log panel: a curated, timestamped narrative of the
+   run, over the canvas bottom-right (not in the page header). */
+.hw-runlog {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  max-width: 320px;
+  border: 1px solid var(--color-border, #3a3a3a);
+  border-radius: var(--radius-md, 6px);
+  background: var(--color-card, #1d1d1d);
+  color: var(--color-card-foreground, var(--color-foreground, #ededed));
+  box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
+  font-size: 12px;
+  overflow: hidden;
+}
+.hw-runlog__toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: var(--color-muted, #262626);
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hw-runlog__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hw-runlog__item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.hw-runlog__time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted-foreground, #9a9a9a);
 }
 
 /* ReactFlow canvas chrome themed with Hermes tokens — the library ships a light
@@ -1034,4 +1084,106 @@ a.hw-o2b:focus-visible {
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--color-muted-foreground, #9a9a9a);
+}
+
+/* --- Conditional branching: labeled source handles + colored edges --------- */
+
+/* A node's outgoing branch points, a right-aligned column of labeled handles.
+   The handle an edge leaves from encodes its condition, so the branch cause is
+   visible at the source. */
+.hw-node__handles {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 6px;
+}
+.hw-node__handle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+.hw-node__handle-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-muted-foreground, #9a9a9a);
+}
+/* Source handles flow INLINE within their labeled rows (overriding ReactFlow's
+   default absolute right-center anchoring) so several can stack and be labeled;
+   ReactFlow reads each handle's DOM bounds for edge routing, so this is safe. */
+.hw-node__handles .react-flow__handle {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  transform: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-border, #6b7280);
+  border: 1px solid var(--color-card, #1d1d1d);
+}
+.hw-node__handles[data-labels="off"] {
+  gap: 2px;
+}
+.hw-handle--success {
+  background: #2ea44f;
+}
+.hw-handle--failure {
+  background: var(--color-destructive, #c0392b);
+}
+.hw-handle--review {
+  background: var(--color-warning, #d6b25e);
+}
+.hw-handle--else {
+  background: var(--color-muted-foreground, #9a9a9a);
+}
+
+/* Edge stroke tone by branch meaning; a plain edge keeps the ReactFlow default. */
+.hw-edge--success {
+  stroke: #2ea44f;
+}
+.hw-edge--failure {
+  stroke: var(--color-destructive, #c0392b);
+}
+.hw-edge--review {
+  stroke: var(--color-warning, #d6b25e);
+}
+.hw-edge--else {
+  stroke: var(--color-muted-foreground, #9a9a9a);
+}
+.hw-edge.is-selected {
+  stroke-width: 3;
+}
+
+/* The branch-cause label chip on a conditioned edge. */
+.hw-edge-label {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  pointer-events: all;
+  background: var(--color-card, #1d1d1d);
+  border: 1px solid var(--color-border, #3a3a3a);
+  color: var(--color-muted-foreground, #9a9a9a);
+}
+.hw-edge-label--success {
+  color: #2ea44f;
+  border-color: #2ea44f;
+}
+.hw-edge-label--failure {
+  color: var(--color-destructive, #c0392b);
+  border-color: var(--color-destructive, #c0392b);
+}
+.hw-edge-label--review {
+  color: var(--color-warning, #d6b25e);
+  border-color: var(--color-warning, #d6b25e);
+}
+.hw-edge-label--else {
+  font-style: italic;
 }
