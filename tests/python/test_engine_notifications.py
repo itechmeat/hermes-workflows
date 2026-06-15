@@ -252,6 +252,73 @@ def test_subscribe_cards_opt_out_skips_per_card_subscription(tmp_path: Path) -> 
         board.close()
 
 
+def test_per_node_notify_false_skips_subscription_despite_workflow_default(tmp_path: Path) -> None:
+    kb = pytest.importorskip("hermes_cli.kanban_db")
+    from hermes_workflows.executor import KanbanExecutor
+
+    rec = _Recorder()
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        eng = Engine(
+            core_cli=["bun", "run", str(CLI)],
+            db_path=str(tmp_path / "runs.db"),
+            kanban=KanbanExecutor(board),
+            sender=rec,
+            default_deliver="fallback:1",
+        )
+        # Workflow default is subscribe (unset), but the work node opts OUT.
+        spec = _spec(
+            tmp_path,
+            {
+                **REVIEW_SPEC,
+                "nodes": [
+                    {"id": "work", "type": "agent_task", "prompt": "do", "notify_completion": False},
+                    {"id": "review", "type": "human_review"},
+                    {"id": "done", "type": "finish", "outcome": "success"},
+                ],
+            },
+        )
+        run = eng.run(spec, "r-1", origin="telegram:8:4")
+        work_card = run["nodes"]["work"]["hermes_task_id"]
+        assert kb.list_notify_subs(board, work_card) == []
+    finally:
+        board.close()
+
+
+def test_per_node_notify_true_subscribes_despite_workflow_opt_out(tmp_path: Path) -> None:
+    kb = pytest.importorskip("hermes_cli.kanban_db")
+    from hermes_workflows.executor import KanbanExecutor
+
+    rec = _Recorder()
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        eng = Engine(
+            core_cli=["bun", "run", str(CLI)],
+            db_path=str(tmp_path / "runs.db"),
+            kanban=KanbanExecutor(board),
+            sender=rec,
+            default_deliver="fallback:1",
+        )
+        # Workflow default is OFF, but the work node opts IN.
+        spec = _spec(
+            tmp_path,
+            {
+                **REVIEW_SPEC,
+                "notifications": {"subscribe_cards": False},
+                "nodes": [
+                    {"id": "work", "type": "agent_task", "prompt": "do", "notify_completion": True},
+                    {"id": "review", "type": "human_review"},
+                    {"id": "done", "type": "finish", "outcome": "success"},
+                ],
+            },
+        )
+        run = eng.run(spec, "r-1", origin="telegram:8:4")
+        work_card = run["nodes"]["work"]["hermes_task_id"]
+        assert kb.list_notify_subs(board, work_card) != []
+    finally:
+        board.close()
+
+
 def test_blocked_card_delivers_one_attention_notice(tmp_path: Path) -> None:
     kb = pytest.importorskip("hermes_cli.kanban_db")
     from hermes_workflows.executor import KanbanExecutor

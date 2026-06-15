@@ -63,6 +63,15 @@ export interface AgentTaskNode {
    * `adopt`; a no-op for a single-card adopt.
    */
   sequential?: boolean;
+  /**
+   * Per-node control over the native per-card completion notification: when this
+   * node's Kanban card settles, whether the run origin is subscribed to its
+   * terminal event (the "done" ping). Unset inherits the workflow-level default
+   * (`notifications.subscribe_cards`, itself defaulting true); `true`/`false`
+   * override it for this node only. Lets an operator have some nodes ping and
+   * others stay quiet without changing the workflow default.
+   */
+  notify_completion?: boolean;
 }
 
 /**

@@ -75,6 +75,14 @@ const OUTCOME_ITEMS: SelectItem[] = [
   ...OUTCOMES.map((o) => ({ value: o, label: o })),
 ];
 
+// Per-node completion-notification control. "" inherits the workflow-level
+// subscribe_cards default; "on"/"off" override it for this node's card only.
+const NOTIFY_ITEMS: SelectItem[] = [
+  { value: "", label: "Inherit workflow default" },
+  { value: "on", label: "Notify when this card completes" },
+  { value: "off", label: "Stay quiet for this node" },
+];
+
 /** Narrow a select value to a workspace kind (or undefined for "(default)"),
  *  without an unchecked cast — the items guarantee membership. */
 function asWorkspaceKind(value: string): (typeof WORKSPACE_KINDS)[number] | undefined {
@@ -195,6 +203,16 @@ export function NodeInspector({
               min={0}
               value={wf.timeout_seconds ?? ""}
               onChange={(e) => onChange({ timeout_seconds: numberOrUndefined(e.target.value) })}
+            />
+          </Field>
+          <Field label="Completion notification">
+            <Select
+              aria-label="Completion notification"
+              value={wf.notify_completion === undefined ? "" : wf.notify_completion ? "on" : "off"}
+              items={NOTIFY_ITEMS}
+              onValueChange={(value) =>
+                onChange({ notify_completion: value === "" ? undefined : value === "on" })
+              }
             />
           </Field>
         </>

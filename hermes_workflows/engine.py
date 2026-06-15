@@ -744,8 +744,11 @@ class Engine:
         (where direct delivery cannot reach). No-op for local script handles and
         when there is no origin or board connection, and when the spec opted out
         (`notifications.subscribe_cards: false`) to silence per-card pings while
-        keeping run-level lifecycle notices. Fail-open."""
-        if not subscribe_cards:
+        keeping run-level lifecycle notices. A per-node `notify_completion`
+        overrides that workflow-level default for this card only. Fail-open."""
+        node_pref = params.get("notify_completion") if params else None
+        effective = node_pref if node_pref is not None else subscribe_cards
+        if not effective:
             return
         origin = run.get("origin")
         if not origin or (params and params.get("kind") == "script"):

@@ -37,6 +37,9 @@ export interface CompiledKanbanTask {
   review_profile?: string;
   /** Drive adopted cards one at a time on a shared branch (see AgentTaskNode.sequential). */
   sequential?: boolean;
+  /** Per-node override of the per-card completion subscription; unset inherits
+   *  the workflow-level `subscribe_cards` (see AgentTaskNode.notify_completion). */
+  notify_completion?: boolean;
 }
 
 /** A script node compiled for local execution by the plugin's ScriptExecutor.
@@ -133,6 +136,7 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     if (node.task_ref !== undefined) task.task_ref = node.task_ref;
     if (node.review_profile !== undefined) task.review_profile = node.review_profile;
     if (node.sequential !== undefined) task.sequential = node.sequential;
+    if (node.notify_completion !== undefined) task.notify_completion = node.notify_completion;
     if (node.model !== undefined) task.model = node.model;
     if (node.skills !== undefined) task.skills = node.skills;
     if (node.workspace !== undefined) task.workspace = node.workspace.type;

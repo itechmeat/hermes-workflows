@@ -393,6 +393,12 @@ function parseAgentTask(value: Rec, base: { id: string }, id: string): AgentTask
     if (typeof value["sequential"] !== "boolean") fail(`node '${id}'.sequential must be a boolean`);
     node.sequential = value["sequential"];
   }
+  if (value["notify_completion"] !== undefined) {
+    if (typeof value["notify_completion"] !== "boolean") {
+      fail(`node '${id}'.notify_completion must be a boolean`);
+    }
+    node.notify_completion = value["notify_completion"];
+  }
   return node;
 }
 

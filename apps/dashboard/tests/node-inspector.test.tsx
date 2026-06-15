@@ -47,6 +47,26 @@ describe("NodeInspector", () => {
     );
   });
 
+  it("sets a per-node completion-notification override (tri-state)", async () => {
+    const onChange = vi.fn();
+    const node = flowNode({ id: "build", type: "agent_task", prompt: "p" });
+    render(<NodeInspector node={node} onChange={onChange} />);
+
+    expect(screen.getByRole("combobox", { name: "Completion notification" })).toHaveTextContent(
+      "Inherit workflow default",
+    );
+    await pickFromSelect("Completion notification", "Stay quiet for this node");
+    expect(onChange).toHaveBeenCalledWith({ notify_completion: false });
+  });
+
+  it("clears a per-node notification override back to inherit", async () => {
+    const onChange = vi.fn();
+    const node = flowNode({ id: "build", type: "agent_task", prompt: "p", notify_completion: true });
+    render(<NodeInspector node={node} onChange={onChange} />);
+    await pickFromSelect("Completion notification", "Inherit workflow default");
+    expect(onChange).toHaveBeenCalledWith({ notify_completion: undefined });
+  });
+
   it("edits a wait node's PR reference and timeout", () => {
     const onChange = vi.fn();
     const node = flowNode({

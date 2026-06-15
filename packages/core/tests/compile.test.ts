@@ -36,6 +36,36 @@ describe("compileToHermesPlan — notifications", () => {
     const off = fromObject({ ...base, notifications: { subscribe_cards: false } }).workflow;
     expect(compileToHermesPlan(off).subscribe_cards).toBe(false);
   });
+
+  test("carries a node's notify_completion override onto its compiled task", () => {
+    const wf = fromObject({
+      id: "n",
+      name: "N",
+      version: 1,
+      scope: { type: "project" },
+      trigger: { type: "manual" },
+      defaults: { profile: "p" },
+      nodes: [
+        { id: "loud", type: "agent_task", prompt: "x", notify_completion: true },
+        { id: "quiet", type: "agent_task", prompt: "y", notify_completion: false },
+        { id: "default", type: "agent_task", prompt: "z" },
+        { id: "done", type: "finish" },
+      ],
+      edges: [
+        { from: "loud", to: "quiet" },
+        { from: "quiet", to: "default" },
+        { from: "default", to: "done" },
+      ],
+    }).workflow;
+    const byNode = Object.fromEntries(
+      compileToHermesPlan(wf).kanban_tasks.map((t) => [t.node, t.notify_completion]),
+    );
+    expect(byNode["loud"]).toBe(true);
+    expect(byNode["quiet"]).toBe(false);
+    // Unset stays absent on the compiled task: the engine then inherits the
+    // workflow-level subscribe_cards default.
+    expect(byNode["default"]).toBeUndefined();
+  });
 });
 
 describe("compileToHermesPlan — wait nodes", () => {
