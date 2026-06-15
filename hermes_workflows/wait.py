@@ -16,19 +16,24 @@ import subprocess
 from typing import Any, Callable, Mapping, Optional
 
 
+# Cap a single `gh` poll so a hung CLI cannot stall the whole tick loop.
+_GH_TIMEOUT_SECONDS = 30
+
+
 def github_pr_state(
     ref: str, *, run: Callable[..., Any] = subprocess.run, gh_bin: str = "gh"
 ) -> Optional[str]:
     """The PR's state (``OPEN`` / ``CLOSED`` / ``MERGED``) for ``ref`` (a PR URL or
-    number), or ``None`` when it cannot be determined right now (gh error, bad
-    output) — the caller treats ``None`` as "keep waiting"."""
+    number), or ``None`` when it cannot be determined right now (gh error, timeout,
+    bad output) — the caller treats ``None`` as "keep waiting"."""
     try:
         proc = run(
             [gh_bin, "pr", "view", ref, "--json", "state"],
             capture_output=True,
             text=True,
+            timeout=_GH_TIMEOUT_SECONDS,
         )
-    except Exception:  # noqa: BLE001 - a gh invocation failure is transient; keep waiting
+    except Exception:  # noqa: BLE001 - a gh failure/timeout is transient; keep waiting
         return None
     if getattr(proc, "returncode", 1) != 0:
         return None

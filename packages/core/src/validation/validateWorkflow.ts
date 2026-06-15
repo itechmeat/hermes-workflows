@@ -313,8 +313,10 @@ function validateWait(
 ): void {
   for (const node of workflow.nodes) {
     if (node.type !== "wait") continue;
-    const ref = node.wait_for.github_pr_merged;
-    if (ref.trim() === "") {
+    // Trim first so detection matches the runtime resolver (which strips before
+    // matching the template) — a padded "  {{…}}" must not slip through as literal.
+    const ref = node.wait_for.github_pr_merged.trim();
+    if (ref === "") {
       err("empty_wait_ref", `wait node '${node.id}'.wait_for.github_pr_merged is empty`);
       continue;
     }

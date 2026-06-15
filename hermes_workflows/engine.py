@@ -177,18 +177,29 @@ class Engine:
 
         pending: list[str] = []
         for node_id, node in run["nodes"].items():
-            if node.get("status") not in ("scheduled", "running") or not node.get("hermes_task_id"):
+            handles = _node_handles(node)
+            if node.get("status") not in ("scheduled", "running") or not handles:
                 continue
-            try:
-                completion = executor.poll(node["hermes_task_id"])
-            except Exception:  # noqa: BLE001 - one bad poll never fails status
-                continue
-            settled = bool(completion.settled and completion.outcome is not None)
-            live = {"card_status": completion.status, "settled": settled}
-            if completion.outcome is not None:
-                live["outcome"] = completion.outcome
-            node["live"] = live
-            if settled or completion.status == "blocked":
+            # An adopt node drives several cards; poll them all so live status
+            # never reports the node healthy while another driven card is stuck.
+            cards: list[dict] = []
+            settled_all = True
+            blocked_any = False
+            for handle in handles:
+                try:
+                    completion = executor.poll(handle)
+                except Exception:  # noqa: BLE001 - one bad poll never fails status
+                    settled_all = False
+                    continue
+                card_settled = bool(completion.settled and completion.outcome is not None)
+                settled_all = settled_all and card_settled
+                blocked_any = blocked_any or completion.status == "blocked"
+                card: dict = {"handle": handle, "card_status": completion.status, "settled": card_settled}
+                if completion.outcome is not None:
+                    card["outcome"] = completion.outcome
+                cards.append(card)
+            node["live"] = {"settled": settled_all and bool(cards), "cards": cards}
+            if (settled_all and cards) or blocked_any:
                 pending.append(node_id)
         run["live"] = {"as_of": "live-poll", "pending_completions": pending}
         return run
@@ -390,7 +401,16 @@ class Engine:
 
         decision = self._advance_decision(spec_path, run)
         for node_id, status in decision["node_updates"].items():
-            run["nodes"][node_id]["status"] = status
+            node = run["nodes"][node_id]
+            # Loop re-entry resets a settled wait node back to pending/running;
+            # clear its attempt-scoped state so the new attempt records a fresh
+            # timeout clock and outcome (otherwise _evaluate_wait sees a stale
+            # wait_started_at and miscomputes elapsed time).
+            if node_id in wait_params and status in ("pending", "running"):
+                node.pop("wait_started_at", None)
+                node.pop("outcome", None)
+                node.pop("output", None)
+            node["status"] = status
 
         subscribe_cards = plan.get("subscribe_cards", True)
         for node_id in decision["schedule"]:
@@ -755,8 +775,10 @@ class Engine:
         node["driven_task_ids"] = driven
         node["hermes_task_id"] = driven[0]
         node["status"] = "scheduled"
-        # Subscribe the primary driven card to its terminal events for the origin.
-        self._subscribe_card(executor, run, driven[0], params, subscribe_cards)
+        # Subscribe every driven card to its terminal events for the origin (a
+        # multi-card adopt drives more than one).
+        for handle in driven:
+            self._subscribe_card(executor, run, handle, params, subscribe_cards)
 
     def _card_terminal(
         self,
@@ -782,7 +804,16 @@ class Engine:
         send = getattr(executor, "send_to_review", None)
         if send is None:
             return True  # backend has no review stage; accept the completion as-is
-        send(handle, reviewer=review_profile)
+        try:
+            send(handle, reviewer=review_profile)
+        except Exception as exc:  # noqa: BLE001 - never let a review-routing error wedge the run
+            # Leave the card unmarked so the next tick retries the transition,
+            # and keep the node active rather than crashing _advance_step.
+            print(
+                f"hermes-workflows: send_to_review failed for {handle}: {exc}",
+                file=sys.stderr,
+            )
+            return False
         node.setdefault("reviewed_task_ids", []).append(handle)
         return False
 

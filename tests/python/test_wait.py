@@ -20,6 +20,17 @@ def test_github_pr_state_parses_state() -> None:
     assert wait.github_pr_state("123", run=run) == "MERGED"
 
 
+def test_github_pr_state_passes_a_timeout() -> None:
+    seen: dict = {}
+
+    def run(argv, **kwargs):
+        seen.update(kwargs)
+        return _Proc(0, '{"state": "OPEN"}')
+
+    wait.github_pr_state("123", run=run)
+    assert seen.get("timeout") == wait._GH_TIMEOUT_SECONDS
+
+
 def test_github_pr_state_keeps_waiting_on_errors() -> None:
     assert wait.github_pr_state("x", run=lambda *a, **k: _Proc(1, "not found")) is None
     assert wait.github_pr_state("x", run=lambda *a, **k: _Proc(0, "not json")) is None

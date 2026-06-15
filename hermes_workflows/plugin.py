@@ -136,9 +136,9 @@ def register(ctx: Any) -> None:
 
 
 _COMMAND_USAGE = (
-    "Usage: /workflow <list | run <id> [project] | status <run_id> | "
+    "Usage: /workflow list | run <id> [project] | status <run_id> | "
     "review <run_id> <node_id> <approved|rejected|needs_changes> [note] | "
-    "cancel <run_id> | explain <id>>"
+    "cancel <run_id> | explain <id>"
 )
 
 

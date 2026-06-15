@@ -155,6 +155,25 @@ def test_adopt_routes_a_driven_card_through_native_review(tmp_path: Path) -> Non
         board.close()
 
 
+def test_route_to_review_leaves_a_non_done_card_untouched(tmp_path: Path) -> None:
+    from hermes_workflows.bridge import kanban as kbridge
+
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        target = kb.create_task(board, title="busy", created_by="op")  # running
+        board.execute("UPDATE tasks SET status = 'running' WHERE id = ?", (target,))
+        board.commit()
+        # A non-done card must not be reassigned or transitioned (no hijack).
+        kbridge.route_to_review(board, target, reviewer="qa")
+        row = board.execute(
+            "SELECT status, assignee FROM tasks WHERE id = ?", (target,)
+        ).fetchone()
+        assert row["status"] == "running"
+        assert row["assignee"] != "qa"
+    finally:
+        board.close()
+
+
 def test_adopt_drives_typed_task_ids_from_upstream_output(tmp_path: Path) -> None:
     board = kb.connect(db_path=tmp_path / "kanban.db")
     try:

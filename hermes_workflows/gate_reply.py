@@ -76,8 +76,10 @@ def resolve_gate_reply(
 
     run, node_id = candidates[0]
     run_id = run["run_id"]
-    spec_path = tools._resolve_spec_path(run["workflow_id"], roots, core_cli)
     try:
+        # Resolve inside the guard: a spec-lookup failure must surface as a gate
+        # error reply (and still skip), not fall through to the gateway agent.
+        spec_path = tools._resolve_spec_path(run["workflow_id"], roots, core_cli)
         engine.decide_review(spec_path, run_id, node_id, decision, note=note)
     except Exception as exc:  # noqa: BLE001 - report the failure to the operator
         # Still skip (the message was a gate reply, not chatter for the agent),
