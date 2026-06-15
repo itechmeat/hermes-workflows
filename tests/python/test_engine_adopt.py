@@ -351,3 +351,97 @@ def test_adopt_sequential_settles_failure_if_any_card_failed(tmp_path: Path) -> 
         assert run["nodes"]["drive"]["outcome"] == "failure"
     finally:
         board.close()
+
+
+def _lockscope_spec() -> dict:
+    """scope (lists ids in its output) -> lock (input_mapping carries them in;
+    its own output is prose) -> drive (adopt {{nodes.lock.output.task_ids}})."""
+    return {
+        "id": "adopt-lockscope",
+        "name": "Adopt lock-scope",
+        "version": 1,
+        "scope": {"type": "project"},
+        "trigger": {"type": "manual"},
+        "defaults": {"profile": "worker"},
+        "nodes": [
+            {"id": "scope", "type": "agent_task", "prompt": "find scopes", "profile": "scout"},
+            {"id": "lock", "type": "agent_task", "prompt": "lock {{chosen}}", "profile": "worker",
+             "input_mapping": {"chosen": "{{nodes.scope.output}}"}},
+            {"id": "drive", "type": "agent_task", "prompt": "drive", "profile": "worker",
+             "adopt": True, "task_ref": "{{nodes.lock.output.task_ids}}"},
+            {"id": "done", "type": "finish", "outcome": "success"},
+        ],
+        "edges": [
+            {"from": "scope", "to": "lock"},
+            {"from": "lock", "to": "drive"},
+            {"from": "drive", "to": "done"},
+        ],
+    }
+
+
+def test_adopt_drives_ids_from_lock_input_when_output_is_prose(tmp_path: Path) -> None:
+    """The structural fix: a node that received the ids via input_mapping carries
+    them as a typed task_ids channel, so a downstream adopt drives the right cards
+    even when that node's own worker output is a prose summary with no literal ids."""
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        t1 = kb.create_task(board, title="one", created_by="op", triage=True)
+        t2 = kb.create_task(board, title="two", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _lockscope_spec())
+
+        run = eng.run(spec, "r")
+        # scope surfaces the chosen ids in its free-text output.
+        _surface_ids(board, run["nodes"]["scope"]["hermes_task_id"], [t1, t2])
+
+        # advance -> lock is scheduled and captures the ids from its resolved input.
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["lock"]["task_ids"] == [t1, t2]
+
+        # lock finishes with PROSE only - no literal ids in its output.
+        lock_card = run["nodes"]["lock"]["hermes_task_id"]
+        board.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (lock_card,))
+        board.execute(
+            "INSERT INTO task_runs (task_id, status, outcome, summary, started_at, ended_at) "
+            "VALUES (?, 'done', 'completed', ?, 1, 2)",
+            (lock_card, "Locked the chosen scope and checked out feature branch feat/x."),
+        )
+        board.commit()
+
+        # advance -> drive adopts the typed ids, NOT scraped from the prose output.
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [t1, t2]
+        assert _status(board, t1) == "ready"
+        assert _status(board, t2) == "ready"
+    finally:
+        board.close()
+
+
+def test_adopt_zero_ids_aborts_run_instead_of_routing_downstream(tmp_path: Path) -> None:
+    """A failed adopt that resolved zero cards hard-stops the run (failed) and never
+    falls through to the downstream finish/build node."""
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True))
+
+        run = eng.run(spec, "r")
+        # collect finishes with prose containing NO task ids and no typed channel.
+        collect_card = run["nodes"]["collect"]["hermes_task_id"]
+        board.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (collect_card,))
+        board.execute(
+            "INSERT INTO task_runs (task_id, status, outcome, summary, started_at, ended_at) "
+            "VALUES (?, 'done', 'completed', ?, 1, 2)",
+            (collect_card, "I reviewed everything and it all looks good to me."),
+        )
+        board.commit()
+
+        run = eng.advance(spec, "r")
+        node = run["nodes"]["drive"]
+        assert node["outcome"] == "failure"
+        assert node.get("abort_run") is True
+        # Fail closed: the run failed and the downstream finish node was NOT reached.
+        assert run["status"] == "failed"
+        assert run["nodes"].get("done", {}).get("status") != "completed"
+    finally:
+        board.close()

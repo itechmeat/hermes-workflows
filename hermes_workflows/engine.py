@@ -484,6 +484,15 @@ class Engine:
                 executor, run, run_id, node_id, task_params.get(node_id), subscribe_cards
             )
 
+        # An adopt node can settle failure SYNCHRONOUSLY during scheduling (it
+        # resolved zero cards to drive) and flag the run to abort. Re-decide so
+        # the run fails closed this tick instead of leaking a 'running' status -
+        # and never advances toward a downstream build/PR - until the next tick.
+        if any(run["nodes"][nid].get("abort_run") for nid in decision["schedule"]):
+            decision = self._advance_decision(spec_path, run)
+            for node_id, status in decision["node_updates"].items():
+                run["nodes"][node_id]["status"] = status
+
         run["status"] = decision["run_status"]
         self._emit_lifecycle(run, decision, plan.get("deliver"), blocked_nodes, stuck_nodes)
         self._emit_memory(run, spec_path)
@@ -808,6 +817,29 @@ class Engine:
         resolved["prompt"] = prompt
         return resolved
 
+    def _input_task_ids(self, run: dict, params: dict) -> list[str]:
+        """Board task ids carried into a node by its input_mapping, captured as a
+        typed channel. Reads the resolved mapping VALUES only (upstream outputs /
+        gate notes) - never the operator-input block layered on top - so a generic
+        operator instruction that happens to name an id cannot pollute the set."""
+        mapping = params.get("input_mapping")
+        if not mapping:
+            return []
+        channels = {
+            nid: {"output": n.get("output"), "review_note": n.get("review_note")}
+            for nid, n in run["nodes"].items()
+        }
+        ids: list[str] = []
+        for ref in mapping.values():
+            try:
+                value = resolve_ref(str(ref), channels)
+            except UnresolvedInput:
+                continue
+            for token in _TASK_ID_TOKEN.findall(value or ""):
+                if token not in ids:
+                    ids.append(token)
+        return ids
+
     def _resolve_task_ref(self, run: dict, task_ref: str) -> list[str]:
         """The card id(s) an adopt node should drive. A literal id resolves to
         itself; a ``{{nodes.<id>.output.task_ids}}`` reference extracts the board
@@ -820,20 +852,28 @@ class Engine:
             return [ref]  # literal board task id
         source = match.group(1)
         node = run["nodes"].get(source)
+        # Prefer the typed list captured from the source node's resolved input
+        # (the ids that flowed in via input_mapping / a gate note): driving real
+        # board cards must not depend on the worker re-emitting machine-parseable
+        # ids in free text. Fall back to scraping the output by id shape only when
+        # no structured list is present.
+        typed = node.get("task_ids") if node else None
+        if typed:
+            structured = [tid for tid in dict.fromkeys(typed) if tid]
+            if structured:
+                return structured
         output = node.get("output") if node else None
-        if not output:
-            raise UnresolvedInput(
-                f"task_ref references task_ids of node {source!r}, which produced no output"
-            )
-        ids: list[str] = []
-        for token in _TASK_ID_TOKEN.findall(output):
-            if token not in ids:
-                ids.append(token)
-        if not ids:
-            raise UnresolvedInput(
-                f"task_ref node {source!r} output surfaced no task ids to drive"
-            )
-        return ids
+        if output:
+            scraped: list[str] = []
+            for token in _TASK_ID_TOKEN.findall(output):
+                if token not in scraped:
+                    scraped.append(token)
+            if scraped:
+                return scraped
+        raise UnresolvedInput(
+            f"task_ref node {source!r} surfaced no task ids to drive "
+            f"(neither a typed task_ids channel nor an id in its output)"
+        )
 
     def _adopt_cards(
         self, executor: NodeExecutor, run: dict, node_id: str, params: dict, subscribe_cards: bool = True
@@ -864,6 +904,11 @@ class Engine:
             node["outcome"] = "failure"
             node["output"] = f"adopt failed: {exc}"
             node["seq"] = _max_seq(run) + 1
+            # An adopt that drove ZERO cards did none of the real work; fail the
+            # run closed so it cannot fall through to a downstream build/PR with
+            # an empty branch. The advance engine honours this and does not route
+            # this node's outgoing edges.
+            node["abort_run"] = True
             return
         node["driven_task_ids"] = driven
         node["hermes_task_id"] = driven[0]
@@ -971,6 +1016,12 @@ class Engine:
             node["output"] = f"input resolution failed: {exc}"
             node["seq"] = _max_seq(run) + 1
             return
+        # Capture the board task ids carried in via input_mapping as a typed
+        # channel, so a downstream adopt can drive them structurally even if this
+        # node's worker later emits a prose summary with no literal ids.
+        captured = self._input_task_ids(run, params)
+        if captured:
+            node["task_ids"] = captured
         handle = executor.schedule(
             run_id=run_id,
             node_id=node_id,

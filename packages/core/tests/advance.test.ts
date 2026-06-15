@@ -126,6 +126,53 @@ describe("advance — dead end", () => {
   });
 });
 
+describe("advance — abort_run hard-stop", () => {
+  const wf = fromObject({
+    id: "abort",
+    name: "Abort",
+    version: 1,
+    scope: { type: "global" },
+    trigger: { type: "manual" },
+    defaults: { profile: "p" },
+    nodes: [
+      { id: "a", type: "agent_task", prompt: "x" },
+      { id: "build", type: "agent_task", prompt: "y" },
+      { id: "done", type: "finish" },
+    ],
+    // Plain edges always fire: without abort_run, 'a' would route to build.
+    edges: [
+      { from: "a", to: "build" },
+      { from: "build", to: "done" },
+    ],
+  }).workflow;
+
+  test("a node flagged abort_run fails the run and does not route onward", () => {
+    const run = createRunState(wf, "r");
+    run.status = "running";
+    // 'a' settled failure AND flagged to abort (e.g. an adopt that drove 0 cards).
+    run.nodes["a"] = {
+      node_id: "a",
+      status: "completed",
+      outcome: "failure",
+      abort_run: true,
+      seq: 1,
+    };
+    const result = advance(wf, run);
+    expect(result.run_status).toBe("failed");
+    expect(result.schedule).not.toContain("build");
+    expect(result.node_updates["build"]).toBeUndefined();
+  });
+
+  test("without abort_run the same node routes onward (regression guard)", () => {
+    const run = createRunState(wf, "r");
+    run.status = "running";
+    complete(run, "a", "failure", 1);
+    const result = advance(wf, run);
+    expect(result.schedule).toContain("build");
+    expect(result.run_status).toBe("running");
+  });
+});
+
 describe("advance — script nodes", () => {
   const scriptWf = fromObject({
     id: "scripts",

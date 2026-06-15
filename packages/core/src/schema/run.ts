@@ -95,6 +95,21 @@ export interface NodeRunState {
     outputs: string[];
     failed: boolean;
   };
+  /**
+   * Board task ids this node is structurally concerned with, captured from its
+   * resolved input at schedule time (the ids that flowed in via input_mapping /
+   * a gate note), independent of whatever free text the worker later emits. An
+   * adopt node's `{{nodes.<id>.output.task_ids}}` reference reads this typed list
+   * in preference to shape-matching ids out of the source node's prose output.
+   */
+  task_ids?: string[];
+  /**
+   * Set by the bridge when a settled node must HARD-STOP the run rather than
+   * route onward (e.g. an adopt node that resolved zero cards to drive). The
+   * advance engine fails the run closed and does not follow this node's outgoing
+   * edges, so a failed adopt can never fall through to a downstream build/PR.
+   */
+  abort_run?: boolean;
   /** Set once the node reaches a terminal state. */
   outcome?: NodeOutcome;
   /** Decision recorded for a human_review node. */

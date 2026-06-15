@@ -64,6 +64,7 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
   const waiting: string[] = [];
   let finishOutcome: NodeOutcome | undefined;
   let failedDeadEnd = false;
+  let aborted = false;
 
   const merged = (id: string): NodeStatus => updates[id] ?? run.nodes[id]?.status ?? "pending";
   const setStatus = (id: string, status: NodeStatus): void => {
@@ -141,6 +142,13 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
     if (node.type === "human_review" && run.nodes[rid]?.review_decision !== undefined) {
       setStatus(rid, "completed");
     }
+    // A node flagged to abort the run (e.g. an adopt that drove zero cards) fails
+    // the run closed: do NOT follow its outgoing edges, so the run cannot fall
+    // through to a downstream build/PR after the real work was skipped.
+    if (run.nodes[rid]?.abort_run) {
+      aborted = true;
+      continue;
+    }
     const targets = selectOutgoing(workflow, run, rid);
     if (targets.length === 0) {
       if (node.type !== "finish") failedDeadEnd = true; // run is stuck, cannot proceed
@@ -153,7 +161,7 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
     schedule.length > 0 && schedule.every((id) => nodes.get(id)?.type === "script");
 
   return {
-    run_status: resolveRunStatus(workflow, run, merged, finishOutcome, failedDeadEnd),
+    run_status: resolveRunStatus(workflow, run, merged, finishOutcome, failedDeadEnd || aborted),
     ...(finishOutcome !== undefined ? { finish_outcome: finishOutcome } : {}),
     schedule,
     waiting,
