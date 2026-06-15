@@ -4,13 +4,18 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.2.0 - 2026-06-15
 
 A visual overhaul of the dashboard plugin on a shared component kit, richer
 `agent_task` editing backed by live host data, run observability built on
 the Hermes observer-hook contract — per-node agent telemetry, pending
 command-approval surfacing, an opt-in per-run JSONL trace — and editor
 playback: run the workflow you are editing and watch it play on the canvas.
+This release also makes a run Kanban-native (drive existing board cards, with an
+optional native review stage), gives gates a two-way chat channel and an operator
+note, adds a worker-free `wait` node, a `/workflow` chat command and a
+`hermes-workflows cancel` CLI, surfaces blocked cards and live status, and keeps
+hand-authored specs readable.
 
 ### Added
 
