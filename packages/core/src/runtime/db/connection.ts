@@ -40,6 +40,7 @@ function migrate(db: Database): void {
     "driven_task_ids",
     "reviewed_task_ids",
     "wait_started_at",
+    "adopt_seq_json",
   ]);
 }
 

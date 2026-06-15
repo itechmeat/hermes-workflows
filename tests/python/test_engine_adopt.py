@@ -45,11 +45,19 @@ def _status(board: sqlite3.Connection, task_id: str) -> str:
     return board.execute("SELECT status FROM tasks WHERE id = ?", (task_id,)).fetchone()["status"]
 
 
-def _adopt_spec(task_ref: str, *, collect: bool = False, review_profile: str | None = None) -> dict:
+def _adopt_spec(
+    task_ref: str,
+    *,
+    collect: bool = False,
+    review_profile: str | None = None,
+    sequential: bool = False,
+) -> dict:
     drive = {"id": "drive", "type": "agent_task", "prompt": "drive", "profile": "worker",
              "adopt": True, "task_ref": task_ref}
     if review_profile is not None:
         drive["review_profile"] = review_profile
+    if sequential:
+        drive["sequential"] = True
     nodes = [drive]
     edges = [{"from": "drive", "to": "done"}]
     if collect:
@@ -208,5 +216,84 @@ def test_adopt_drives_typed_task_ids_from_upstream_output(tmp_path: Path) -> Non
         run = eng.advance(spec, "r")
         assert run["nodes"]["drive"]["status"] == "completed"
         assert run["nodes"]["drive"]["outcome"] == "success"
+    finally:
+        board.close()
+
+
+def _surface_ids(board: sqlite3.Connection, collect_card: str, ids: list[str]) -> None:
+    """Make the collect node terminal, surfacing the given task ids in its output."""
+    board.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (collect_card,))
+    board.execute(
+        "INSERT INTO task_runs (task_id, status, outcome, summary, started_at, ended_at) "
+        "VALUES (?, 'done', 'completed', ?, 1, 2)",
+        (collect_card, "scope: drive " + " and ".join(ids) + " please"),
+    )
+    board.commit()
+
+
+def test_adopt_sequential_drives_cards_one_at_a_time(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        t1 = kb.create_task(board, title="one", created_by="op", triage=True)
+        t2 = kb.create_task(board, title="two", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(
+            tmp_path,
+            _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True, sequential=True),
+        )
+
+        run = eng.run(spec, "r")
+        _surface_ids(board, run["nodes"]["collect"]["hermes_task_id"], [t1, t2])
+
+        # Sequential: only the FIRST card is promoted into dispatch; the second
+        # stays in triage (not promoted) until the first is terminal.
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [t1]
+        assert _status(board, t1) == "ready"
+        assert _status(board, t2) == "triage"
+
+        # First card terminal -> the second is promoted now; the node stays active.
+        _complete(board, t1)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] in ("scheduled", "running")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [t2]
+        assert _status(board, t2) == "ready"
+
+        # Second (last) card terminal -> the node settles success.
+        _complete(board, t2)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "completed"
+        assert run["nodes"]["drive"]["outcome"] == "success"
+    finally:
+        board.close()
+
+
+def test_adopt_sequential_settles_failure_if_any_card_failed(tmp_path: Path) -> None:
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        t1 = kb.create_task(board, title="one", created_by="op", triage=True)
+        t2 = kb.create_task(board, title="two", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(
+            tmp_path,
+            _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True, sequential=True),
+        )
+
+        run = eng.run(spec, "r")
+        _surface_ids(board, run["nodes"]["collect"]["hermes_task_id"], [t1, t2])
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [t1]
+
+        # First card FAILS: the sequence still advances to the second card.
+        _complete(board, t1, outcome="failed")
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] in ("scheduled", "running")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [t2]
+
+        # Second card succeeds, but the node settles failure because one failed.
+        _complete(board, t2)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "completed"
+        assert run["nodes"]["drive"]["outcome"] == "failure"
     finally:
         board.close()

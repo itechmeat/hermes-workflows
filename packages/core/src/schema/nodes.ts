@@ -53,6 +53,16 @@ export interface AgentTaskNode {
    * with `adopt`. Absent leaves the driven card settling on first `done`.
    */
   review_profile?: string;
+  /**
+   * For a multi-card `adopt` node: drive the referenced cards ONE AT A TIME
+   * instead of promoting them all into the dispatch lane at once. Promote card
+   * N, wait until it is terminal (incl. its review stage), then promote N+1, so
+   * each worker builds on the prior cards' committed work on a shared branch.
+   * The node still settles when all are terminal (failure if any failed).
+   * Default (absent/false) keeps the concurrent behavior. Only meaningful with
+   * `adopt`; a no-op for a single-card adopt.
+   */
+  sequential?: boolean;
 }
 
 /**

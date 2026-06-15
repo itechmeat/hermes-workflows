@@ -352,6 +352,16 @@ describe("validateWorkflow — adopt / task_ref", () => {
     expect(codes(adopt({ task_ref: "t_abc123" }))).toContain("task_ref_without_adopt");
   });
 
+  test("accepts sequential on an adopt node", () => {
+    expect(
+      validateWorkflow(adopt({ adopt: true, task_ref: "t_abc123", sequential: true })).valid,
+    ).toBe(true);
+  });
+
+  test("rejects sequential without adopt", () => {
+    expect(codes(adopt({ sequential: true }))).toContain("sequential_without_adopt");
+  });
+
   test("rejects a malformed task_ref", () => {
     expect(codes(adopt({ adopt: true, task_ref: "not a ref!" }))).toContain("invalid_task_ref");
   });

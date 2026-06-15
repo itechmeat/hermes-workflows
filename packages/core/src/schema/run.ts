@@ -83,6 +83,18 @@ export interface NodeRunState {
    * card and the node settles on the post-review terminal state.
    */
   reviewed_task_ids?: string[];
+  /**
+   * Bookkeeping for a sequential `adopt` node (`sequential: true`): the cards not
+   * yet promoted (`pending`), the assignee to promote them under, and the
+   * accumulated `outputs` / `failed` flag from already-terminal cards. The poll
+   * loop promotes one card at a time and aggregates the final outcome from this.
+   */
+  adopt_seq?: {
+    pending: string[];
+    assignee: string;
+    outputs: string[];
+    failed: boolean;
+  };
   /** Set once the node reaches a terminal state. */
   outcome?: NodeOutcome;
   /** Decision recorded for a human_review node. */

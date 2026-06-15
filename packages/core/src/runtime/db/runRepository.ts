@@ -105,6 +105,7 @@ interface NodeRow {
   driven_task_ids: string | null;
   reviewed_task_ids: string | null;
   wait_started_at: string | null;
+  adopt_seq_json: string | null;
   outcome: string | null;
   review_decision: string | null;
   review_note: string | null;
@@ -230,14 +231,15 @@ export class RunRepository {
     this.db
       .query(
         `INSERT INTO workflow_node_runs
-           (id, run_id, node_id, status, hermes_task_id, driven_task_ids, reviewed_task_ids, wait_started_at, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
-         VALUES ($id, $run, $node, $status, $task, $driven, $reviewed, $waitStarted, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
+           (id, run_id, node_id, status, hermes_task_id, driven_task_ids, reviewed_task_ids, wait_started_at, adopt_seq_json, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
+         VALUES ($id, $run, $node, $status, $task, $driven, $reviewed, $waitStarted, $adoptSeq, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            hermes_task_id = excluded.hermes_task_id,
            driven_task_ids = excluded.driven_task_ids,
            reviewed_task_ids = excluded.reviewed_task_ids,
            wait_started_at = excluded.wait_started_at,
+           adopt_seq_json = excluded.adopt_seq_json,
            outcome = excluded.outcome,
            review_decision = excluded.review_decision,
            review_note = excluded.review_note,
@@ -261,6 +263,7 @@ export class RunRepository {
             ? JSON.stringify(node.reviewed_task_ids)
             : null,
         $waitStarted: node.wait_started_at === undefined ? null : String(node.wait_started_at),
+        $adoptSeq: node.adopt_seq === undefined ? null : JSON.stringify(node.adopt_seq),
         $outcome: node.outcome ?? null,
         $review: node.review_decision ?? null,
         $reviewNote: node.review_note ?? null,
@@ -295,6 +298,9 @@ export class RunRepository {
         node.reviewed_task_ids = JSON.parse(n.reviewed_task_ids) as string[];
       }
       if (n.wait_started_at !== null) node.wait_started_at = Number(n.wait_started_at);
+      if (n.adopt_seq_json !== null) {
+        node.adopt_seq = JSON.parse(n.adopt_seq_json) as NodeRunState["adopt_seq"];
+      }
       if (n.outcome !== null) node.outcome = n.outcome as NodeRunState["outcome"];
       if (n.review_decision !== null)
         node.review_decision = n.review_decision as NodeRunState["review_decision"];

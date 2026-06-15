@@ -389,6 +389,10 @@ function parseAgentTask(value: Rec, base: { id: string }, id: string): AgentTask
   if (value["review_profile"] !== undefined) {
     node.review_profile = str(value["review_profile"], `node '${id}'.review_profile`);
   }
+  if (value["sequential"] !== undefined) {
+    if (typeof value["sequential"] !== "boolean") fail(`node '${id}'.sequential must be a boolean`);
+    node.sequential = value["sequential"];
+  }
   return node;
 }
 

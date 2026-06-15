@@ -358,17 +358,37 @@ class Engine:
                 for handle, completion in zip(handles, completions)
             ]
             if all(terminal):
-                seq += 1
-                node["status"] = "completed"
-                node["outcome"] = (
-                    "failure" if any(c.outcome == "failure" for c in completions) else "success"
-                )
-                node["seq"] = seq
-                outputs = [c.output for c in completions if c.output is not None]
-                if outputs:
-                    node["output"] = "\n\n".join(outputs)
-                self._merge_telemetry(node)
-                settled_cards.extend(handles)
+                batch_failed = any(c.outcome == "failure" for c in completions)
+                batch_outputs = [c.output for c in completions if c.output is not None]
+                seq_state = node.get("adopt_seq")
+                if seq_state and seq_state.get("pending"):
+                    # Sequential adopt: this card is terminal but more remain.
+                    # Stash its result, promote the next card on the shared branch,
+                    # and keep the node active rather than settling.
+                    seq_state.setdefault("outputs", []).extend(batch_outputs)
+                    seq_state["failed"] = bool(seq_state.get("failed")) or batch_failed
+                    next_id = seq_state["pending"].pop(0)
+                    adopt = getattr(executor, "adopt", None)
+                    handle = adopt(next_id, assignee=seq_state.get("assignee") or "")
+                    node["driven_task_ids"] = [handle]
+                    node["hermes_task_id"] = handle
+                    node["status"] = "scheduled"
+                    self._subscribe_card(
+                        executor, run, handle, task_params.get(node_id) or {},
+                        plan.get("subscribe_cards", True),
+                    )
+                else:
+                    seq += 1
+                    node["status"] = "completed"
+                    failed = batch_failed or bool(seq_state and seq_state.get("failed"))
+                    node["outcome"] = "failure" if failed else "success"
+                    node["seq"] = seq
+                    prior_outputs = list(seq_state.get("outputs") or []) if seq_state else []
+                    outputs = prior_outputs + batch_outputs
+                    if outputs:
+                        node["output"] = "\n\n".join(outputs)
+                    self._merge_telemetry(node)
+                    settled_cards.extend(handles)
             elif any(c.status == "blocked" for c in completions):
                 # An underlying card was blocked (e.g. a worker error ran
                 # `kanban block`). The node stays active so the tick keeps polling
@@ -760,12 +780,21 @@ class Engine:
         or adopt error settles the node failure loudly rather than scheduling it
         in a broken state — the same contract as input_mapping resolution."""
         node = run["nodes"][node_id]
+        sequential = bool(params.get("sequential"))
         try:
             ids = self._resolve_task_ref(run, params.get("task_ref") or "")
             adopt = getattr(executor, "adopt", None)
             if adopt is None:
                 raise ValueError("adopt requires a Kanban-backed (project) scope")
-            driven = [adopt(task_id, assignee=params.get("assignee") or "") for task_id in ids]
+            assignee = params.get("assignee") or ""
+            # Sequential is only meaningful for more than one card: promote the
+            # first now and queue the rest; the poll loop promotes N+1 once N is
+            # terminal, so workers build on prior committed work on one branch.
+            sequential = sequential and len(ids) > 1
+            if sequential:
+                driven = [adopt(ids[0], assignee=assignee)]
+            else:
+                driven = [adopt(task_id, assignee=assignee) for task_id in ids]
         except (UnresolvedInput, ValueError) as exc:
             node["status"] = "completed"
             node["outcome"] = "failure"
@@ -775,6 +804,13 @@ class Engine:
         node["driven_task_ids"] = driven
         node["hermes_task_id"] = driven[0]
         node["status"] = "scheduled"
+        if sequential:
+            node["adopt_seq"] = {
+                "pending": ids[1:],
+                "assignee": assignee,
+                "outputs": [],
+                "failed": False,
+            }
         # Subscribe every driven card to its terminal events for the origin (a
         # multi-card adopt drives more than one).
         for handle in driven:

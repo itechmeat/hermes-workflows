@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS workflow_node_runs (
   -- Epoch seconds a wait node began polling (for its optional timeout). Added
   -- after the initial schema, so connection.ts ALTERs pre-existing databases.
   wait_started_at TEXT,
+  -- JSON bookkeeping for a sequential adopt node (pending ids, assignee,
+  -- accumulated outputs/failed). Added after the initial schema, so
+  -- connection.ts ALTERs pre-existing databases.
+  adopt_seq_json  TEXT,
   outcome         TEXT,
   review_decision TEXT,
   -- Optional operator free-text payload attached when resolving a human_review
