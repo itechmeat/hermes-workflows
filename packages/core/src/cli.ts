@@ -134,6 +134,7 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
         required(str(flags, "id"), "--id"),
         str(flags, "project"),
         str(flags, "origin"),
+        str(flags, "input"),
       );
     case "run-load":
       return cmdRunLoad(required(db, "--db"), required(str(flags, "id"), "--id"));

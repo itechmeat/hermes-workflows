@@ -128,21 +128,26 @@ class Engine:
         run_id: str,
         project_id: Optional[str] = None,
         origin: Optional[str] = None,
+        input: Optional[str] = None,
     ) -> dict:
         """Record a new run without advancing it — the non-blocking half of
         :meth:`run`, for callers (the dashboard start route) that must return
-        before the first node executes."""
+        before the first node executes. ``input`` is the operator's free-form
+        run input, layered above every agent_task prompt at highest priority."""
         args = ["run-create", spec_path, "--db", self.db_path, "--id", run_id]
         if project_id:
             args += ["--project", project_id]
         if origin:
             args += ["--origin", origin]
+        if input:
+            args += ["--input", input]
         created = self._core(args)
         self._trace_emit(
             run_id,
             "run_created",
             workflow_id=(created or {}).get("workflow_id"),
             project_id=project_id,
+            input=input,
         )
         return created
 
@@ -152,8 +157,9 @@ class Engine:
         run_id: str,
         project_id: Optional[str] = None,
         origin: Optional[str] = None,
+        input: Optional[str] = None,
     ) -> dict:
-        self.create(spec_path, run_id, project_id, origin)
+        self.create(spec_path, run_id, project_id, origin, input)
         return self.advance(spec_path, run_id)
 
     def status(self, run_id: str) -> dict:
@@ -781,16 +787,25 @@ class Engine:
         params (the compiled task) are left untouched. A no-mapping node is
         returned unchanged. Raises UnresolvedInput when a reference cannot be
         satisfied (handled by the caller)."""
+        base = params.get("prompt", "")
+        prompt = base
         mapping = params.get("input_mapping")
-        if not mapping:
-            return params
-        channels = {
-            nid: {"output": node.get("output"), "review_note": node.get("review_note")}
-            for nid, node in run["nodes"].items()
-        }
-        resolved_prompt = resolve_input_mapping(params.get("prompt", ""), mapping, channels)
+        if mapping:
+            channels = {
+                nid: {"output": node.get("output"), "review_note": node.get("review_note")}
+                for nid, node in run["nodes"].items()
+            }
+            prompt = resolve_input_mapping(prompt, mapping, channels)
+        # The run-level operator input (if any) is layered ABOVE every agent_task
+        # node's prompt as the highest-priority block: it overrides conflicting
+        # node instructions and otherwise binds as an additional constraint.
+        operator_input = run.get("input")
+        if operator_input:
+            prompt = _layer_operator_input(prompt, operator_input)
+        if prompt == base:
+            return params  # nothing layered or substituted: byte-identical
         resolved = dict(params)
-        resolved["prompt"] = resolved_prompt
+        resolved["prompt"] = prompt
         return resolved
 
     def _resolve_task_ref(self, run: dict, task_ref: str) -> list[str]:
@@ -1026,6 +1041,21 @@ def _run_result_output(run: dict) -> Optional[str]:
         if best_seq is None or seq >= best_seq:
             best, best_seq = node["output"], seq
     return best
+
+
+def _layer_operator_input(prompt: str, operator_input: str) -> str:
+    """Layer the run's operator input above a node's prompt as the highest-
+    priority block: it overrides conflicting node instructions and otherwise
+    binds as an additional constraint. Nothing is dropped - the full node prompt
+    follows."""
+    return (
+        "OPERATOR INSTRUCTION - HIGHEST PRIORITY for this run. Where it conflicts "
+        "with the node instructions below, follow this; otherwise treat it as an "
+        "additional binding constraint.\n\n"
+        f"{operator_input}\n\n"
+        "--- node instructions ---\n\n"
+        f"{prompt}"
+    )
 
 
 def _trace_snapshot(run: dict) -> dict:

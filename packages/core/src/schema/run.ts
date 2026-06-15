@@ -129,6 +129,15 @@ export interface RunState {
   status: RunStatus;
   project_id?: string;
   /**
+   * Free-form operator input supplied at run start (CLI `--input`, the
+   * `/workflow run` command, or the dashboard Play button). The engine layers it
+   * above EVERY agent_task node's prompt as the highest-priority block, so it
+   * overrides conflicting node instructions and otherwise binds as an additional
+   * constraint. Persisted so it applies to every node across ticks. Absent for a
+   * run started without operator input.
+   */
+  input?: string;
+  /**
    * The chat the run originated from, an opaque `<platform>:<chat>[:<thread>]`
    * string Hermes' native delivery interprets. Captured for model-started runs
    * (a `pre_gateway_dispatch` hook) and cron-started runs (the schedule);

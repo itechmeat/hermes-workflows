@@ -110,6 +110,24 @@ describe("RunRepository — runs", () => {
     ]);
   });
 
+  test("round-trips a run-level operator input", () => {
+    const run = createRunState(
+      workflow,
+      "run-input",
+      undefined,
+      undefined,
+      "scope = only X; be terse",
+    );
+    expect(run.input).toBe("scope = only X; be terse");
+    repo.saveRun(run);
+    expect(repo.loadRun("run-input")?.input).toBe("scope = only X; be terse");
+
+    // A run started without operator input loads with input absent.
+    const bare = createRunState(workflow, "run-noinput");
+    repo.saveRun(bare);
+    expect(repo.loadRun("run-noinput")?.input).toBeUndefined();
+  });
+
   test("upserts on save and returns null for an unknown run", () => {
     const run = createRunState(workflow, "run-2");
     repo.saveRun(run);

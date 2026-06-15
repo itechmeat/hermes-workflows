@@ -114,3 +114,64 @@ def test_schedule_fails_loud_when_source_output_missing(tmp_path: Path) -> None:
     assert node_b["outcome"] == "failure"
     assert "input" in (node_b["output"] or "").lower()
     assert not node_b.get("hermes_task_id")
+
+
+def test_run_input_layers_above_an_agent_task_prompt(tmp_path: Path) -> None:
+    """A run-level operator input is layered above the node prompt as the
+    highest-priority block, before the original prompt (which is kept in full)."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {
+        "workflow_id": "w",
+        "origin": None,
+        "input": "scope = only t_X and t_Y; keep it minimal",
+        "nodes": {"b": {"status": "pending"}},
+    }
+    params = {"node": "b", "kind": "agent", "prompt": "propose three scopes"}
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    prompt = fake.captured["prompt"]
+    assert "scope = only t_X and t_Y; keep it minimal" in prompt
+    assert "propose three scopes" in prompt
+    assert "highest priority" in prompt.lower()
+    # Operator block precedes the node prompt (it has precedence).
+    assert prompt.index("only t_X") < prompt.index("propose three scopes")
+
+
+def test_run_input_layers_on_top_of_resolved_input_mapping(tmp_path: Path) -> None:
+    """Operator input composes with input_mapping: the upstream output is
+    substituted first, then the operator block is layered above the result."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {
+        "workflow_id": "w",
+        "origin": None,
+        "input": "be terse",
+        "nodes": {
+            "a": {"status": "completed", "outcome": "success", "output": "INV", "seq": 1},
+            "b": {"status": "pending"},
+        },
+    }
+    params = {
+        "node": "b",
+        "kind": "agent",
+        "prompt": "scope from {{data}}",
+        "input_mapping": {"data": "{{nodes.a.output}}"},
+    }
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    prompt = fake.captured["prompt"]
+    assert "scope from INV" in prompt  # input_mapping resolved
+    assert "be terse" in prompt  # operator input layered
+    assert prompt.index("be terse") < prompt.index("scope from INV")
+
+
+def test_absent_run_input_leaves_the_prompt_byte_identical(tmp_path: Path) -> None:
+    """No operator input and no mapping: the prompt is unchanged (no regression)."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {"workflow_id": "w", "origin": None, "nodes": {"b": {"status": "pending"}}}
+    params = {"node": "b", "kind": "agent", "prompt": "base prompt"}
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    assert fake.captured["prompt"] == "base prompt"

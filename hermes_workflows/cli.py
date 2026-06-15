@@ -147,7 +147,9 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
         project_id = _default_project(engine, spec, args.project)
         run_id = f"{args.workflow_id}-{uuid.uuid4().hex[:8]}"
         try:
-            run = engine.run(spec, run_id, project_id=project_id, origin=args.origin)
+            run = engine.run(
+                spec, run_id, project_id=project_id, origin=args.origin, input=args.input
+            )
         except cli_bridge.CoreBridgeError as exc:
             # Single-flight refusal is an expected operator-facing outcome:
             # exit with the core's message, not a traceback.
@@ -192,6 +194,9 @@ def _parser() -> argparse.ArgumentParser:
     # Chat origin (<platform>:<chat>[:<thread>]) for run-lifecycle notices; the
     # cron trigger shim carries the schedule's delivery target here.
     p_run.add_argument("--origin", default=None)
+    # Free-form operator input, layered above every agent_task prompt at highest
+    # priority (overrides conflicting node instructions, augments the rest).
+    p_run.add_argument("--input", default=None)
 
     sub.add_parser("advance-all", help="advance every active run")
 

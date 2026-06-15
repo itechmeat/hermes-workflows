@@ -136,7 +136,8 @@ def register(ctx: Any) -> None:
 
 
 _COMMAND_USAGE = (
-    "Usage: /workflow list | run <id> [project] | status <run_id> | "
+    "Usage: /workflow list | run <id> [project] [--input <operator prompt>] | "
+    "status <run_id> | "
     "review <run_id> <node_id> <approved|rejected|needs_changes> [note] | "
     "cancel <run_id> | explain <id>"
 )
@@ -171,15 +172,25 @@ def _handle_command(raw_args: str = "", **_kwargs: Any) -> str:
             )
         if sub == "run":
             if not rest:
-                return "Usage: /workflow run <workflow_id> [project]"
+                return "Usage: /workflow run <workflow_id> [project] [--input <operator prompt>]"
+            workflow_id = rest[0]
+            tail = rest[1:]
+            # Everything after `--input` is the operator's free-form run input,
+            # layered above every agent_task prompt at highest priority.
+            operator_input = None
+            if "--input" in tail:
+                i = tail.index("--input")
+                operator_input = " ".join(tail[i + 1 :]).strip() or None
+                tail = tail[:i]
             run_id = f"run_{uuid.uuid4().hex[:12]}"
             result = tools.run_workflow(
-                rest[0],
+                workflow_id,
                 engine=_build_engine(),
                 roots=roots,
                 core_cli=core_cli,
                 run_id=run_id,
-                project_id=rest[1] if len(rest) > 1 else None,
+                project_id=tail[0] if tail else None,
+                input=operator_input,
             )
             return f"Started run {result['run_id']} ({result['status']})."
         if sub == "status":

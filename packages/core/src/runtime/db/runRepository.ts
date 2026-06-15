@@ -212,7 +212,12 @@ export class RunRepository {
           $ver: run.workflow_version,
           $status: run.status,
           $project: run.project_id ?? null,
-          $input: meta.input === undefined ? null : JSON.stringify(meta.input),
+          $input:
+            run.input !== undefined
+              ? JSON.stringify(run.input)
+              : meta.input === undefined
+                ? null
+                : JSON.stringify(meta.input),
           $started: meta.started_at ?? null,
           $finished: meta.finished_at ?? null,
           $error: meta.error ?? null,
@@ -322,6 +327,10 @@ export class RunRepository {
       nodes,
     };
     if (row.project_id !== null) run.project_id = row.project_id;
+    if (row.input_json !== null) {
+      const parsed = JSON.parse(row.input_json) as unknown;
+      if (typeof parsed === "string") run.input = parsed;
+    }
     if (row.origin !== null) run.origin = row.origin;
     if (row.notified !== null) {
       const parsed = JSON.parse(row.notified) as string[];

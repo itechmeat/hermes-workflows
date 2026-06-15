@@ -57,6 +57,22 @@ def test_run_status_and_advance_all(home: Path, capsys) -> None:
     assert tick["active"] is True
 
 
+def test_run_threads_operator_input_into_run_state(home: Path, capsys) -> None:
+    """`run --input` persists the operator's free-form input on the run, so the
+    engine layers it above every agent_task prompt at highest priority. It
+    survives a fresh status load (durable, not in-memory)."""
+    run = _invoke(capsys, "run", "feature-development", "--input", "scope = only X; be terse")
+    assert run["input"] == "scope = only X; be terse"
+
+    status = _invoke(capsys, "status", run["run_id"])
+    assert status["input"] == "scope = only X; be terse"
+
+
+def test_run_without_input_has_no_run_input(home: Path, capsys) -> None:
+    run = _invoke(capsys, "run", "feature-development")
+    assert run.get("input") is None
+
+
 def test_unknown_workflow_exits(home: Path) -> None:
     with pytest.raises(SystemExit):
         cli.main(["run", "no-such-workflow"])
