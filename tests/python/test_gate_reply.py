@@ -1,0 +1,123 @@
+"""Native operator->run channel (t_64a30497): a chat reply that is exactly a
+review decision resolves the run paused on that gate, via the pre_gateway_dispatch
+hook. Deterministic and language-agnostic — only exact decision tokens count.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from hermes_workflows import gate_reply
+
+ROOT = Path(__file__).resolve().parents[2]
+CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
+ROOTS = [str(ROOT / "examples")]
+ORIGIN = "telegram:8:4"
+
+
+class StubEngine:
+    def __init__(self, runs: list[dict]) -> None:
+        self._runs = runs
+        self.calls: list[tuple] = []
+
+    def active_runs(self) -> list[dict]:
+        return self._runs
+
+    def decide_review(self, spec, run_id, node_id, decision, note=None):
+        self.calls.append((spec, run_id, node_id, decision, note))
+        return {}
+
+
+def _waiting_run(run_id: str = "r1", origin: str = ORIGIN) -> dict:
+    return {
+        "run_id": run_id,
+        "workflow_id": "feature-development",
+        "origin": origin,
+        "status": "waiting",
+        "nodes": {
+            "plan": {"status": "completed"},
+            "review": {"status": "waiting_for_review"},
+        },
+    }
+
+
+def _resolve(text: str, runs: list[dict]):
+    engine = StubEngine(runs)
+    result = gate_reply.resolve_gate_reply(ORIGIN, text, engine=engine, roots=ROOTS, core_cli=CLI)
+    return result, engine
+
+
+def test_decision_and_note_parsing() -> None:
+    assert gate_reply._decision_and_note("approved") == ("approved", None)
+    assert gate_reply._decision_and_note("needs_changes fix the lints") == (
+        "needs_changes",
+        "fix the lints",
+    )
+    assert gate_reply._decision_and_note("yes please") == (None, None)
+    assert gate_reply._decision_and_note("  ") == (None, None)
+
+
+def test_reply_resolves_the_single_waiting_gate() -> None:
+    result, engine = _resolve("approved ship it", [_waiting_run()])
+    assert result is not None and result["action"] == "skip"
+    assert len(engine.calls) == 1
+    spec, run_id, node_id, decision, note = engine.calls[0]
+    assert spec.endswith("feature-development.workflow.yaml")
+    assert (run_id, node_id, decision, note) == ("r1", "review", "approved", "ship it")
+
+
+def test_bare_decision_has_no_note() -> None:
+    result, engine = _resolve("rejected", [_waiting_run()])
+    assert result is not None
+    assert engine.calls[0][3:] == ("rejected", None)
+
+
+def test_non_decision_text_is_ignored() -> None:
+    result, engine = _resolve("how is it going?", [_waiting_run()])
+    assert result is None
+    assert engine.calls == []
+
+
+def test_reply_from_another_chat_is_ignored() -> None:
+    result, engine = _resolve("approved", [_waiting_run(origin="telegram:999:1")])
+    assert result is None
+    assert engine.calls == []
+
+
+def test_ambiguous_waiting_gates_fall_through() -> None:
+    result, engine = _resolve("approved", [_waiting_run("r1"), _waiting_run("r2")])
+    assert result is None  # two runs waiting in this chat — do not guess
+    assert engine.calls == []
+
+
+def test_no_waiting_gate_falls_through() -> None:
+    running = _waiting_run()
+    running["status"] = "running"
+    running["nodes"]["review"] = {"status": "scheduled"}
+    result, engine = _resolve("approved", [running])
+    assert result is None
+    assert engine.calls == []
+
+
+def test_hook_fast_paths_non_decision_without_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A plain message must not build an engine (cheap guard on every message).
+    def _boom():
+        raise AssertionError("build_engine must not be called for non-decision text")
+
+    monkeypatch.setattr("hermes_workflows.cli.build_engine", _boom)
+
+    class _Event:
+        text = "good morning"
+        source = object()
+
+    assert gate_reply.route_chat_reply(event=_Event()) is None
+
+
+def test_hook_returns_none_without_a_source() -> None:
+    class _Event:
+        text = "approved"
+        source = None
+
+    assert gate_reply.route_chat_reply(event=_Event()) is None

@@ -147,6 +147,7 @@ validation (`approved` / `rejected` / `needs_changes`, and only while the node
 is actually awaiting review):
 
 - the `workflow_review` model tool,
+- a plain chat reply in the run's origin chat — see the operator->run channel below,
 - the `/workflow review <run> <node> <decision> [note]` chat slash command (CLI
   and gateway/messenger sessions),
 - the CLI: `hermes-workflows review <run_id> <node_id> <decision> [--note "…"]`,
@@ -161,14 +162,25 @@ choice or instructions into the rest of the run.
 On entering the gate the run delivers one **ACTION NEEDED** notice to its origin
 naming the gate, the allowed decisions, and how to resolve it.
 
-> **Chat replies do not reach a paused run.** A workflow that asks the operator
-> to "reply in chat" will not receive the reply: on a live gateway the reply is
-> consumed by the normal gateway agent in a fresh session, never by the paused
-> run. Resolve a gate only through the three surfaces above (dashboard or CLI in
-> practice). A native operator→run channel — Telegram inline-keyboard buttons
-> whose callback resolves the gate, or a tagged reply addressing a run id —
-> needs an upstream Hermes event→run binding that does not exist yet, so it is
-> deliberately not stubbed here.
+### Operator→run channel (chat reply)
+
+A run paused on a gate notifies its origin chat. The operator can resolve it by
+**replying in that chat with a decision** — `approved`, `rejected`, or
+`needs_changes`, optionally followed by a note that becomes
+`{{nodes.<gate>.review_note}}`. A `pre_gateway_dispatch` hook
+(`hermes_workflows/gate_reply.py`) intercepts the reply, routes it to the run's
+gate through the same `decide_review` path, and stops the gateway agent from also
+consuming it. Without this the reply would be swallowed by the normal gateway
+agent in a fresh session and never reach the paused run.
+
+The match is deterministic and language-agnostic: only the exact decision enum
+tokens count (never NL guesses like "yes" or "1"), and the reply is routed only
+when the origin chat has exactly one run waiting on a gate. Zero or more than one
+waiting gate in the chat falls through to normal dispatch rather than guessing;
+disambiguate with `/workflow review <run> <node> <decision>` or the dashboard.
+Telegram inline-keyboard buttons whose callback resolves the gate are a possible
+future enhancement on top of this channel (they need host support for plugin
+button callbacks); the tagged-reply route here needs none.
 
 ## Inline mode (`execution.default_mode`)
 

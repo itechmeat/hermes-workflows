@@ -150,8 +150,13 @@ playback: run the workflow you are editing and watch it play on the canvas.
   (prompts/commands) when lossless, keeping a hand-authored spec readable across
   the round trip instead of one-line quoted `"...\n..."` strings.
 - The `human_review` waiting notice is now an actionable ACTION NEEDED message
-  (the gate, the allowed decisions, how to resolve) and states that chat replies
-  do not reach a paused run; the chat-reply gap is documented as an upstream ask.
+  (the gate, the allowed decisions, how to resolve).
+- Operator->run channel: replying in a paused run's origin chat with a decision
+  (`approved` / `rejected` / `needs_changes`, optionally a note) resolves that
+  gate. A `pre_gateway_dispatch` hook routes the reply to the run instead of
+  letting the gateway agent swallow it. Deterministic and language-agnostic
+  (exact decision tokens only), routed only when the chat has exactly one waiting
+  gate; otherwise it falls through to `/workflow review` or the dashboard.
 - Script-node commands always receive `HOME` so HOME-credential CLIs (claude,
   codex, gh, …) resolve their config; the agent bash-tool HOME caveat is
   documented.

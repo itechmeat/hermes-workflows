@@ -217,7 +217,7 @@ def test_waiting_run_notifies_and_subscribes_the_card(tmp_path: Path) -> None:
         assert review_notices[0][0] == "telegram:8:4"
         message = review_notices[0][1]
         assert "hermes-workflows review" in message
-        assert "does not reach" in message
+        assert "Reply in this chat" in message
 
         # Advancing again while still waiting delivers no duplicate.
         before = len(rec.sent)

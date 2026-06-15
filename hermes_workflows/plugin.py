@@ -58,13 +58,21 @@ def register(ctx: Any) -> None:
             pass
 
     # Capture each turn's chat origin before dispatch so a model-started
-    # workflow_run can carry it (tool handlers never see the SessionSource).
+    # workflow_run can carry it (tool handlers never see the SessionSource), and
+    # route an operator's decision reply to a run paused on a human_review gate
+    # (the native operator->run channel). Both are pre_gateway_dispatch hooks.
     register_hook = getattr(ctx, "register_hook", None)
     if callable(register_hook):
         try:
             from .origin_capture import capture_origin
 
             register_hook("pre_gateway_dispatch", capture_origin)
+        except Exception:
+            pass
+        try:
+            from .gate_reply import route_chat_reply
+
+            register_hook("pre_gateway_dispatch", route_chat_reply)
         except Exception:
             pass
 

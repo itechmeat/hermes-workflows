@@ -153,6 +153,11 @@ class Engine:
             raise ValueError(f"unknown run {run_id}")
         return run
 
+    def active_runs(self) -> list[dict]:
+        """Every run still needing advances (created / running / waiting). Used by
+        the chat-reply gate router to find a run awaiting a decision."""
+        return self._core(["run-list", "--db", self.db_path, "--active"])
+
     def status_live(self, spec_path: str, run_id: str) -> dict:
         """Like :meth:`status`, but annotate each active node with a read-only
         live poll of its backing card, so a manual status read reflects reality
@@ -798,15 +803,15 @@ def _notice_text(run: dict, event: str, node_id: Optional[str]) -> str:
     run_id = run.get("run_id")
     if event == "waiting":
         # Actionable gate notice: what is needed, the allowed decisions, and how
-        # to resolve it. A chat reply does not reach a paused run (the gateway
-        # consumes it in a fresh session), so the operator is told to use the
-        # dashboard or the CLI explicitly rather than reply here.
+        # to resolve it. The operator can reply right here in this chat with a
+        # decision (the gate_reply hook routes it to this run), or use the
+        # dashboard / CLI.
         return (
             f"ACTION NEEDED - workflow {workflow_id} run {run_id}: review gate "
             f"'{node_id}' is waiting for your decision (approved / rejected / "
-            f"needs_changes). Resolve it from the dashboard run view, or run: "
-            f"hermes-workflows review {run_id} {node_id} <decision> [--note \"...\"]. "
-            f"Replying in chat does not reach this run."
+            f"needs_changes). Reply in this chat with one of those words "
+            f"(optionally followed by a note), or resolve it from the dashboard "
+            f"or with: hermes-workflows review {run_id} {node_id} <decision> [--note \"...\"]."
         )
     if event == "blocked":
         card = (run.get("nodes") or {}).get(node_id, {}).get("hermes_task_id")
