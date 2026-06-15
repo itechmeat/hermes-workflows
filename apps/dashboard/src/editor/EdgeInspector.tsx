@@ -1,13 +1,17 @@
-import type { FlowEdge, WorkflowEdgeData } from "./graphMapping";
+import { sourceHandlesFor, type FlowEdge, type WorkflowEdgeData } from "./graphMapping";
 import { Field, Select, type SelectItem } from "../ui/components";
 
-// Edit a selected edge's branch cause. The common outcomes (success / failure /
-// a review decision / else / plain) map straight onto the source node's handles;
+// Edit a selected edge's branch cause. The options are restricted to the SOURCE
+// node's real outcomes (a work/condition node branches on success/failure; a
+// human_review on its decision) so a choice always maps to a handle that exists
+// on that node - otherwise the edge would bind to a missing handle and vanish.
 // "another node's status" is the advanced case the per-handle model cannot
 // express (branch on a node OTHER than the edge's source), kept so the engine's
 // full edge-condition capability stays reachable from the editor.
 export interface EdgeInspectorProps {
   edge: FlowEdge;
+  /** The edge's source node type, to restrict the offered branch outcomes. */
+  sourceType: string;
   /** Candidate source nodes for the advanced cross-node condition. */
   nodeIds: string[];
   onChange: (data: WorkflowEdgeData) => void;
@@ -24,16 +28,28 @@ type BranchKind =
   | "else"
   | "advanced";
 
-const BRANCH_ITEMS: SelectItem[] = [
-  { value: "plain", label: "Always (plain / parallel)" },
-  { value: "success", label: "On success" },
-  { value: "failure", label: "On failure" },
-  { value: "approved", label: "On approved" },
-  { value: "rejected", label: "On rejected" },
-  { value: "needs_changes", label: "On needs_changes" },
-  { value: "else", label: "Fallback (else)" },
-  { value: "advanced", label: "On another node's status…" },
-];
+const BRANCH_LABEL: Record<string, string> = {
+  out: "Always (plain / parallel)",
+  success: "On success",
+  failure: "On failure",
+  approved: "On approved",
+  rejected: "On rejected",
+  needs_changes: "On needs_changes",
+  else: "Fallback (else)",
+};
+
+/** Branch options valid for the edge's source node: its real outcome handles
+ *  (the `out` handle shown as the plain "always" branch), plus the advanced
+ *  cross-node condition. Offering an outcome the source node lacks is exactly
+ *  what made an edge bind to a missing handle and disappear. */
+function branchItems(sourceType: string): SelectItem[] {
+  const items: SelectItem[] = sourceHandlesFor(sourceType).map((h) => ({
+    value: h.id === "out" ? "plain" : h.id,
+    label: BRANCH_LABEL[h.id] ?? h.id,
+  }));
+  items.push({ value: "advanced", label: "On another node's status…" });
+  return items;
+}
 
 const STATUS_EQUALS = ["success", "failure"] as const;
 
@@ -76,11 +92,13 @@ function buildData(
 
 export function EdgeInspector({
   edge,
+  sourceType,
   nodeIds,
   onChange,
   readOnly = false,
 }: EdgeInspectorProps): React.ReactElement {
   const { kind, advNode, advEquals } = readKind(edge);
+  const items = branchItems(sourceType);
   const nodeItems: SelectItem[] = nodeIds
     .filter((id) => id !== edge.target)
     .map((id) => ({ value: id, label: id }));
@@ -95,7 +113,7 @@ export function EdgeInspector({
         <Select
           aria-label="Branch when"
           value={kind}
-          items={BRANCH_ITEMS}
+          items={items}
           onValueChange={(value) =>
             onChange(buildData(value as BranchKind, edge.source, advNode, advEquals))
           }

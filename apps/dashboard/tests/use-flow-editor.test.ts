@@ -93,6 +93,17 @@ describe("useFlowEditor", () => {
     expect(result.current.dirty).toBe(true);
   });
 
+  it("removeEdge deletes the edge and clears its selection", () => {
+    const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
+    const edgeId = result.current.edges[0]!.id;
+    act(() => result.current.selectEdge(edgeId));
+    expect(result.current.selectedEdge?.id).toBe(edgeId);
+    act(() => result.current.removeEdge(edgeId));
+    expect(result.current.edges).toHaveLength(0);
+    expect(result.current.selectedEdge).toBeNull();
+    expect(result.current.dirty).toBe(true);
+  });
+
   it("marks dirty on a node move but not on measurement or selection", () => {
     const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
 

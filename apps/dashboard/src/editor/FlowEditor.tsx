@@ -403,13 +403,30 @@ export function FlowEditor({
           className="hw-node-modal"
           onClose={closeEdgeEditor}
           footer={
-            <Button variant="primary" onClick={closeEdgeEditor}>
-              {playing ? "Close" : "Done"}
-            </Button>
+            <>
+              {!playing && (
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    ctrl.removeEdge(ctrl.selectedEdge!.id);
+                    closeEdgeEditor();
+                  }}
+                >
+                  Delete edge
+                </Button>
+              )}
+              <Button variant="primary" onClick={closeEdgeEditor}>
+                {playing ? "Close" : "Done"}
+              </Button>
+            </>
           }
         >
           <EdgeInspector
             edge={ctrl.selectedEdge}
+            sourceType={
+              ctrl.nodes.find((n) => n.id === ctrl.selectedEdge!.source)?.data.node.type ??
+              "agent_task"
+            }
             nodeIds={ctrl.nodes.map((n) => n.id)}
             onChange={handleEdgeChange}
             readOnly={playing}

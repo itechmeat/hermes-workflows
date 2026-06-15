@@ -56,6 +56,8 @@ export interface FlowEditorController {
   /** Set a selected edge's branch (condition/fallback) and reposition it onto
    *  the source handle that encodes it. */
   updateEdge: (id: string, data: WorkflowEdgeData) => void;
+  /** Remove an edge (the delete affordance in the edge inspector). */
+  removeEdge: (id: string) => void;
   addNode: (type: NodeType) => string;
   duplicateNode: (id: string) => string | null;
   applyLayout: () => void;
@@ -129,6 +131,15 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
   );
 
   const selectEdge = useCallback((id: string | null) => setSelectedEdgeId(id), []);
+
+  const removeEdge = useCallback(
+    (id: string) => {
+      setEdges((current) => current.filter((edge) => edge.id !== id));
+      setSelectedEdgeId((sel) => (sel === id ? null : sel));
+      setDirty(true);
+    },
+    [setEdges],
+  );
 
   const updateEdge = useCallback(
     (id: string, data: WorkflowEdgeData) => {
@@ -252,6 +263,7 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     selectedEdge,
     selectEdge,
     updateEdge,
+    removeEdge,
     addNode,
     duplicateNode,
     applyLayout,
