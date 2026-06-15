@@ -298,6 +298,15 @@ export function NodeInspector({
         </>
       )}
 
+      {wf.type === "condition" && (
+        <p className="hw-note">
+          A condition node routes by outcome - it runs nothing itself. Draw an edge from its{" "}
+          <strong>success</strong> or <strong>failure</strong> handle to branch on the upstream
+          result, and from <strong>else</strong> for the fallback path. Select any edge to
+          fine-tune its condition (including branching on another node's status).
+        </p>
+      )}
+
       {wf.type === "finish" && (
         <Field label="Outcome">
           <Select

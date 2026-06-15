@@ -39,6 +39,108 @@ export interface WorkflowGraph {
 /** The shared node type key; T3 ships one generic renderer, T4 adds per-type. */
 export const WORKFLOW_NODE_TYPE = "workflow";
 
+/** The custom edge type key: a labeled, colored edge that makes a branch's cause
+ *  legible (vs a neutral plain fan-out edge). */
+export const WORKFLOW_EDGE_TYPE = "workflow";
+
+/** A node's outgoing branch points. The handle an edge LEAVES FROM encodes its
+ *  condition, so the branching cause is visible at the source: dragging from the
+ *  `failure` handle gives the edge `node_status=failure` automatically, and
+ *  several edges out of the single `out` handle read as a parallel fan-out. */
+export type SourceHandleKind =
+  | "out"
+  | "success"
+  | "failure"
+  | "approved"
+  | "rejected"
+  | "needs_changes"
+  | "else";
+
+export type HandleTone = "plain" | "success" | "failure" | "review" | "else";
+
+export interface SourceHandleSpec {
+  id: SourceHandleKind;
+  label: string;
+  tone: HandleTone;
+}
+
+const STATUS_HANDLES: SourceHandleSpec[] = [
+  { id: "success", label: "success", tone: "success" },
+  { id: "failure", label: "failure", tone: "failure" },
+  { id: "else", label: "else", tone: "else" },
+  { id: "out", label: "always", tone: "plain" },
+];
+
+const REVIEW_HANDLES: SourceHandleSpec[] = [
+  { id: "approved", label: "approved", tone: "review" },
+  { id: "rejected", label: "rejected", tone: "review" },
+  { id: "needs_changes", label: "needs", tone: "review" },
+  { id: "else", label: "else", tone: "else" },
+  { id: "out", label: "always", tone: "plain" },
+];
+
+/** The source handles a node type exposes. A `human_review` branches on its
+ *  review decision; every other non-terminal node branches on its own
+ *  success/failure outcome. `finish` is terminal and has none. */
+export function sourceHandlesFor(type: string): SourceHandleSpec[] {
+  if (type === "finish") return [];
+  if (type === "human_review") return REVIEW_HANDLES;
+  return STATUS_HANDLES;
+}
+
+/** The source handle that displays an edge's condition/fallback. A cross-node
+ *  `node_status` (advanced: branch on ANOTHER node's outcome) has no own-outcome
+ *  handle, so it leaves the plain `out` handle and relies on the edge label. */
+export function edgeSourceHandle(
+  data: WorkflowEdgeData | undefined,
+  sourceId: string,
+): SourceHandleKind {
+  if (data?.fallback) return "else";
+  const c = data?.condition;
+  if (c === undefined) return "out";
+  if (c.type === "review_status") return c.equals;
+  if (c.type === "node_status" && c.node === sourceId) return c.equals;
+  return "out";
+}
+
+/** Edge condition/fallback data implied by the handle an edge was drawn from. */
+export function handleToEdgeData(
+  handle: string | null | undefined,
+  sourceId: string,
+): WorkflowEdgeData {
+  switch (handle) {
+    case "success":
+    case "failure":
+      return { condition: { type: "node_status", node: sourceId, equals: handle } };
+    case "approved":
+    case "rejected":
+    case "needs_changes":
+      return { condition: { type: "review_status", equals: handle } };
+    case "else":
+      return { fallback: true };
+    default:
+      return {};
+  }
+}
+
+/** A short, legible label for an edge's branch cause (empty for a plain edge). */
+export function edgeConditionLabel(data: WorkflowEdgeData | undefined, sourceId: string): string {
+  if (data?.fallback) return "else";
+  const c = data?.condition;
+  if (c === undefined) return "";
+  if (c.type === "review_status") return c.equals;
+  return c.node === sourceId ? c.equals : `${c.equals} of ${c.node}`;
+}
+
+/** The visual tone for an edge's branch cause, matching the source handle tones. */
+export function edgeTone(data: WorkflowEdgeData | undefined): HandleTone {
+  if (data?.fallback) return "else";
+  const c = data?.condition;
+  if (c === undefined) return "plain";
+  if (c.type === "review_status") return "review";
+  return c.equals === "failure" ? "failure" : "success";
+}
+
 /** Human-readable label for a workflow node type, shared by the canvas node and
  *  the editor modal so the technical type (`agent_task`) shows as "Agent task". */
 export const NODE_TYPE_LABEL: Record<string, string> = {
@@ -94,6 +196,10 @@ export function workflowToFlow(workflow: Workflow, ui?: UiLayout): FlowGraph {
       id: `e${index}:${edge.from}->${edge.to}`,
       source: edge.from,
       target: edge.to,
+      // Leave from the handle that encodes the condition so the branch cause is
+      // visible at the source point; the custom edge type adds a legible label.
+      sourceHandle: edgeSourceHandle(data, edge.from),
+      type: WORKFLOW_EDGE_TYPE,
       data,
     };
   });

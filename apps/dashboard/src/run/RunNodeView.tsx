@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { nodeMetaLine, nodeTypeLabel } from "../editor/graphMapping";
 import { nodeTypeIcon } from "../editor/nodeTypeIcons";
 import { ExpandIcon } from "../ui/icons";
+import { SourceHandles } from "../editor/nodes/SourceHandles";
 import type { RunFlowNode } from "./runView";
 
 // Read-only node renderer for the run inspector and editor playback: a
@@ -52,7 +53,7 @@ export function RunNodeView({ data, selected }: NodeProps<RunFlowNode>): React.R
           </span>
         )}
       </div>
-      <Handle type="source" position={Position.Right} />
+      <SourceHandles nodeType={node.type} labels={false} />
     </div>
   );
 }

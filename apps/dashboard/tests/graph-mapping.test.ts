@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { workflowToFlow, flowToWorkflow } from "../src/editor/graphMapping";
+import {
+  workflowToFlow,
+  flowToWorkflow,
+  handleToEdgeData,
+  edgeSourceHandle,
+  edgeConditionLabel,
+  sourceHandlesFor,
+  WORKFLOW_EDGE_TYPE,
+} from "../src/editor/graphMapping";
 import type { Workflow, UiLayout } from "../src/api/types";
 
 const workflow: Workflow = {
@@ -85,5 +93,85 @@ describe("graph mapping", () => {
     );
     const back = flowToWorkflow(workflow, moved, flow.edges, flow.viewport);
     expect(back.ui?.xyflow?.nodes).toContainEqual({ id: "ship", x: 999, y: 1 });
+  });
+
+  it("leaves each edge from the source handle that encodes its condition", () => {
+    const flow = workflowToFlow(workflow, ui);
+    const handle = (from: string, to: string) =>
+      flow.edges.find((e) => e.source === from && e.target === to)?.sourceHandle;
+    expect(handle("build", "gate")).toBe("out"); // plain fan-out
+    expect(handle("gate", "ship")).toBe("approved"); // review_status
+    expect(handle("gate", "done")).toBe("else"); // fallback
+    // Every edge is the custom labeled type.
+    expect(flow.edges.every((e) => e.type === WORKFLOW_EDGE_TYPE)).toBe(true);
+  });
+});
+
+describe("conditional-edge handle mapping", () => {
+  it("derives edge data from the handle an edge was drawn from", () => {
+    expect(handleToEdgeData("success", "n1")).toEqual({
+      condition: { type: "node_status", node: "n1", equals: "success" },
+    });
+    expect(handleToEdgeData("failure", "n1")).toEqual({
+      condition: { type: "node_status", node: "n1", equals: "failure" },
+    });
+    expect(handleToEdgeData("rejected", "g")).toEqual({
+      condition: { type: "review_status", equals: "rejected" },
+    });
+    expect(handleToEdgeData("else", "n1")).toEqual({ fallback: true });
+    expect(handleToEdgeData("out", "n1")).toEqual({});
+    expect(handleToEdgeData(null, "n1")).toEqual({});
+  });
+
+  it("maps an own-outcome node_status to its handle, a cross-node one to out", () => {
+    expect(
+      edgeSourceHandle({ condition: { type: "node_status", node: "me", equals: "failure" } }, "me"),
+    ).toBe("failure");
+    // Branch on ANOTHER node's status: no own handle, leaves the plain handle.
+    expect(
+      edgeSourceHandle(
+        { condition: { type: "node_status", node: "other", equals: "success" } },
+        "me",
+      ),
+    ).toBe("out");
+    expect(edgeSourceHandle({ fallback: true }, "me")).toBe("else");
+    expect(edgeSourceHandle(undefined, "me")).toBe("out");
+  });
+
+  it("labels an edge by its branch cause", () => {
+    expect(edgeConditionLabel({ fallback: true }, "me")).toBe("else");
+    expect(
+      edgeConditionLabel({ condition: { type: "review_status", equals: "approved" } }, "g"),
+    ).toBe("approved");
+    expect(
+      edgeConditionLabel(
+        { condition: { type: "node_status", node: "me", equals: "success" } },
+        "me",
+      ),
+    ).toBe("success");
+    expect(
+      edgeConditionLabel(
+        { condition: { type: "node_status", node: "other", equals: "failure" } },
+        "me",
+      ),
+    ).toBe("failure of other");
+    expect(edgeConditionLabel(undefined, "me")).toBe("");
+  });
+
+  it("exposes outcome handles per node type", () => {
+    expect(sourceHandlesFor("human_review").map((h) => h.id)).toEqual([
+      "approved",
+      "rejected",
+      "needs_changes",
+      "else",
+      "out",
+    ]);
+    expect(sourceHandlesFor("agent_task").map((h) => h.id)).toEqual([
+      "success",
+      "failure",
+      "else",
+      "out",
+    ]);
+    expect(sourceHandlesFor("finish")).toEqual([]);
   });
 });

@@ -8,12 +8,14 @@ import type { ModelGroup, NodeType, SpecDetail, WorkflowNode } from "../api/type
 import { useFlowEditor, type SaveStatus } from "./useFlowEditor";
 import { useRunPlayback, type PlaybackPhase } from "./useRunPlayback";
 import { NodeInspector } from "./NodeInspector";
+import { EdgeInspector } from "./EdgeInspector";
 import { ValidationPanel } from "./ValidationPanel";
 import { CompilePreview } from "./CompilePreview";
-import { nodeTypeLabel, type FlowNode } from "./graphMapping";
+import { nodeTypeLabel, type FlowEdge, type FlowNode, type WorkflowEdgeData } from "./graphMapping";
 import { nodeTypeIcon } from "./nodeTypeIcons";
 import { NodeOpenProvider } from "./nodeOpenContext";
 import { CANVAS_NODE_TYPES } from "../run/canvasNodeTypes";
+import { CANVAS_EDGE_TYPES } from "./edges/canvasEdgeTypes";
 import { overlayRunStatus } from "../run/runView";
 import { Button, Menu, Modal, type MenuItem } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
@@ -87,6 +89,7 @@ export function FlowEditor({
   // a single click selects (enables Duplicate, highlights), a double click or a
   // fresh add opens the editor.
   const [editing, setEditing] = useState(false);
+  const [editingEdge, setEditingEdge] = useState(false);
   const [tool, setTool] = useState<Tool>(null);
   // Profile/model option lists for the inspector selects (the user's Hermes
   // roster + configured models). Best-effort: empty on failure.
@@ -188,6 +191,27 @@ export function FlowEditor({
     [ctrl],
   );
 
+  // Clicking an edge opens its inspector (set its branch condition / fallback).
+  const onEdgeClick = useCallback(
+    (_event: unknown, edge: FlowEdge) => {
+      ctrl.selectEdge(edge.id);
+      setEditingEdge(true);
+    },
+    [ctrl],
+  );
+
+  const handleEdgeChange = useCallback(
+    (data: WorkflowEdgeData) => {
+      if (ctrl.selectedEdge) ctrl.updateEdge(ctrl.selectedEdge.id, data);
+    },
+    [ctrl],
+  );
+
+  const closeEdgeEditor = useCallback(() => {
+    setEditingEdge(false);
+    ctrl.selectEdge(null);
+  }, [ctrl]);
+
   const onNodeDoubleClick = useCallback(
     (_event: unknown, node: FlowNode) => openNode(node.id),
     [openNode],
@@ -200,7 +224,9 @@ export function FlowEditor({
   const closeEditor = useCallback(() => setEditing(false), []);
   const onPaneClick = useCallback(() => {
     ctrl.selectNode(null);
+    ctrl.selectEdge(null);
     setEditing(false);
+    setEditingEdge(false);
   }, [ctrl]);
 
   // While a run plays the canvas renders the run pipeline: the same nodes at
@@ -320,6 +346,7 @@ export function FlowEditor({
                 nodes={canvasNodes}
                 edges={ctrl.edges}
                 nodeTypes={CANVAS_NODE_TYPES}
+                edgeTypes={CANVAS_EDGE_TYPES}
                 nodesDraggable={!playing}
                 nodesConnectable={!playing}
                 elementsSelectable={!playing}
@@ -329,6 +356,7 @@ export function FlowEditor({
                 onMoveEnd={ctrl.onMoveEnd}
                 onNodeClick={playing ? undefined : onNodeClick}
                 onNodeDoubleClick={playing ? undefined : onNodeDoubleClick}
+                onEdgeClick={playing ? undefined : onEdgeClick}
                 onPaneClick={playing ? undefined : onPaneClick}
                 defaultViewport={ctrl.viewport}
                 fitView={ctrl.viewport === undefined}
@@ -363,6 +391,27 @@ export function FlowEditor({
             skills={skills}
             // A running workflow opens nodes for inspection only: fully disabled
             // so the live run can never be edited from here.
+            readOnly={playing}
+          />
+        </Modal>
+      )}
+
+      {editingEdge && ctrl.selectedEdge !== null && (
+        <Modal
+          title="Edge condition"
+          ariaLabel="Edit edge condition"
+          className="hw-node-modal"
+          onClose={closeEdgeEditor}
+          footer={
+            <Button variant="primary" onClick={closeEdgeEditor}>
+              {playing ? "Close" : "Done"}
+            </Button>
+          }
+        >
+          <EdgeInspector
+            edge={ctrl.selectedEdge}
+            nodeIds={ctrl.nodes.map((n) => n.id)}
+            onChange={handleEdgeChange}
             readOnly={playing}
           />
         </Modal>

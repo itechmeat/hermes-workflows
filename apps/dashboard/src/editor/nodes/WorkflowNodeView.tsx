@@ -4,6 +4,7 @@ import { nodeMetaLine, nodeTypeLabel } from "../graphMapping";
 import { nodeTypeIcon } from "../nodeTypeIcons";
 import { useNodeOpen } from "../nodeOpenContext";
 import { ExpandIcon } from "../../ui/icons";
+import { SourceHandles } from "./SourceHandles";
 
 // One generic renderer for every workflow node type. The header line carries
 // the human type label and a short id; an open button (equivalent to a double
@@ -39,7 +40,7 @@ export function WorkflowNodeView({ data, selected }: NodeProps<FlowNode>): React
       </div>
       {node.title !== undefined && <div className="hw-node__title">{node.title}</div>}
       {meta !== "" && <div className="hw-node__meta">{meta}</div>}
-      <Handle type="source" position={Position.Right} />
+      <SourceHandles nodeType={node.type} />
     </div>
   );
 }

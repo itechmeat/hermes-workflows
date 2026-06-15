@@ -12,11 +12,15 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import {
+  edgeSourceHandle,
   flowToWorkflow,
+  handleToEdgeData,
   workflowToFlow,
+  WORKFLOW_EDGE_TYPE,
   WORKFLOW_NODE_TYPE,
   type FlowEdge,
   type FlowNode,
+  type WorkflowEdgeData,
 } from "./graphMapping";
 import { layout } from "./layout";
 import type { WorkflowsApi } from "../api/client";
@@ -47,6 +51,11 @@ export interface FlowEditorController {
   onMoveEnd: (event: unknown, viewport: Viewport) => void;
   selectNode: (id: string | null) => void;
   updateNode: (id: string, patch: Partial<WorkflowNode>) => void;
+  selectedEdge: FlowEdge | null;
+  selectEdge: (id: string | null) => void;
+  /** Set a selected edge's branch (condition/fallback) and reposition it onto
+   *  the source handle that encodes it. */
+  updateEdge: (id: string, data: WorkflowEdgeData) => void;
   addNode: (type: NodeType) => string;
   duplicateNode: (id: string) => string | null;
   applyLayout: () => void;
@@ -95,9 +104,41 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     [onEdgesChangeRaw],
   );
 
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
   const onConnect = useCallback(
     (connection: Connection) => {
-      setEdges((current) => addEdge(connection, current));
+      setEdges((current) => {
+        // The handle the edge was drawn from encodes its condition (drag from the
+        // `failure` handle -> node_status=failure; from `else` -> fallback).
+        const data = handleToEdgeData(connection.sourceHandle, connection.source);
+        const edge: FlowEdge = {
+          id: `e:${connection.source}:${connection.sourceHandle ?? "out"}->${connection.target}`,
+          source: connection.source,
+          target: connection.target,
+          sourceHandle: connection.sourceHandle ?? null,
+          targetHandle: connection.targetHandle ?? null,
+          type: WORKFLOW_EDGE_TYPE,
+          data,
+        };
+        return addEdge(edge, current);
+      });
+      setDirty(true);
+    },
+    [setEdges],
+  );
+
+  const selectEdge = useCallback((id: string | null) => setSelectedEdgeId(id), []);
+
+  const updateEdge = useCallback(
+    (id: string, data: WorkflowEdgeData) => {
+      setEdges((current) =>
+        current.map((edge) =>
+          edge.id === id
+            ? { ...edge, data, sourceHandle: edgeSourceHandle(data, edge.source) }
+            : edge,
+        ),
+      );
       setDirty(true);
     },
     [setEdges],
@@ -193,6 +234,7 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
   }, [client, detail.workflow, nodes, edges, viewport]);
 
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedEdge = edges.find((edge) => edge.id === selectedEdgeId) ?? null;
 
   return {
     nodes,
@@ -207,6 +249,9 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     onMoveEnd,
     selectNode,
     updateNode,
+    selectedEdge,
+    selectEdge,
+    updateEdge,
     addNode,
     duplicateNode,
     applyLayout,

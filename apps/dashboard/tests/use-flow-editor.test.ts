@@ -63,6 +63,36 @@ describe("useFlowEditor", () => {
     expect(result.current.edges).toHaveLength(2);
   });
 
+  it("connecting from a labeled handle conditions the new edge", () => {
+    const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
+    act(() =>
+      result.current.onConnect({
+        source: "build",
+        target: "done",
+        sourceHandle: "failure",
+        targetHandle: null,
+      }),
+    );
+    // A second edge build->done, from a different (failure) handle, is added
+    // alongside the pre-existing plain one.
+    const edge = result.current.edges.find((e) => e.sourceHandle === "failure");
+    expect(edge?.data?.condition).toEqual({
+      type: "node_status",
+      node: "build",
+      equals: "failure",
+    });
+  });
+
+  it("updateEdge sets the branch and repositions it onto the encoding handle", () => {
+    const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
+    const edgeId = result.current.edges[0]!.id;
+    act(() => result.current.updateEdge(edgeId, { fallback: true }));
+    const edge = result.current.edges.find((e) => e.id === edgeId);
+    expect(edge?.data).toEqual({ fallback: true });
+    expect(edge?.sourceHandle).toBe("else");
+    expect(result.current.dirty).toBe(true);
+  });
+
   it("marks dirty on a node move but not on measurement or selection", () => {
     const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
 
