@@ -147,6 +147,10 @@ export interface ExportedWorkflow {
 /** Optional start options for `POST /workflows/{id}/run`. */
 export interface RunOptions {
   project_id?: string;
+  /** Free-form operator input, layered above every agent_task prompt at highest
+   *  priority for this run (overrides conflicting node instructions, augments
+   *  the rest). */
+  input?: string;
 }
 
 export interface O2BStatus {

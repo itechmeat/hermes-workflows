@@ -388,6 +388,7 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     project_id = _default_project(engine, spec, payload.get("project_id"))
     run_id = f"{workflow_id}-{uuid.uuid4().hex[:8]}"
+    operator_input = payload.get("input")
     try:
         return tools.start_workflow(
             workflow_id,
@@ -400,6 +401,7 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
             core_cli=config.core_cli(),
             run_id=run_id,
             project_id=project_id,
+            input=operator_input,
             ensure_tick=cron.ensure_workflow_tick,
         )
     except cli_bridge.CoreBridgeError as exc:

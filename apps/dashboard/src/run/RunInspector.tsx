@@ -137,6 +137,12 @@ export function RunInspector({
         </div>
       )}
 
+      {run.input ? (
+        <p className="hw-run-input">
+          <strong>Operator input</strong> (highest priority for this run): {run.input}
+        </p>
+      ) : null}
+
       <div className="hw-shell">
         <div className="hw-editor-body">
           <div className="hw-canvas">
