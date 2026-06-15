@@ -39,8 +39,18 @@ def test_no_args_and_help_show_usage() -> None:
     assert plugin._handle_command("help").startswith("Usage: /workflow")
 
 
-def test_unknown_subcommand_shows_usage() -> None:
-    assert plugin._handle_command("frobnicate").startswith("Usage: /workflow")
+def test_unmatched_free_text_asks_which_workflow(home: Path) -> None:
+    # Not an explicit subcommand and not a recognizable workflow: ask, never guess.
+    out = plugin._handle_command("frobnicate the whatsit")
+    assert "could not match" in out and "feature-development" in out
+
+
+def test_nl_entry_resolves_target_and_operator_input(home: Path) -> None:
+    # Free text whose leading run is a workflow id starts that workflow, carrying
+    # the remainder as the operator input (t_77d752f7).
+    out = plugin._handle_command("feature-development take 2-3 minor related tasks")
+    assert out.startswith("Started run ")
+    assert 'input: "take 2-3 minor related tasks"' in out
 
 
 def test_list_names_the_workflow(home: Path) -> None:

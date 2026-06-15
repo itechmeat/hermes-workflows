@@ -26,6 +26,36 @@ def engine(tmp_path: Path):
     board.close()
 
 
+_WORKFLOWS = [
+    {"id": "osb-feature-release", "name": "Feature Release"},
+    {"id": "nightly-audit", "name": "Nightly Audit"},
+]
+
+
+def test_resolve_nl_command_matches_id_and_keeps_instruction() -> None:
+    out = tools.resolve_nl_command("osb-feature-release take 2-3 minor related tasks", _WORKFLOWS)
+    assert out == {"workflow_id": "osb-feature-release", "input": "take 2-3 minor related tasks"}
+
+
+def test_resolve_nl_command_matches_a_multiword_name() -> None:
+    out = tools.resolve_nl_command("Feature Release ship it", _WORKFLOWS)
+    assert out == {"workflow_id": "osb-feature-release", "input": "ship it"}
+
+
+def test_resolve_nl_command_bare_target_has_no_input() -> None:
+    out = tools.resolve_nl_command("nightly-audit", _WORKFLOWS)
+    assert out == {"workflow_id": "nightly-audit", "input": None}
+
+
+def test_resolve_nl_command_unknown_target_asks() -> None:
+    out = tools.resolve_nl_command("do something vague", _WORKFLOWS)
+    assert "question" in out and "could not match" in out["question"]
+
+
+def test_resolve_nl_command_empty_asks() -> None:
+    assert "question" in tools.resolve_nl_command("   ", _WORKFLOWS)
+
+
 def test_workflow_list() -> None:
     result = tools.list_workflows(roots=[EXAMPLES], core_cli=CLI)
     ids = sorted(w["id"] for w in result["workflows"])

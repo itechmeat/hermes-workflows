@@ -219,9 +219,39 @@ def _handle_command(raw_args: str = "", **_kwargs: Any) -> str:
             explained = tools.explain_workflow(rest[0], roots=roots, core_cli=core_cli)
             summary = explained.get("summary") or explained.get("name") or rest[0]
             return f"{rest[0]}: {summary}"
-        return _COMMAND_USAGE
+        # Not an explicit subcommand: treat the whole argument string as natural
+        # language - resolve the target workflow + operator input, or ask.
+        return _handle_nl_command(raw_args, roots, core_cli)
     except Exception as exc:  # noqa: BLE001 - a slash command never crashes the session
         return f"workflow command failed: {exc}"
+
+
+def _handle_nl_command(raw_args: str, roots: Any, core_cli: Any) -> str:
+    """Free-text entry: `/workflow <anything>` that is not an explicit subcommand.
+    Resolve it to a workflow id + operator input and start the run, or return a
+    clarifying question when the target/intent is ambiguous or unknown."""
+    import uuid
+
+    from . import tools
+
+    workflows = tools.list_workflows(roots=roots, core_cli=core_cli)["workflows"]
+    resolved = tools.resolve_nl_command(raw_args, workflows)
+    question = resolved.get("question")
+    if question:
+        return question
+    workflow_id = resolved["workflow_id"]
+    operator_input = resolved.get("input")
+    run_id = f"run_{uuid.uuid4().hex[:12]}"
+    result = tools.run_workflow(
+        workflow_id,
+        engine=_build_engine(),
+        roots=roots,
+        core_cli=core_cli,
+        run_id=run_id,
+        input=operator_input,
+    )
+    suffix = f' with input: "{operator_input}"' if operator_input else ""
+    return f"Started run {result['run_id']} ({result['status']}) of {workflow_id}{suffix}."
 
 
 def _handle_list(args: Any = None, **_kwargs: Any) -> str:

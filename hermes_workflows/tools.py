@@ -24,6 +24,49 @@ def _resolve_spec_path(workflow_id: str, roots: Sequence[str], core_cli: Sequenc
     raise ValueError(f"unknown workflow '{workflow_id}'")
 
 
+def resolve_nl_command(text: str, workflows: Sequence[dict]) -> dict:
+    """Resolve the free text after ``/workflow`` into a target and operator input,
+    or a clarifying question. Matches the LONGEST leading run of the text against a
+    known workflow id or name (case-insensitive); whatever follows is the operator
+    instruction. Returns ``{"workflow_id", "input"}`` on a confident, unique match,
+    otherwise ``{"question": "..."}`` so the caller asks rather than guesses (no
+    recognizable target, or more than one workflow matched the same leading text).
+    """
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return {"question": "Which workflow should I run? Try `/workflow <id> <instruction>`."}
+    lowered = cleaned.lower()
+    best_len = 0
+    matches: list[tuple[str, str]] = []  # (workflow_id, remaining operator input)
+    for w in workflows:
+        for target in (str(w.get("id", "")), str(w.get("name", ""))):
+            t = target.strip().lower()
+            if not t:
+                continue
+            # A target matches when it is the whole text or its leading run (so the
+            # remainder is the operator instruction). Longest target wins.
+            if lowered == t or lowered.startswith(t + " "):
+                remainder = cleaned[len(t):].strip()
+                if len(t) > best_len:
+                    best_len, matches = len(t), [(str(w["id"]), remainder)]
+                elif len(t) == best_len:
+                    matches.append((str(w["id"]), remainder))
+    if best_len == 0:
+        available = ", ".join(sorted({str(w["id"]) for w in workflows})) or "(none configured)"
+        return {
+            "question": f"I could not match a workflow in {cleaned!r}. Which one did you "
+            f"mean? Available: {available}. Try `/workflow <id> <instruction>`."
+        }
+    unique = {wid for wid, _ in matches}
+    if len(unique) > 1:
+        return {
+            "question": f"That could be any of: {', '.join(sorted(unique))}. "
+            f"Which workflow did you mean?"
+        }
+    workflow_id, remainder = matches[0]
+    return {"workflow_id": workflow_id, "input": remainder or None}
+
+
 def list_workflows(*, roots: Sequence[str], core_cli: Sequence[str]) -> dict:
     workflows = [
         {
