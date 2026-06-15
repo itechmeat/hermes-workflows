@@ -96,11 +96,11 @@ export interface NodeRunState {
     failed: boolean;
   };
   /**
-   * Board task ids this node is structurally concerned with, captured from its
-   * resolved input at schedule time (the ids that flowed in via input_mapping /
-   * a gate note), independent of whatever free text the worker later emits. An
-   * adopt node's `{{nodes.<id>.output.task_ids}}` reference reads this typed list
-   * in preference to shape-matching ids out of the source node's prose output.
+   * Board task ids this node RESOLVED, captured from a structured `task_ids` block
+   * in its worker output at settle time (a fenced ```task_ids code block or a
+   * `<task_ids>` tag) - the chosen ids, isolated from any stray id-shaped token in
+   * its prose. An adopt node's `{{nodes.<id>.output.task_ids}}` reference reads
+   * this typed list in preference to shape-scraping the source node's prose.
    */
   task_ids?: string[];
   /**

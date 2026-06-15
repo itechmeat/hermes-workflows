@@ -82,6 +82,14 @@ data flows via `input_mapping: { x: "{{nodes.<id>.output}}" }`, substituted at s
 and failing loud on a missing output. Runs are single-flight: at most one active run per
 workflow.
 
+An `adopt` node's `task_ref: "{{nodes.<id>.output.task_ids}}"` drives the board cards a prior
+node RESOLVED. The reliable contract: the resolving node's worker emits the chosen ids in a
+structured block in its output - a fenced ```` ```task_ids ```` code block (or a
+`<task_ids>…</task_ids>` tag) - which the engine captures into that node's typed `task_ids`
+channel, isolated from any stray `t_`-shaped token in its prose. A bare shape-scrape of
+free-text output is only a last-resort fallback (it grabs any/wrong id and cannot isolate a
+chosen subset). An adopt that resolves zero ids fails the run closed.
+
 ## Conventions
 
 - TypeScript: strict, ESM, `.ts` extension imports, Bun runtime. Run `fmt` then `lint` before

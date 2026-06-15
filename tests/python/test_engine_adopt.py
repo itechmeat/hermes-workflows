@@ -353,63 +353,47 @@ def test_adopt_sequential_settles_failure_if_any_card_failed(tmp_path: Path) -> 
         board.close()
 
 
-def _lockscope_spec() -> dict:
-    """scope (lists ids in its output) -> lock (input_mapping carries them in;
-    its own output is prose) -> drive (adopt {{nodes.lock.output.task_ids}})."""
-    return {
-        "id": "adopt-lockscope",
-        "name": "Adopt lock-scope",
-        "version": 1,
-        "scope": {"type": "project"},
-        "trigger": {"type": "manual"},
-        "defaults": {"profile": "worker"},
-        "nodes": [
-            {"id": "scope", "type": "agent_task", "prompt": "find scopes", "profile": "scout"},
-            {"id": "lock", "type": "agent_task", "prompt": "lock {{chosen}}", "profile": "worker",
-             "input_mapping": {"chosen": "{{nodes.scope.output}}"}},
-            {"id": "drive", "type": "agent_task", "prompt": "drive", "profile": "worker",
-             "adopt": True, "task_ref": "{{nodes.lock.output.task_ids}}"},
-            {"id": "done", "type": "finish", "outcome": "success"},
-        ],
-        "edges": [
-            {"from": "scope", "to": "lock"},
-            {"from": "lock", "to": "drive"},
-            {"from": "drive", "to": "done"},
-        ],
-    }
+def test_extract_task_ids_block() -> None:
+    from hermes_workflows.engine import _extract_task_ids_block
+
+    fenced = "Locked it.\n```task_ids\nt_aaaa\nt_bbbb\n```\nstray t_cccc outside"
+    assert _extract_task_ids_block(fenced) == ["t_aaaa", "t_bbbb"]
+    assert _extract_task_ids_block("<task_ids>t_aaaa, t_bbbb</task_ids>") == ["t_aaaa", "t_bbbb"]
+    # No block -> empty (so the caller falls back / fails closed, not a wrong scrape).
+    assert _extract_task_ids_block("just prose with a stray t_cccc") == []
+    assert _extract_task_ids_block(None) == []
 
 
-def test_adopt_drives_ids_from_lock_input_when_output_is_prose(tmp_path: Path) -> None:
-    """The structural fix: a node that received the ids via input_mapping carries
-    them as a typed task_ids channel, so a downstream adopt drives the right cards
-    even when that node's own worker output is a prose summary with no literal ids."""
+def test_adopt_drives_ids_from_a_structured_output_block(tmp_path: Path) -> None:
+    """The chosen ids come from a structured ```task_ids block in the resolving
+    node's OUTPUT, isolated from any stray t_-shaped token elsewhere in its prose -
+    so adopt drives exactly the chosen cards, never a leaked/wrong id (t_53be3a7b)."""
     board = kb.connect(db_path=tmp_path / "kanban.db")
     try:
         t1 = kb.create_task(board, title="one", created_by="op", triage=True)
         t2 = kb.create_task(board, title="two", created_by="op", triage=True)
         eng = _engine(tmp_path, board)
-        spec = _spec(tmp_path, _lockscope_spec())
+        spec = _spec(tmp_path, _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True))
 
         run = eng.run(spec, "r")
-        # scope surfaces the chosen ids in its free-text output.
-        _surface_ids(board, run["nodes"]["scope"]["hermes_task_id"], [t1, t2])
-
-        # advance -> lock is scheduled and captures the ids from its resolved input.
-        run = eng.advance(spec, "r")
-        assert run["nodes"]["lock"]["task_ids"] == [t1, t2]
-
-        # lock finishes with PROSE only - no literal ids in its output.
-        lock_card = run["nodes"]["lock"]["hermes_task_id"]
-        board.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (lock_card,))
+        collect_card = run["nodes"]["collect"]["hermes_task_id"]
+        # Output is prose (with a STRAY id that must be ignored) plus the chosen
+        # ids in a fenced task_ids block.
+        summary = (
+            "Locked Scope 1 (CodeGraph quality); ignore the stray id t_99999999.\n"
+            f"```task_ids\n{t1}\n{t2}\n```"
+        )
+        board.execute("UPDATE tasks SET status = 'done' WHERE id = ?", (collect_card,))
         board.execute(
             "INSERT INTO task_runs (task_id, status, outcome, summary, started_at, ended_at) "
             "VALUES (?, 'done', 'completed', ?, 1, 2)",
-            (lock_card, "Locked the chosen scope and checked out feature branch feat/x."),
+            (collect_card, summary),
         )
         board.commit()
 
-        # advance -> drive adopts the typed ids, NOT scraped from the prose output.
         run = eng.advance(spec, "r")
+        # Captured from the block - exactly the chosen ids, not the stray one.
+        assert run["nodes"]["collect"]["task_ids"] == [t1, t2]
         assert run["nodes"]["drive"]["driven_task_ids"] == [t1, t2]
         assert _status(board, t1) == "ready"
         assert _status(board, t2) == "ready"

@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS workflow_node_runs (
   -- accumulated outputs/failed). Added after the initial schema, so
   -- connection.ts ALTERs pre-existing databases.
   adopt_seq_json  TEXT,
-  -- JSON array of board task ids the node is structurally concerned with,
-  -- captured from its resolved input (read by an adopt task_ids reference in
+  -- JSON array of board task ids the node resolved, captured from a structured
+  -- task_ids block in its worker output (read by an adopt task_ids reference in
   -- preference to scraping prose). Added after the initial schema, so
   -- connection.ts ALTERs pre-existing databases.
   task_ids_json   TEXT,

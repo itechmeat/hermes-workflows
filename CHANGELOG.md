@@ -63,11 +63,13 @@ of polling forever, and the plugin version shown in the dashboard header.
 - `bin/hermes-workflows` no longer claims a `~/.hermes/bin` symlink that is not
   created; the header and docs describe the actual resolution (optional installed
   symlink, falling back to the in-repo wrapper).
-- An `adopt` node drives board cards from a typed `task_ids` channel captured from
-  its resolved input, not by shape-matching ids in the worker's prose output, so a
-  node that summarises in prose still drives the right cards. An adopt that resolves
-  zero cards now fails the run closed instead of falling through to a downstream
-  build/PR with an empty branch.
+- An `adopt` node drives board cards from a typed `task_ids` channel captured from a
+  structured ```` ```task_ids ```` block (or `<task_ids>` tag) in the resolving node's
+  worker output - the chosen ids, isolated from any stray `t_`-shaped token in its
+  prose - rather than shape-scraping free text or input values (which grabbed wrong
+  ids and could not isolate the chosen scope). A bare shape-scrape remains only a
+  last-resort fallback. An adopt that resolves zero ids now fails the run closed
+  instead of falling through to a downstream build/PR with an empty branch.
 
 ## 0.2.0 - 2026-06-15
 

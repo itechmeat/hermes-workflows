@@ -48,10 +48,33 @@ _ADOPT_STUCK_FAILURES = 3
 _MAX_INLINE_STEPS = 10_000
 
 # task_ref resolution: a literal board id, or a typed reference to the task ids
-# an upstream node surfaced in its output (extracted by the board id shape, so a
-# free-text agent output still yields a typed id list, failing loud on none).
+# an upstream node resolved. The reliable source is a STRUCTURED block the worker
+# emits in its output (a fenced ```task_ids block or a <task_ids>…</task_ids>
+# tag); a plain shape-scrape of free text is only a last-resort fallback because
+# it grabs any/stray t_-shaped token and cannot isolate the chosen ones.
 _TASK_IDS_REF = re.compile(r"^\{\{nodes\.([A-Za-z0-9_-]+)\.output\.task_ids\}\}$")
 _TASK_ID_TOKEN = re.compile(r"\bt_[0-9a-z]+\b")
+_TASK_IDS_BLOCK = re.compile(
+    r"```task_ids\b[^\n]*\n(.*?)```|<task_ids>(.*?)</task_ids>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _extract_task_ids_block(text: Optional[str]) -> list[str]:
+    """The task ids a worker listed in a STRUCTURED block in its output - a fenced
+    ```task_ids code block or a ``<task_ids>…</task_ids>`` tag. This isolates the
+    ids the node RESOLVED (e.g. a lock-scope node's chosen scope), independent of
+    any t_-shaped token that happens to appear elsewhere in its prose. Returns an
+    empty list when the output carries no such block."""
+    if not text:
+        return []
+    ids: list[str] = []
+    for match in _TASK_IDS_BLOCK.finditer(text):
+        inner = match.group(1) or match.group(2) or ""
+        for token in _TASK_ID_TOKEN.findall(inner):
+            if token not in ids:
+                ids.append(token)
+    return ids
 
 
 class Engine:
@@ -433,6 +456,12 @@ class Engine:
                     outputs = prior_outputs + batch_outputs
                     if outputs:
                         node["output"] = "\n\n".join(outputs)
+                        # Capture the ids the worker listed in a structured block
+                        # in its output (the resolved/chosen ids), so a downstream
+                        # adopt reads them via {{nodes.<id>.output.task_ids}}.
+                        block_ids = _extract_task_ids_block(node["output"])
+                        if block_ids:
+                            node["task_ids"] = block_ids
                     self._merge_telemetry(node)
                     settled_cards.extend(handles)
             elif any(c.status == "blocked" for c in completions):
@@ -820,62 +849,43 @@ class Engine:
         resolved["prompt"] = prompt
         return resolved
 
-    def _input_task_ids(self, run: dict, params: dict) -> list[str]:
-        """Board task ids carried into a node by its input_mapping, captured as a
-        typed channel. Reads the resolved mapping VALUES only (upstream outputs /
-        gate notes) - never the operator-input block layered on top - so a generic
-        operator instruction that happens to name an id cannot pollute the set."""
-        mapping = params.get("input_mapping")
-        if not mapping:
-            return []
-        channels = {
-            nid: {"output": n.get("output"), "review_note": n.get("review_note")}
-            for nid, n in run["nodes"].items()
-        }
-        ids: list[str] = []
-        for ref in mapping.values():
-            try:
-                value = resolve_ref(str(ref), channels)
-            except UnresolvedInput:
-                continue
-            for token in _TASK_ID_TOKEN.findall(value or ""):
-                if token not in ids:
-                    ids.append(token)
-        return ids
-
     def _resolve_task_ref(self, run: dict, task_ref: str) -> list[str]:
         """The card id(s) an adopt node should drive. A literal id resolves to
-        itself; a ``{{nodes.<id>.output.task_ids}}`` reference extracts the board
-        task ids an upstream node surfaced in its output (by their id shape, so a
-        free-text output still yields a typed list). Fails loud on an empty or
-        unproduced source — never drives zero cards silently."""
+        itself; a ``{{nodes.<id>.output.task_ids}}`` reference reads the ids the
+        source node RESOLVED. Resolution order, most reliable first:
+
+        1. the source node's typed ``task_ids`` (captured from a structured block
+           in its worker output at settle - the chosen ids, isolated);
+        2. a structured ``task_ids`` block parsed from its output directly (robust
+           if the settle-time capture did not run);
+        3. a last-resort shape-scrape of its free-text output (legacy; grabs any
+           t_-shaped token, so it cannot isolate a chosen subset).
+
+        Fails loud when none resolve - never drives zero cards silently."""
         ref = task_ref.strip()
         match = _TASK_IDS_REF.match(ref)
         if not match:
             return [ref]  # literal board task id
         source = match.group(1)
         node = run["nodes"].get(source)
-        # Prefer the typed list captured from the source node's resolved input
-        # (the ids that flowed in via input_mapping / a gate note): driving real
-        # board cards must not depend on the worker re-emitting machine-parseable
-        # ids in free text. Fall back to scraping the output by id shape only when
-        # no structured list is present.
-        typed = node.get("task_ids") if node else None
-        if typed:
-            structured = [tid for tid in dict.fromkeys(typed) if tid]
-            if structured:
-                return structured
-        output = node.get("output") if node else None
-        if output:
-            scraped: list[str] = []
-            for token in _TASK_ID_TOKEN.findall(output):
-                if token not in scraped:
-                    scraped.append(token)
-            if scraped:
-                return scraped
+        typed = (node.get("task_ids") if node else None) or []
+        structured = [tid for tid in dict.fromkeys(typed) if tid]
+        if structured:
+            return structured
+        output = (node.get("output") if node else None) or ""
+        block = _extract_task_ids_block(output)
+        if block:
+            return block
+        scraped: list[str] = []
+        for token in _TASK_ID_TOKEN.findall(output):
+            if token not in scraped:
+                scraped.append(token)
+        if scraped:
+            return scraped
         raise UnresolvedInput(
-            f"task_ref node {source!r} surfaced no task ids to drive "
-            f"(neither a typed task_ids channel nor an id in its output)"
+            f"task_ref node {source!r} surfaced no task ids to drive: its output has "
+            f"no task_ids block and no id-shaped token. The node that resolves the "
+            f"choice must emit the chosen ids in a ```task_ids block."
         )
 
     def _adopt_cards(
@@ -1019,12 +1029,6 @@ class Engine:
             node["output"] = f"input resolution failed: {exc}"
             node["seq"] = _max_seq(run) + 1
             return
-        # Capture the board task ids carried in via input_mapping as a typed
-        # channel, so a downstream adopt can drive them structurally even if this
-        # node's worker later emits a prose summary with no literal ids.
-        captured = self._input_task_ids(run, params)
-        if captured:
-            node["task_ids"] = captured
         handle = executor.schedule(
             run_id=run_id,
             node_id=node_id,
