@@ -1187,3 +1187,64 @@ a.hw-o2b:focus-visible {
 .hw-edge-label--else {
   font-style: italic;
 }
+
+/* Toast notifications (Base UI Toast parts, wrapped in ui/components/Toast).
+ * A fixed viewport at the bottom-right stacks dismissible cards; the save-error
+ * variant uses the destructive accent so a failed save cannot be missed. */
+.hw-toast-viewport {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  outline: none;
+}
+.hw-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-card, #1d1d1d);
+  border: 1px solid var(--color-border, #3a3a3a);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
+  color: var(--color-foreground, #e6edf3);
+}
+.hw-toast--save-error {
+  border-color: var(--color-destructive, #c0392b);
+}
+.hw-toast__body {
+  flex: 1;
+  min-width: 0;
+}
+.hw-toast__title {
+  font-weight: 600;
+  font-size: 13px;
+  margin: 0 0 2px;
+}
+.hw-toast--save-error .hw-toast__title {
+  color: var(--color-destructive, #c0392b);
+}
+.hw-toast__description {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-muted-foreground, #9a9a9a);
+  overflow-wrap: anywhere;
+}
+.hw-toast__close {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--color-muted-foreground, #9a9a9a);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.hw-toast__close:hover {
+  color: var(--color-foreground, #e6edf3);
+}

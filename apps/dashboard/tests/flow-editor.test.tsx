@@ -39,6 +39,17 @@ function stubClient(): WorkflowsApi {
   } as unknown as WorkflowsApi;
 }
 
+function failingClient(message: string): WorkflowsApi {
+  return {
+    saveWorkflow: vi.fn(async () => {
+      throw new Error(message);
+    }),
+    listProfiles: vi.fn(async () => []),
+    listModels: vi.fn(async () => []),
+    listSkills: vi.fn(async () => []),
+  } as unknown as WorkflowsApi;
+}
+
 describe("FlowEditor", () => {
   it("shows a back button only when onBack is provided, and fires it", async () => {
     const { rerender } = render(<FlowEditor detail={detail} client={stubClient()} />);
@@ -128,4 +139,28 @@ describe("FlowEditor", () => {
   // single click (onNodeClick). These ReactFlow pointer paths can't be driven
   // in jsdom — d3-drag dereferences a live `document` on mousedown and throws —
   // so the editor-open path is covered above via the Add-node menu instead.
+
+  it("pops a toast with the human-readable reason when a save fails validation", async () => {
+    const message =
+      "incomplete_branch: node 'build' branches on node_status but covers neither outcome";
+    const { container } = render(<FlowEditor detail={detail} client={failingClient(message)} />);
+    // Auto-layout dirties the graph (no node modal in the way), enabling Save.
+    await userEvent.click(screen.getByRole("button", { name: /auto-layout/i }));
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    // The prominent toast (not just the inline bar label) carries the reason.
+    const toast = await screen.findByTestId("save-error-toast");
+    expect(toast).toHaveTextContent(/incomplete_branch/i);
+    expect(toast).toHaveTextContent("node 'build' branches on node_status");
+    expect(container.querySelector(".hw-toast")).not.toBeNull();
+  });
+
+  it("shows no toast when a save succeeds", async () => {
+    render(<FlowEditor detail={detail} client={stubClient()} />);
+    await userEvent.click(screen.getByRole("button", { name: /auto-layout/i }));
+    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    // Give the save round-trip a tick to settle, then assert no toast surfaced.
+    expect(await screen.findByText(/saved/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("save-error-toast")).not.toBeInTheDocument();
+  });
 });

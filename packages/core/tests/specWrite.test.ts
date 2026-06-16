@@ -75,6 +75,26 @@ describe("SpecStore write path", () => {
     expect(await readdir(globalRoot).catch(() => [])).not.toContain("saved.workflow.yaml");
   });
 
+  test("validation error carries human-readable messages and structured errors", async () => {
+    const bad = workflow({
+      nodes: [{ id: "done", type: "finish" }],
+      edges: [{ from: "done", to: "ghost" }],
+    });
+    const err = (await store
+      .saveWorkflow(bad, undefined, globalRoot)
+      .then(() => null)
+      .catch((e) => e)) as SpecValidationError;
+    expect(err).toBeInstanceOf(SpecValidationError);
+    // The message is the operator-facing reason, not just the bare code list:
+    // it includes each error's human message so a surfaced 400 is readable.
+    expect(err.message).toContain("ghost");
+    expect(err.message).not.toMatch(/^workflow failed validation: [a-z_]+(, [a-z_]+)*$/);
+    // The structured errors stay available for a UI that renders code + message.
+    expect(err.errors.length).toBeGreaterThan(0);
+    expect(err.errors[0]).toHaveProperty("code");
+    expect(err.errors[0]).toHaveProperty("message");
+  });
+
   test("refuses to save a workflow whose id would escape the storage root", async () => {
     const evil = workflow({ id: "../../evil" });
     await expect(store.saveWorkflow(evil, undefined, globalRoot)).rejects.toBeInstanceOf(

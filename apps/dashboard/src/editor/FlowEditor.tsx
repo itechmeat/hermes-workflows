@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Background, Controls, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -17,7 +17,7 @@ import { NodeOpenProvider } from "./nodeOpenContext";
 import { CANVAS_NODE_TYPES } from "../run/canvasNodeTypes";
 import { CANVAS_EDGE_TYPES } from "./edges/canvasEdgeTypes";
 import { overlayRunStatus } from "../run/runView";
-import { Button, Menu, Modal, type MenuItem } from "../ui/components";
+import { Button, Menu, Modal, ToastHost, useToasts, type MenuItem } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
 import {
   ArrowLeftIcon,
@@ -65,6 +65,33 @@ function statusLabel(status: SaveStatus, dirty: boolean): string {
   if (dirty) return "Unsaved changes";
   if (status.kind === "saved") return "Saved";
   return "No changes";
+}
+
+// Surfaces a failed save as a prominent, dismissible toast (the inline bar
+// label is easy to miss). The message is the core's human-readable validation
+// reason - e.g. "incomplete_branch: node 'collect' branches on node_status but
+// covers neither outcome" - so the operator sees what and where without opening
+// the Validate panel. Rendered inside <ToastHost>, where useToasts() resolves.
+function SaveErrorToast({ status }: { status: SaveStatus }): null {
+  const toasts = useToasts();
+  const shownFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (status.kind !== "error") {
+      shownFor.current = null;
+      return;
+    }
+    if (shownFor.current === status.message) return; // same failure, one toast
+    shownFor.current = status.message;
+    toasts.add({
+      title: "Save failed",
+      description: status.message,
+      type: "save-error",
+      priority: "high",
+      timeout: 0, // an error stays until the operator dismisses it
+      data: { testId: "save-error-toast" },
+    });
+  }, [status, toasts]);
+  return null;
 }
 
 const PLAY_LABEL: Record<PlaybackPhase, string> = {
@@ -345,7 +372,8 @@ export function FlowEditor({
   );
 
   return (
-    <>
+    <ToastHost>
+      <SaveErrorToast status={ctrl.status} />
       {slots ? (
         <>
           {slots.leftHost ? createPortal(title, slots.leftHost) : null}
@@ -464,6 +492,6 @@ export function FlowEditor({
           <CompilePreview workflowId={detail.workflow.id} client={api} />
         </Modal>
       )}
-    </>
+    </ToastHost>
   );
 }

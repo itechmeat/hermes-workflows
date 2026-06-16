@@ -39,11 +39,14 @@ export interface WriteRoots {
   project?: string;
 }
 
-/** Raised when a save is refused because the graph fails validation. */
+/** Raised when a save is refused because the graph fails validation. The
+ * message carries each error's human-readable reason (not just the bare code)
+ * so a surfaced 400 is legible to the operator; `errors` keeps the structured
+ * code+message pairs for a UI that renders them individually. */
 export class SpecValidationError extends Error {
   override name = "SpecValidationError";
   constructor(readonly errors: ValidationIssue[]) {
-    super(`workflow failed validation: ${errors.map((e) => e.code).join(", ")}`);
+    super(`workflow failed validation: ${errors.map((e) => `${e.code}: ${e.message}`).join("; ")}`);
   }
 }
 

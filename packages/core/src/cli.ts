@@ -201,9 +201,16 @@ async function main(): Promise<number> {
   } catch (err) {
     // Structured so the Python bridge can map the error kind to an HTTP status
     // (e.g. NotFoundError -> 404, SpecValidationError -> 400). The message stays
-    // human-readable for non-parsing callers.
-    const e = err as Error;
-    process.stderr.write(`${JSON.stringify({ error: { name: e.name, message: e.message } })}\n`);
+    // human-readable for non-parsing callers. When the error carries structured
+    // sub-errors (a SpecValidationError's code+message list), pass them through
+    // as `details` so a surfacing UI can render each one.
+    const e = err as Error & { errors?: { code?: string; message?: string }[] };
+    const details = Array.isArray(e.errors)
+      ? e.errors.map((d) => ({ code: d.code, message: d.message }))
+      : undefined;
+    process.stderr.write(
+      `${JSON.stringify({ error: { name: e.name, message: e.message, ...(details ? { details } : {}) } })}\n`,
+    );
     return 1;
   }
 }
