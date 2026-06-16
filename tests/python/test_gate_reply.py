@@ -57,6 +57,11 @@ def test_decision_and_note_parsing() -> None:
     )
     assert gate_reply._decision_and_note("yes please") == (None, None)
     assert gate_reply._decision_and_note("  ") == (None, None)
+    # A capitalized decision token is still a decision, not a bare pick: it must
+    # not slip past the token check and get auto-approved by _interpret_reply.
+    assert gate_reply._decision_and_note("Rejected fix this") == ("rejected", "fix this")
+    assert gate_reply._interpret_reply("Rejected fix this") == ("rejected", "fix this")
+    assert gate_reply._interpret_reply("NEEDS_CHANGES") == ("needs_changes", None)
 
 
 def test_reply_resolves_the_single_waiting_gate() -> None:

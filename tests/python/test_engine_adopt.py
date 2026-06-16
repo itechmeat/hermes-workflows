@@ -353,6 +353,41 @@ def test_adopt_sequential_settles_failure_if_any_card_failed(tmp_path: Path) -> 
         board.close()
 
 
+def test_adopt_sequential_fails_closed_when_promoting_the_next_card_errors(tmp_path: Path) -> None:
+    """If promoting the next sequential card errors (e.g. the card vanished), the
+    node settles failure and aborts the run rather than wedging the tick by
+    re-raising before the run is saved."""
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        t1 = kb.create_task(board, title="one", created_by="op", triage=True)
+        t2 = kb.create_task(board, title="two", created_by="op", triage=True)
+        eng = _engine(tmp_path, board)
+        spec = _spec(
+            tmp_path,
+            _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True, sequential=True),
+        )
+
+        run = eng.run(spec, "r")
+        _surface_ids(board, run["nodes"]["collect"]["hermes_task_id"], [t1, t2])
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [t1]
+
+        # The first card is terminal, but the next card disappears before it can
+        # be promoted: the adopt call will fail loud.
+        _complete(board, t1)
+        board.execute("DELETE FROM tasks WHERE id = ?", (t2,))
+        board.commit()
+
+        run = eng.advance(spec, "r")
+        node = run["nodes"]["drive"]
+        assert node["status"] == "completed"
+        assert node["outcome"] == "failure"
+        assert node.get("abort_run") is True
+        assert run["status"] == "failed"
+    finally:
+        board.close()
+
+
 def test_extract_task_ids_block() -> None:
     from hermes_workflows.engine import _extract_task_ids_block
 

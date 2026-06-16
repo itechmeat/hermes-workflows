@@ -389,6 +389,10 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
     project_id = _default_project(engine, spec, payload.get("project_id"))
     run_id = f"{workflow_id}-{uuid.uuid4().hex[:8]}"
     operator_input = payload.get("input")
+    if operator_input is not None and not isinstance(operator_input, str):
+        raise HTTPException(status_code=400, detail="input must be a string")
+    if isinstance(operator_input, str):
+        operator_input = operator_input.strip() or None
     try:
         return tools.start_workflow(
             workflow_id,

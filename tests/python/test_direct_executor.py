@@ -360,3 +360,26 @@ def test_inflight_handle_is_not_double_spawned(tmp_path, store_dir) -> None:
     assert first == again
     _wait_settled(ex, first)
     assert counter.read_text().count("x") == 1
+
+
+def test_detached_runner_settles_failure_on_corrupt_spec(tmp_path) -> None:
+    """A corrupt/unparseable spec file must not strand the handle: the runner
+    recovers the completion path from the .req.json name and writes a settled
+    failure (regression for the started-but-unsettled hang the detached worker
+    exists to prevent)."""
+    import json
+    import subprocess
+    import sys
+
+    runner = Path(__file__).resolve().parents[2] / "hermes_workflows" / "executor" / "_detached_runner.py"
+    completion = tmp_path / "run-1:n:0"
+    req = tmp_path / "run-1:n:0.req.json"
+    req.write_text("{ this is not valid json")
+
+    subprocess.run([sys.executable, str(runner), str(req)], check=True, timeout=30)
+
+    assert completion.exists(), "runner must settle a completion even for a bad spec"
+    settled = json.loads(completion.read_text())
+    assert settled["settled"] is True
+    assert settled["outcome"] == "failure"
+    assert not req.exists(), "the one-shot request file is cleaned up"

@@ -29,6 +29,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+from typing import Optional
 
 # Mirror store.MAX_OUTPUT_CHARS: cap captured output so a runaway worker cannot
 # bloat the run store.
@@ -110,16 +111,27 @@ def _invoke(argv, timeout, env_extra):
 
 
 def main(argv) -> int:
-    spec = json.loads(open(argv[1]).read())
-    completion_path = spec["completion_path"]
+    spec_path = argv[1] if len(argv) > 1 else ""
+    # Recover the completion path from the request-file name up front, so a spec
+    # that fails to parse (missing/corrupt, or absent completion_path) still
+    # settles a failure rather than stranding the handle as started forever.
+    completion_path: Optional[str] = (
+        spec_path[: -len(".req.json")] if spec_path.endswith(".req.json") else None
+    )
     try:
+        with open(spec_path, encoding="utf-8") as fh:
+            spec = json.load(fh)
+        completion_path = spec.get("completion_path") or completion_path
+        if not completion_path:
+            raise ValueError("spec is missing completion_path")
         result = _invoke(spec["argv"], spec.get("timeout"), spec.get("env"))
     except Exception as exc:  # noqa: BLE001 - must settle, never strand the node
         result = dict(settled=True, outcome="failure", output=f"agent invocation crashed: {exc}")
-    _write_completion(completion_path, **result)
+    if completion_path is not None:
+        _write_completion(completion_path, **result)
     # Best-effort cleanup of the one-shot request file.
     try:
-        os.unlink(argv[1])
+        os.unlink(spec_path)
     except OSError:
         pass
     return 0

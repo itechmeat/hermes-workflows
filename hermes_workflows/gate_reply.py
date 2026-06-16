@@ -35,10 +35,13 @@ def _decision_and_note(text: str) -> Tuple[Optional[str], Optional[str]]:
     """Split a reply into an exact decision token and an optional trailing note.
     Returns ``(None, None)`` when the first token is not a review decision."""
     parts = (text or "").strip().split(None, 1)
-    if not parts or parts[0] not in REVIEW_OPTIONS:
+    if not parts:
+        return None, None
+    token = parts[0].lower()
+    if token not in REVIEW_OPTIONS:
         return None, None
     note = parts[1].strip() if len(parts) > 1 else None
-    return parts[0], (note or None)
+    return token, (note or None)
 
 
 def _interpret_reply(text: str) -> Tuple[Optional[str], Optional[str]]:

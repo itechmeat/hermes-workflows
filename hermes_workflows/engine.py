@@ -436,9 +436,27 @@ class Engine:
                     # and keep the node active rather than settling.
                     seq_state.setdefault("outputs", []).extend(batch_outputs)
                     seq_state["failed"] = bool(seq_state.get("failed")) or batch_failed
-                    next_id = seq_state["pending"].pop(0)
+                    next_id = seq_state["pending"][0]
                     adopt = getattr(executor, "adopt", None)
-                    handle = adopt(next_id, assignee=seq_state.get("assignee") or "")
+                    try:
+                        if adopt is None:
+                            raise RuntimeError(
+                                "sequential adopt requires a Kanban-backed (project) scope"
+                            )
+                        handle = adopt(next_id, assignee=seq_state.get("assignee") or "")
+                    except Exception as exc:  # noqa: BLE001 - fail closed, never wedge the tick
+                        seq += 1
+                        node["status"] = "completed"
+                        node["outcome"] = "failure"
+                        node["seq"] = seq
+                        node["output"] = (
+                            f"sequential adopt failed promoting next card {next_id}: {exc}"
+                        )
+                        node["abort_run"] = True
+                        self._merge_telemetry(node)
+                        settled_cards.extend(handles)
+                        continue
+                    seq_state["pending"].pop(0)
                     node["driven_task_ids"] = [handle]
                     node["hermes_task_id"] = handle
                     node["status"] = "scheduled"

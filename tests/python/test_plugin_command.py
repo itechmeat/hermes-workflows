@@ -53,6 +53,13 @@ def test_nl_entry_resolves_target_and_operator_input(home: Path) -> None:
     assert 'input: "take 2-3 minor related tasks"' in out
 
 
+def test_run_subcommand_parses_input_flag(home: Path) -> None:
+    # The explicit `run` subcommand consumes everything after --input as the
+    # operator prompt and starts the run (no project arg for a global workflow).
+    out = plugin._handle_command("run feature-development --input scope only bugfixes")
+    assert out.startswith("Started run ")
+
+
 def test_list_names_the_workflow(home: Path) -> None:
     out = plugin._handle_command("list")
     assert "feature-development" in out

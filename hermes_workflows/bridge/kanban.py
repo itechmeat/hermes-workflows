@@ -176,14 +176,20 @@ class NodeCompletion:
 
 def read_completion(conn: sqlite3.Connection, task_id: str) -> NodeCompletion:
     """Read the current completion state of a node's Kanban task."""
+    has_failures_col = "consecutive_failures" in _columns(conn, "tasks")
     task = conn.execute(
-        "SELECT status, result, consecutive_failures FROM tasks WHERE id = ?", (task_id,)
+        (
+            "SELECT status, result, consecutive_failures FROM tasks WHERE id = ?"
+            if has_failures_col
+            else "SELECT status, result FROM tasks WHERE id = ?"
+        ),
+        (task_id,),
     ).fetchone()
     if task is None:
         return NodeCompletion(found=False)
 
     status = task["status"]
-    failures = task["consecutive_failures"] or 0
+    failures = int(task["consecutive_failures"] or 0) if has_failures_col else 0
     run = conn.execute(
         "SELECT outcome, summary, metadata FROM task_runs WHERE task_id = ? ORDER BY id DESC LIMIT 1",
         (task_id,),
