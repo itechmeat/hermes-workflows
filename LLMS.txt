@@ -177,14 +177,11 @@ loop or a self-polling wait) — confirm the loop terminates.
   re-running.
 - Where the underlying work is idempotent, a crashed or cancelled run is safe to
   re-run from scratch.
-- Caveat (direct executor): a `global`/direct `agent_task` runs inside a thread
-  of whichever process performs the advance. If advances are driven by
-  short-lived processes (a bare CLI `run` and a CLI tick), that thread can be
-  killed when the process exits while the agent's own subprocess keeps running -
-  the agent finishes but its completion is never recorded and the node hangs
-  `started`-but-unsettled. Drive long-running global agent nodes from a
-  long-lived process, or verify the host's tick actually waits for them, before
-  relying on unattended (cron) execution.
+- Note (direct executor): a `global`/direct `agent_task` runs in a detached
+  process that outlives whichever short-lived process performed the advance (a
+  bare CLI `run` or a CLI tick) and writes its own settled completion, so the
+  node no longer hangs `started`-but-unsettled when that process exits.
+  Unattended (cron) global execution is supported without a long-lived driver.
 
 ## Enforced execution settings
 

@@ -22,7 +22,7 @@ Install: `bun install`
 
 Full gate (run this before any commit; CI runs the same):
 
-```
+```bash
 bun run validate
 ```
 
@@ -179,7 +179,7 @@ release rather than committed).
 5. Assemble the GIF with ffmpeg (palettegen then paletteuse), `framerate 2` (about 0.5s per
    frame), `-loop 0`, scaled to 1640 wide:
 
-   ```
+   ```bash
    ffmpeg -y -framerate 2 -start_number 0 -i frame%d.png \
      -vf "scale=1640:-1:flags=lanczos,palettegen=stats_mode=full" pal.png
    ffmpeg -y -framerate 2 -start_number 0 -i frame%d.png -i pal.png \

@@ -89,7 +89,20 @@ of polling forever, and the plugin version shown in the dashboard header.
   tick) exits. The agent ran in a daemon thread of that process and died with it,
   orphaning the worker and stranding the node; it now runs in a detached process
   that outlives the scheduler and writes its own settled completion. Cron-triggered
-  global workflows are covered.
+  global workflows are covered. The detached worker also settles a failure when its
+  own spec file is missing or corrupt, so a bad launch can never strand the node.
+- A hard run abort (an adopt that drove zero cards, or a sequential adopt that
+  cannot promote its next card) now closes the run failed even when another node
+  is still active or waiting in a parallel branch, instead of being masked by the
+  active node. A sequential adopt whose next-card promotion errors fails closed
+  rather than wedging the tick.
+- A chat gate reply that is a capitalized decision token (e.g. `Rejected fix the
+  lint`) is now matched case-insensitively as that decision, instead of slipping
+  past the token check and being auto-approved as a bare pick.
+- The CLI preserves a free-form `--input` value that itself begins with `--`,
+  rather than mistaking it for the next flag and dropping the operator prompt.
+- `read_completion` feature-detects the board's `consecutive_failures` column, so
+  polling still works against an older Kanban schema that lacks it.
 
 ## 0.2.0 - 2026-06-15
 
