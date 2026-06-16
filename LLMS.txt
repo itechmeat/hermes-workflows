@@ -1,0 +1,204 @@
+# Hermes Workflows — authoring notes for LLMs
+
+Practical, universal guidance for writing and operating Hermes workflow specs.
+Applies to any workflow, independent of which project or board it touches.
+
+## Scope decides how nodes execute
+
+`scope` is not just metadata — it selects the node executor:
+
+- `scope: global` → nodes run **direct** (in-process). No Kanban cards are
+  created. Use this for read-only, maintenance, reporting, or
+  fan-out/notify workflows that should not litter any board.
+- `scope: project` (or `projects`) → every `agent_task` node is dispatched as a
+  **Kanban worker card** on that project's board. Use this ONLY when the
+  workflow genuinely drives cards through the board (e.g. an
+  adopt/implement flow). Otherwise each run leaves worker cards behind and
+  pollutes the board it was meant to serve.
+
+Rule of thumb: if the workflow does not need a card per node, make it `global`
+and reference everything by absolute path inside the prompts.
+
+## Edges and branching
+
+- An **unconditioned ("always") edge fires whenever the source node reaches
+  `completed`, regardless of its outcome.** A node that soft-fails (reports
+  `node_outcome: failure` but still completes) will therefore traverse an
+  unconditioned edge and "fall through" to the next node. Treat `always` as a
+  quick-prototyping crutch, not a finished design.
+- Prefer an explicit condition on every edge out of a work node:
+  `condition: {type: node_status, node: <source-id>, equals: success|failure}`.
+  The `node` field is **required** for `node_status` conditions.
+- Validator rule `incomplete_branch`: a node that has any `node_status`-
+  conditioned outgoing edge must cover **both** `success` and `failure`, or else
+  carry a `fallback: true` edge. Partial coverage fails validation. (This is why
+  switching a single edge from "always" to "success" produces
+  `incomplete_branch` — you must also wire the failure/fallback path.)
+- `review_status` branches (human-review gates) MAY be partial: an unhandled
+  decision intentionally stops the run.
+- Route failures somewhere useful — typically a notifier node that reports the
+  failure, then a terminal `finish` node with `outcome: failure`.
+
+## Never change a live run's executor-determining fields
+
+The engine **re-reads the spec on every advance**. Editing `scope` (or any field
+that selects the executor) while a run is active switches the executor
+mid-flight and orphans the in-flight run: a node backed by one executor can no
+longer be reconciled by another, and the run freezes (e.g. a finished worker
+card is never ingested, the node stays "scheduled" forever). Change such fields
+only **between** runs. If you must unstick a run that was edited mid-flight,
+temporarily restore the original field value so the engine can finish it, then
+change it back once the run reaches a terminal node.
+
+## Self-containment and portability
+
+- Embed all instructions inline in node prompts. Do **not** write a node prompt
+  that says "read /path/to/external-file and follow it" — that makes the
+  workflow non-portable and dependent on host state.
+- Custom scripts belong **in the workflow**, via a `script` node: materialize
+  the script to a temp path with a heredoc inside the node's `command`, then have
+  downstream agent nodes invoke it from that temp path. The workflow then carries
+  its own copy and runs anywhere.
+- When embedding a long script, generate the spec programmatically (read the
+  script, prefix each line with the YAML block indent) rather than hand-pasting —
+  YAML literal blocks strip the common indent, so the script's own indentation is
+  preserved as long as you add the block indent uniformly. Verify the embedded
+  copy round-trips byte-identical before trusting it.
+
+## `script` node specifics
+
+- Type `script`, required field `command` (a shell command; settles
+  `success`/`failure` by exit code). Optional `cwd` and an `env` allowlist.
+- **Gated by `execution.scripts_enabled` (default: false).** A workflow that
+  contains any script node refuses to run until this is enabled. It is a
+  security toggle (script nodes run arbitrary shell) and is global to all
+  workflows — enable it deliberately.
+- The script executor runs the command with an **allowlist-only environment**:
+  only the env var names in the settings `script_env_allowlist` (intersected with
+  the node's `env`), plus `HOME` (always). With an empty allowlist there is **no
+  `PATH`**, so external binaries (`python3`, `mkdir`, `cat`, …) are not found. A
+  self-contained script command must set its own PATH, e.g.
+  `export PATH=/usr/local/bin:/usr/bin:/bin` as its first line.
+- Set `cwd` to a directory that **already exists**. The executor `chdir`s before
+  running, so pointing `cwd` at a directory the command itself is supposed to
+  create fails before the command runs. Use a stable dir (e.g. `/tmp`) and have
+  the command create its own subdirectories with absolute paths.
+- `agent_task` nodes are **not** subject to `scripts_enabled` or the env
+  allowlist — they run with the full process environment (so host credentials
+  like `gh` auth are available there, not in script nodes).
+
+## Delivery: workflows do not auto-send
+
+A cron *prompt* job auto-delivers the agent's final message to its `--deliver`
+target. A *workflow* does not: a node's output is not sent anywhere by itself.
+To deliver a message (chat, Telegram, etc.) a node must send it explicitly
+(e.g. `hermes send --to <target> --file <path>`). The robust pattern is: a
+worker node writes the finished message to a file, and a separate downstream
+node sends that file — so a delivery failure does not lose the completed work,
+and the send can be retried or routed to a failure path independently.
+
+## Cron-triggering a workflow
+
+Run a workflow on a schedule the plugin-native way, not via a parallel
+prompt-cron:
+
+- Declare `trigger: {type: cron, schedule: "<5-field cron, UTC>"}` in the spec,
+  or register the trigger through the plugin. Either compiles into a native
+  **no-agent** cron job named `workflow:<id>` whose shim execs
+  `hermes-workflows run <id> [--origin <deliver>]`.
+- The shim lives under `HERMES_HOME/scripts/`; the cron job carries the schedule
+  and an optional delivery target threaded onto the run as its origin.
+- Do not keep a separate prompt-based cron doing the same job — one trigger per
+  workflow.
+
+## Validate before relying on a spec
+
+`validate <spec>` and `compile-preview <spec>` (the core CLI) are the same checks
+the editor runs on save. Aim for zero errors and zero warnings before shipping a
+spec. A `cycle` warning is benign when the loop is intentional (e.g. a fix→review
+loop or a self-polling wait) — confirm the loop terminates.
+
+## Node types
+
+- `agent_task` — an LLM step (a `prompt`, plus `profile`, `model`, `timeout_seconds`).
+- `script` — a deterministic shell step (see the `script` node section above).
+- `human_review` — a gate that pauses for an operator decision. It declares
+  `options` (e.g. `approved` / `rejected` / `needs_changes`); branch out of it
+  with `condition: {type: review_status, equals: <option>}`. `review_status`
+  branches may be partial — an unhandled option intentionally stops the run.
+- `condition` — a routing-only node that resolves instantly.
+- `wait` — a worker-free external wait; it parks and is polled by the tick each
+  cycle until its predicate settles.
+- `finish` — a terminal node carrying `outcome: success|failure`. Give a
+  workflow one success finish and one failure finish, and route to them.
+
+## Operator input (manual runs)
+
+- A run started with a free-form operator instruction (`run <id> --input "..."`)
+  has that text **layered above every `agent_task` node's prompt** as a
+  highest-priority block ("OPERATOR INSTRUCTION - HIGHEST PRIORITY ... --- node
+  instructions ---"). It is not a `{{placeholder}}`; it is prepended
+  automatically, overrides conflicting node instructions, and otherwise binds as
+  an extra constraint. To make a workflow controllable this way, write node
+  prompts that anticipate such an instruction and map it onto concrete behaviour
+  (e.g. honor a "top N" / time-window scope by adjusting flags and how much of
+  the work-list to process). The cron/no-input path runs the full default scope.
+- Heavy or specialized reasoning can be delegated from an orchestrating
+  `agent_task` to a separate CLI (e.g. `HOME=/root claude -p --model <m> "$(cat
+  prompt.md)"`): the node assembles a context-rich prompt, shells out, captures
+  output (`tee`), retries once on failure, and parses the result. This keeps the
+  mechanical loop on a cheap model while a stronger model does the judgment.
+
+## Passing data between nodes
+
+- `input_mapping` threads an upstream node's output into a prompt placeholder:
+  set `input_mapping: {var: "{{nodes.<id>.output}}"}` and reference `{{var}}` in
+  the prompt. A human-review gate's free-text note is readable as
+  `{{nodes.<gate-id>.review_note}}`. These placeholders are substituted at
+  schedule time; single braces (e.g. a JSON literal `{"k": 1}`) are left alone.
+
+## Driving existing board cards (adopt)
+
+- An `agent_task` with `adopt: true` and `task_ref` does not run a fresh prompt —
+  it drives EXISTING Kanban cards through the board as the node's work. A failed
+  adopt **hard-stops** the run (`abort_run`) and does not fall through to
+  downstream nodes; explicit success/failure edges enforce this. This is the one
+  case where project scope and per-node cards are the point, not overhead.
+
+## Run lifecycle and operations
+
+- Drive runs with the entrypoint: `run <id>` (start + first advance),
+  `status <run-id>`, `cancel <run-id>`, `advance-all`.
+- A multi-node run advances via a singleton **tick** cron, created while runs are
+  active and torn down when none remain. Without it a run stalls after its first
+  step.
+- **Single-flight:** at most one active run per workflow. A stuck or orphaned
+  active run blocks new runs (an "active run exists" refusal) — cancel it before
+  re-running.
+- Where the underlying work is idempotent, a crashed or cancelled run is safe to
+  re-run from scratch.
+- Caveat (direct executor): a `global`/direct `agent_task` runs inside a thread
+  of whichever process performs the advance. If advances are driven by
+  short-lived processes (a bare CLI `run` and a CLI tick), that thread can be
+  killed when the process exits while the agent's own subprocess keeps running -
+  the agent finishes but its completion is never recorded and the node hangs
+  `started`-but-unsettled. Drive long-running global agent nodes from a
+  long-lived process, or verify the host's tick actually waits for them, before
+  relying on unattended (cron) execution.
+
+## Enforced execution settings
+
+- `execution.default_mode`: `durable` (one node per tick) vs `direct` / `auto`
+  (drains inline-eligible steps synchronously within one advance).
+- `execution.scripts_enabled` and `execution.script_env_allowlist`: see the
+  `script` node section.
+- These are enforced (security-relevant) settings. Each `run` / `advance` happens
+  in a fresh process that reads them live, so a settings change takes effect on
+  the next run without restarting the gateway.
+
+## Memory provider
+
+- `defaults.memory.provider` is `auto | open_second_brain | none`. Use `none` for
+  a workflow that must not write to the agent memory / vault layer; `auto` lets
+  the host decide. `fail_open: true` keeps a run going when the memory backend is
+  unavailable rather than failing the node.
