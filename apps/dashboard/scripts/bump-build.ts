@@ -14,6 +14,14 @@ import { fileURLToPath } from "node:url";
 const here = fileURLToPath(new URL(".", import.meta.url));
 const file = resolve(here, "../build-number.json");
 const data = JSON.parse(readFileSync(file, "utf8")) as { build: number };
-const next = (Number(data.build) || 0) + 1;
+const current = data.build;
+// Fail closed on a malformed counter rather than silently resetting to 0, which
+// would break the monotonic-counter contract.
+if (!Number.isInteger(current) || current < 0) {
+  throw new Error(
+    `Invalid build counter in ${file}: expected a non-negative integer, got ${String(current)}`,
+  );
+}
+const next = current + 1;
 writeFileSync(file, `${JSON.stringify({ build: next }, null, 2)}\n`);
 console.log(`dashboard build number -> ${next}`);

@@ -37,6 +37,12 @@ export function RunInspector({
   const [log, setLog] = useState<LoggedRunEvent[]>([]);
   const slots = useHeaderSlots();
 
+  // Drop the prior run's curated log when the inspected run changes without an
+  // unmount; otherwise key-dedupe would suppress the new run's `run:started`.
+  useEffect(() => {
+    setLog([]);
+  }, [runId]);
+
   // Append any newly-observed run-lifecycle events to the curated run log,
   // stamping each with the time it was first seen (kept on later polls).
   useEffect(() => {

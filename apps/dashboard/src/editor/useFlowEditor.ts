@@ -26,6 +26,12 @@ import { layout } from "./layout";
 import type { WorkflowsApi } from "../api/client";
 import type { NodeType, SpecDetail, WorkflowNode } from "../api/types";
 
+// A runtime edge id that encodes the source handle, so re-handling an edge
+// regenerates a matching id and two edges from the same handle never collide.
+function makeEdgeId(source: string, sourceHandle: string | null, target: string): string {
+  return `e:${source}:${sourceHandle ?? "out"}->${target}`;
+}
+
 export type SaveStatus =
   | { kind: "idle" }
   | { kind: "saving" }
@@ -115,7 +121,7 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
         // `failure` handle -> node_status=failure; from `else` -> fallback).
         const data = handleToEdgeData(connection.sourceHandle, connection.source);
         const edge: FlowEdge = {
-          id: `e:${connection.source}:${connection.sourceHandle ?? "out"}->${connection.target}`,
+          id: makeEdgeId(connection.source, connection.sourceHandle ?? null, connection.target),
           source: connection.source,
           target: connection.target,
           sourceHandle: connection.sourceHandle ?? null,
@@ -144,11 +150,19 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
   const updateEdge = useCallback(
     (id: string, data: WorkflowEdgeData) => {
       setEdges((current) =>
-        current.map((edge) =>
-          edge.id === id
-            ? { ...edge, data, sourceHandle: edgeSourceHandle(data, edge.source) }
-            : edge,
-        ),
+        current.map((edge) => {
+          if (edge.id !== id) return edge;
+          // The id encodes the source handle, so re-derive both when the branch
+          // changes; otherwise an `out -> else` edit leaves a stale id and a new
+          // `out` edge would collide with it (ambiguous select/remove).
+          const sourceHandle = edgeSourceHandle(data, edge.source);
+          return {
+            ...edge,
+            data,
+            sourceHandle,
+            id: makeEdgeId(edge.source, sourceHandle, edge.target),
+          };
+        }),
       );
       setDirty(true);
     },

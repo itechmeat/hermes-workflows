@@ -121,7 +121,7 @@ export function nextAddableHandleId(
   type: string,
   shownIds: Iterable<string>,
 ): SourceHandleKind | null {
-  const shown = new Set<string>([...shownIds]);
+  const shown = new Set<string>(shownIds);
   return sourceHandlesFor(type).find((h) => !shown.has(h.id))?.id ?? null;
 }
 
@@ -160,13 +160,19 @@ export function handleToEdgeData(
   }
 }
 
+/** Render a snake_case outcome id as legible canvas text (needs_changes -> needs changes). */
+function displayOutcomeLabel(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
 /** A short, legible label for an edge's branch cause (empty for a plain edge). */
 export function edgeConditionLabel(data: WorkflowEdgeData | undefined, sourceId: string): string {
   if (data?.fallback) return "else";
   const c = data?.condition;
   if (c === undefined) return "";
-  if (c.type === "review_status") return c.equals;
-  return c.node === sourceId ? c.equals : `${c.equals} of ${c.node}`;
+  const outcome = displayOutcomeLabel(c.equals);
+  if (c.type === "review_status") return outcome;
+  return c.node === sourceId ? outcome : `${outcome} of ${c.node}`;
 }
 
 /** The visual tone for an edge's branch cause, matching the source handle tones. */
