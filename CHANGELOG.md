@@ -46,6 +46,14 @@ of polling forever, and the plugin version shown in the dashboard header.
   timestamped, curated history of the run (started with the operator input, nodes
   completed/failed, gates entered and resolved, terminal outcome) over the canvas,
   filtered to user-facing events only.
+- **Save-failure toast.** A workflow that fails server-side validation on save now
+  raises a prominent, dismissible toast naming the offending node(s) and the
+  human-readable reason (e.g. "a node branches on node_status but covers neither
+  outcome"), instead of only a small inline status label built from bare error
+  codes. Validation stays server-authoritative.
+- **Edge hover highlight.** Hovering a connection in the editor turns it blue and
+  lifts it above the nodes, so a single edge is followable end to end in a dense
+  graph; mouse-out restores its branch color and stacking.
 
 ### Changed
 
@@ -57,6 +65,12 @@ of polling forever, and the plugin version shown in the dashboard header.
   "scope 3", or a scope name) as approval with the reply text as the note, not only
   the literal `approved`/`rejected`/`needs_changes` tokens. The operator input is
   no longer shown as a page-header string; it appears as the first run-log entry.
+- Waiting for a PR merge is handled by the worker-free `wait` node
+  (`wait_for: { github_pr_merged: ... }`), polled in the engine tick with no Kanban
+  card. A release PR left open for hours therefore never accrues dispatcher
+  failures or auto-blocks while it waits, and the run proceeds on merge with no
+  manual unblock - the stall seen when a merge-wait was modeled as an `agent_task`
+  that reported failure to "keep waiting". Now regression-guarded.
 
 ### Fixed
 
@@ -70,6 +84,12 @@ of polling forever, and the plugin version shown in the dashboard header.
   ids and could not isolate the chosen scope). A bare shape-scrape remains only a
   last-resort fallback. An adopt that resolves zero ids now fails the run closed
   instead of falling through to a downstream build/PR with an empty branch.
+- A global (`direct`) `agent_task` node no longer hangs `started`-but-unsettled
+  when the short-lived advancing process (a CLI `run` or the cron `advance-all`
+  tick) exits. The agent ran in a daemon thread of that process and died with it,
+  orphaning the worker and stranding the node; it now runs in a detached process
+  that outlives the scheduler and writes its own settled completion. Cron-triggered
+  global workflows are covered.
 
 ## 0.2.0 - 2026-06-15
 

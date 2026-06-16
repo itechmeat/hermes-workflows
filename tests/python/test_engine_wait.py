@@ -80,6 +80,32 @@ def test_wait_parks_then_settles_success_on_merged(tmp_path: Path, monkeypatch) 
     assert run["status"] == "completed"
 
 
+def test_long_open_pr_never_blocks_then_settles_on_merge(tmp_path: Path, monkeypatch) -> None:
+    """Regression for t_ddd03333: a release PR left OPEN while the operator
+    reviews must NOT stall the run. Modeling merge-wait as an agent_task that
+    reports failure to "keep waiting" let the dispatcher accrue consecutive
+    failures and auto-block the card. A worker-free wait node has no card at all,
+    so many OPEN ticks never accrue a failure or auto-block; when the PR finally
+    merges the run proceeds with no manual unblock."""
+    eng = _engine(tmp_path)
+    spec = _spec(tmp_path, _spec_obj("merge-wait-long"))
+    eng.run(spec, "r")
+
+    monkeypatch.setattr("hermes_workflows.wait.github_pr_state", lambda _ref: "OPEN")
+    for _ in range(12):  # the operator takes their time; far past any auto-block threshold
+        run = eng.advance(spec, "r")
+        node = run["nodes"]["merge"]
+        assert node["status"] == "running"  # parked, still waiting
+        assert node.get("hermes_task_id") is None  # no card -> nothing to auto-block
+        assert node.get("outcome") is None  # never settled as a failure
+        assert run["status"] in ("running", "waiting")  # run stays active, not blocked/failed
+
+    monkeypatch.setattr("hermes_workflows.wait.github_pr_state", lambda _ref: "MERGED")
+    run = eng.advance(spec, "r")
+    assert run["nodes"]["merge"]["outcome"] == "success"
+    assert run["status"] == "completed"
+
+
 def test_wait_fails_on_closed(tmp_path: Path, monkeypatch) -> None:
     eng = _engine(tmp_path)
     spec = _spec(tmp_path, _spec_obj("merge-wait-closed"))
