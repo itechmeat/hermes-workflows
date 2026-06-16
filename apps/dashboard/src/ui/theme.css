@@ -1157,6 +1157,14 @@ a.hw-o2b:focus-visible {
 .hw-edge.is-selected {
   stroke-width: 3;
 }
+/* Hover: a clear blue highlight, distinct from the resting branch tones. The
+ * hovered edge is also lifted above nodes (its zIndex is raised in JS - the SVG
+ * edge layer cannot be CSS-stacked above the HTML node layer). Two classes beat
+ * the single-class branch tones on specificity, so no !important is needed. */
+.hw-edge.is-hovered {
+  stroke: #4493f8;
+  stroke-width: 3;
+}
 
 /* The branch-cause label chip on a conditioned edge. */
 .hw-edge-label {

@@ -20,6 +20,10 @@ export interface WorkflowNodeData extends Record<string, unknown> {
 export interface WorkflowEdgeData extends Record<string, unknown> {
   condition?: EdgeCondition;
   fallback?: boolean;
+  /** Transient: the pointer is over this edge. Set only on the render-time
+   *  overlay ({@link hoverEdge}), never on the persisted edge model, so it
+   *  drives the blue hover highlight without dirtying the graph. */
+  hovered?: boolean;
 }
 
 export type FlowNode = FlowNodeBase<WorkflowNodeData>;
@@ -172,6 +176,25 @@ export function edgeTone(data: WorkflowEdgeData | undefined): HandleTone {
   if (c === undefined) return "plain";
   if (c.type === "review_status") return "review";
   return c.equals === "failure" ? "failure" : "success";
+}
+
+// zIndex for the hovered edge. xyflow renders edges below nodes by default; an
+// edge whose zIndex exceeds the nodes' lifts into an SVG layer above them, so a
+// pointed-at edge becomes followable end to end in a dense graph (t_c8e0bd91).
+export const HOVERED_EDGE_Z_INDEX = 1000;
+
+/** Render-time overlay: mark `hoveredId` as hovered (blue highlight) and raise
+ *  its zIndex above nodes, leaving every other edge untouched. Pure - returns a
+ *  new array only when something changes - so hover stays out of the persisted
+ *  edge model and never dirties the graph. Returns the input array when nothing
+ *  is hovered. */
+export function hoverEdge(edges: readonly FlowEdge[], hoveredId: string | null): FlowEdge[] {
+  if (hoveredId === null) return edges as FlowEdge[];
+  return edges.map((edge) =>
+    edge.id === hoveredId
+      ? { ...edge, zIndex: HOVERED_EDGE_Z_INDEX, data: { ...edge.data, hovered: true } }
+      : edge,
+  );
 }
 
 /** Human-readable label for a workflow node type, shared by the canvas node and

@@ -29,12 +29,13 @@ export function WorkflowEdgeView(props: EdgeProps<FlowEdge>): React.ReactElement
   });
   const tone = edgeTone(data);
   const label = edgeConditionLabel(data, source);
+  const hovered = data?.hovered === true;
   return (
     <>
       <BaseEdge
         path={path}
         markerEnd={markerEnd}
-        className={`hw-edge hw-edge--${tone}${selected ? " is-selected" : ""}`}
+        className={`hw-edge hw-edge--${tone}${selected ? " is-selected" : ""}${hovered ? " is-hovered" : ""}`}
         style={tone === "else" ? { strokeDasharray: "6 4" } : undefined}
       />
       {label !== "" && (

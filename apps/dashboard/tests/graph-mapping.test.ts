@@ -9,7 +9,10 @@ import {
   defaultHandleIds,
   shownHandleSpecs,
   nextAddableHandleId,
+  hoverEdge,
+  HOVERED_EDGE_Z_INDEX,
   WORKFLOW_EDGE_TYPE,
+  type FlowEdge,
 } from "../src/editor/graphMapping";
 import type { Workflow, UiLayout } from "../src/api/types";
 
@@ -207,5 +210,29 @@ describe("dynamic handle set (default 2 + add-on-demand)", () => {
     expect(nextAddableHandleId("agent_task", ["success", "failure", "else"])).toBe("out");
     expect(nextAddableHandleId("agent_task", ["success", "failure", "else", "out"])).toBeNull();
     expect(nextAddableHandleId("human_review", ["approved", "rejected"])).toBe("needs_changes");
+  });
+
+  describe("hoverEdge", () => {
+    const edges: FlowEdge[] = [
+      { id: "e1", source: "a", target: "b", type: WORKFLOW_EDGE_TYPE, data: {} },
+      { id: "e2", source: "b", target: "c", type: WORKFLOW_EDGE_TYPE, data: { fallback: true } },
+    ];
+
+    it("returns the same array untouched when nothing is hovered", () => {
+      expect(hoverEdge(edges, null)).toBe(edges);
+    });
+
+    it("lifts the hovered edge above nodes and flags it, leaving the rest alone", () => {
+      const out = hoverEdge(edges, "e1");
+      const hovered = out.find((e) => e.id === "e1")!;
+      const other = out.find((e) => e.id === "e2")!;
+      expect(hovered.zIndex).toBe(HOVERED_EDGE_Z_INDEX);
+      expect(hovered.data?.hovered).toBe(true);
+      // the other edge is not elevated and not flagged
+      expect(other.zIndex).toBeUndefined();
+      expect(other.data?.hovered).toBeUndefined();
+      // the persisted input edge is not mutated (overlay is a copy)
+      expect(edges[0]!.data?.hovered).toBeUndefined();
+    });
   });
 });

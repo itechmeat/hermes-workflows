@@ -11,7 +11,13 @@ import { NodeInspector } from "./NodeInspector";
 import { EdgeInspector } from "./EdgeInspector";
 import { ValidationPanel } from "./ValidationPanel";
 import { CompilePreview } from "./CompilePreview";
-import { nodeTypeLabel, type FlowEdge, type FlowNode, type WorkflowEdgeData } from "./graphMapping";
+import {
+  hoverEdge,
+  nodeTypeLabel,
+  type FlowEdge,
+  type FlowNode,
+  type WorkflowEdgeData,
+} from "./graphMapping";
 import { nodeTypeIcon } from "./nodeTypeIcons";
 import { NodeOpenProvider } from "./nodeOpenContext";
 import { CANVAS_NODE_TYPES } from "../run/canvasNodeTypes";
@@ -118,6 +124,9 @@ export function FlowEditor({
   const [editing, setEditing] = useState(false);
   const [editingEdge, setEditingEdge] = useState(false);
   const [tool, setTool] = useState<Tool>(null);
+  // The edge the pointer is over, for the blue hover highlight + lift-above-
+  // nodes. Kept here (not in the edge model) so hover never dirties the graph.
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   // Profile/model option lists for the inspector selects (the user's Hermes
   // roster + configured models). Best-effort: empty on failure.
   const [profiles, setProfiles] = useState<string[]>([]);
@@ -289,6 +298,18 @@ export function FlowEditor({
     },
   }));
 
+  // Render-time hover overlay: the pointed-at edge turns blue and lifts above
+  // the nodes layer, leaving the persisted edge model (ctrl.edges) untouched.
+  const canvasEdges = useMemo(
+    () => hoverEdge(ctrl.edges, hoveredEdgeId),
+    [ctrl.edges, hoveredEdgeId],
+  );
+  const onEdgeMouseEnter = useCallback(
+    (_event: unknown, edge: FlowEdge) => setHoveredEdgeId(edge.id),
+    [],
+  );
+  const onEdgeMouseLeave = useCallback(() => setHoveredEdgeId(null), []);
+
   const addItems: MenuItem[] = NODE_TYPES.map((type) => ({
     key: type,
     label: nodeTypeLabel(type),
@@ -392,7 +413,7 @@ export function FlowEditor({
             <NodeOpenProvider value={openNode}>
               <ReactFlow
                 nodes={canvasNodes}
-                edges={ctrl.edges}
+                edges={canvasEdges}
                 nodeTypes={CANVAS_NODE_TYPES}
                 edgeTypes={CANVAS_EDGE_TYPES}
                 nodesDraggable={!playing}
@@ -405,6 +426,8 @@ export function FlowEditor({
                 onNodeClick={playing ? undefined : onNodeClick}
                 onNodeDoubleClick={playing ? undefined : onNodeDoubleClick}
                 onEdgeClick={playing ? undefined : onEdgeClick}
+                onEdgeMouseEnter={onEdgeMouseEnter}
+                onEdgeMouseLeave={onEdgeMouseLeave}
                 onPaneClick={playing ? undefined : onPaneClick}
                 defaultViewport={ctrl.viewport}
                 fitView={ctrl.viewport === undefined}
