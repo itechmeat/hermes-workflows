@@ -362,6 +362,10 @@ describe("validateWorkflow — adopt / task_ref", () => {
     expect(codes(adopt({ sequential: true }))).toContain("sequential_without_adopt");
   });
 
+  test("accepts an explicit sequential: false on a non-adopt node", () => {
+    expect(codes(adopt({ sequential: false }))).not.toContain("sequential_without_adopt");
+  });
+
   test("rejects a malformed task_ref", () => {
     expect(codes(adopt({ adopt: true, task_ref: "not a ref!" }))).toContain("invalid_task_ref");
   });

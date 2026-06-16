@@ -274,7 +274,7 @@ function validateAdopt(
         `node '${node.id}' has a review_profile but is not an adopt node`,
       );
     }
-    if (node.sequential !== undefined && adopt !== true) {
+    if (node.sequential === true && adopt !== true) {
       err("sequential_without_adopt", `node '${node.id}' has sequential but is not an adopt node`);
     }
     if (adopt === true && task_ref === undefined) {

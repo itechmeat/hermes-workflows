@@ -161,7 +161,7 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
     schedule.length > 0 && schedule.every((id) => nodes.get(id)?.type === "script");
 
   return {
-    run_status: resolveRunStatus(workflow, run, merged, finishOutcome, failedDeadEnd || aborted),
+    run_status: resolveRunStatus(workflow, run, merged, finishOutcome, failedDeadEnd, aborted),
     ...(finishOutcome !== undefined ? { finish_outcome: finishOutcome } : {}),
     schedule,
     waiting,
@@ -176,7 +176,11 @@ function resolveRunStatus(
   merged: (id: string) => NodeStatus,
   finishOutcome: NodeOutcome | undefined,
   failedDeadEnd: boolean,
+  aborted: boolean,
 ): RunStatus {
+  // A hard abort (e.g. an adopt that drove zero cards) closes the run failed
+  // regardless of any node still active or waiting in a parallel branch.
+  if (aborted) return "failed";
   if (finishOutcome !== undefined) return finishOutcome === "failure" ? "failed" : "completed";
 
   let hasActive = false;

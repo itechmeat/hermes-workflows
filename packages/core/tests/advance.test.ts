@@ -171,6 +171,22 @@ describe("advance — abort_run hard-stop", () => {
     expect(result.schedule).toContain("build");
     expect(result.run_status).toBe("running");
   });
+
+  test("abort_run closes the run as failed even while another node is still active", () => {
+    const run = createRunState(wf, "r");
+    run.status = "running";
+    // 'a' aborts the run, but a parallel node is still running this tick: the
+    // abort is a hard stop and must not be masked by the active node.
+    run.nodes["a"] = {
+      node_id: "a",
+      status: "completed",
+      outcome: "failure",
+      abort_run: true,
+      seq: 1,
+    };
+    run.nodes["build"] = { node_id: "build", status: "running", seq: 0 };
+    expect(advance(wf, run).run_status).toBe("failed");
+  });
 });
 
 describe("advance — script nodes", () => {

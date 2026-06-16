@@ -36,6 +36,29 @@ interface Flags {
   [key: string]: string | boolean | string[];
 }
 
+// Flags that always consume the following token as their value, even when that
+// value itself begins with `--` (e.g. operator `--input "--urgent ..."`). Without
+// this, a value starting with `--` is mistaken for the next flag and dropped.
+const VALUE_FLAGS = new Set([
+  "body",
+  "db",
+  "global-root",
+  "id",
+  "input",
+  "kind",
+  "markdown-file",
+  "node",
+  "origin",
+  "project",
+  "project-root",
+  "roots",
+  "run-file",
+  "spec-file",
+  "templates-root",
+  "title",
+  "workflow",
+]);
+
 function parseFlags(argv: string[]): Flags {
   const flags: Flags = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -43,7 +66,7 @@ function parseFlags(argv: string[]): Flags {
     if (token.startsWith("--")) {
       const key = token.slice(2);
       const next = argv[i + 1];
-      if (next === undefined || next.startsWith("--")) {
+      if (next === undefined || (next.startsWith("--") && !VALUE_FLAGS.has(key))) {
         flags[key] = true;
       } else {
         flags[key] = next;
