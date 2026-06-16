@@ -1,0 +1,129 @@
+"""Detached worker for DirectExecutor. Runs ONE agent invocation and writes its
+settled completion to the store file, then exits.
+
+Why a separate process and not a thread: the engine advances a run from
+short-lived processes (`hermes-workflows run`, and the `advance-all` tick shim).
+``DirectExecutor.schedule`` is non-blocking by contract, so the advancing
+process exits right after scheduling. A worker run in a daemon thread of that
+process dies with it - the agent is orphaned, its result is never captured, and
+the node hangs `started`-but-unsettled forever (the global/cron-driven hang,
+t_a06d9af5). Launched as a detached process (its own session), this runner
+outlives the scheduler and settles the node on its own.
+
+Run by ABSOLUTE FILE PATH (``python <this file> <spec.json>``), never as
+``-m hermes_workflows...``: a path run does not import the ``hermes_workflows``
+package, so this stays stdlib-only and needs neither ``hermes_cli`` nor the
+heavy ``executor`` package import in the fresh child. The completion-file
+format mirrors ``store.CompletionStore`` (keys: settled/outcome/output/started).
+
+Spec JSON (written by ``DirectExecutor.schedule``):
+    {"argv": [...], "timeout": <float|null>, "completion_path": "<path>",
+     "env": {"HERMES_PROFILE": "..."}}
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+
+# Mirror store.MAX_OUTPUT_CHARS: cap captured output so a runaway worker cannot
+# bloat the run store.
+MAX_OUTPUT_CHARS = 100_000
+
+
+def _clip(text):
+    cleaned = (text or "").strip()
+    if len(cleaned) <= MAX_OUTPUT_CHARS:
+        return cleaned
+    return cleaned[:MAX_OUTPUT_CHARS] + "\n…[truncated]"
+
+
+def _write_completion(path, *, settled, outcome, output, started=True):
+    """Atomic write matching CompletionStore.write so a concurrent reader never
+    sees a half-written file."""
+    payload = json.dumps(
+        {"settled": settled, "outcome": outcome, "output": output, "started": started}
+    )
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        fh.write(payload)
+    os.replace(tmp, path)
+
+
+def _read_text(handle) -> str:
+    handle.seek(0)
+    return handle.read().decode("utf-8", "replace")
+
+
+def _kill_process_group(proc) -> None:
+    """SIGKILL the worker's whole process group - start_new_session made it the
+    group leader, so any detached child it spawned dies too - then reap it."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        proc.kill()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _invoke(argv, timeout, env_extra):
+    """Run the agent argv, capturing stdout/stderr to temp files (NOT pipes - a
+    detached grandchild inheriting the agent's stdio would otherwise wedge a pipe
+    read past the timeout). Returns a completion dict."""
+    env = {**os.environ, **(env_extra or {})}
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        try:
+            proc = subprocess.Popen(
+                argv,
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=err,
+                env=env,
+                start_new_session=True,
+            )
+        except FileNotFoundError as exc:
+            runner = argv[0] if argv else ""
+            return dict(
+                settled=True,
+                outcome="failure",
+                output=f"agent runner {runner!r} not found: {exc}",
+            )
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_process_group(proc)
+            return dict(
+                settled=True, outcome="failure", output=f"agent timed out after {timeout:g}s"
+            )
+        stdout = _read_text(out)
+        stderr = _read_text(err)
+    if proc.returncode == 0:
+        return dict(settled=True, outcome="success", output=_clip(stdout))
+    detail = stderr.strip() or stdout.strip()
+    return dict(settled=True, outcome="failure", output=_clip(detail))
+
+
+def main(argv) -> int:
+    spec = json.loads(open(argv[1]).read())
+    completion_path = spec["completion_path"]
+    try:
+        result = _invoke(spec["argv"], spec.get("timeout"), spec.get("env"))
+    except Exception as exc:  # noqa: BLE001 - must settle, never strand the node
+        result = dict(settled=True, outcome="failure", output=f"agent invocation crashed: {exc}")
+    _write_completion(completion_path, **result)
+    # Best-effort cleanup of the one-shot request file.
+    try:
+        os.unlink(argv[1])
+    except OSError:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

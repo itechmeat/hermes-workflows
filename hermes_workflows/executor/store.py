@@ -47,6 +47,11 @@ class CompletionStore:
         )
         os.replace(tmp, path)
 
+    def path_for(self, handle: str) -> Path:
+        """The completion file path for ``handle``. Public so a detached worker
+        (DirectExecutor's runner) can write the same file this store reads."""
+        return self._path(handle)
+
     def _path(self, handle: str) -> Path:
         safe = handle.replace("/", "_").replace(":", "_")
         return self.root / f"{safe}.json"

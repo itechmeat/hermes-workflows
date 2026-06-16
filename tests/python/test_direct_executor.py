@@ -233,6 +233,51 @@ def test_detached_child_holding_stdio_does_not_block_settling(tmp_path, store_di
     assert completion.output == "done: go"
 
 
+def test_completion_survives_a_short_lived_scheduling_process(tmp_path, store_dir) -> None:
+    """The advancing process (``hermes-workflows run`` / the ``advance-all`` tick
+    shim) is short-lived: it calls ``schedule`` and exits immediately, since
+    ``schedule`` is non-blocking by contract. The node's worker must NOT be tied
+    to that process's lifetime - a worker run in a daemon thread of the scheduler
+    dies when the scheduler exits, orphaning the agent and never writing the
+    settled completion (the global/cron-driven hang reported in t_a06d9af5).
+
+    Here a separate Python process schedules the node and exits before the fake
+    agent (a 1s sleep) finishes; this process then polls the store. The worker
+    must outlive its scheduler and settle the node on its own."""
+    import subprocess
+    import sys
+    import textwrap
+
+    hermes = _fake_hermes(tmp_path / "hermes", 'sleep 1; echo "done: $PROMPT"')
+    repo_root = Path(__file__).resolve().parents[2]
+    script = textwrap.dedent(
+        f"""
+        from hermes_workflows.executor.direct_executor import DirectExecutor
+        ex = DirectExecutor(
+            hermes_bin={str(hermes)!r}, store_dir={str(store_dir)!r}, timeout_seconds=10
+        )
+        ex.schedule(
+            run_id="run-1", node_id="n", workflow_id="wf",
+            params={{"assignee": "researcher", "prompt": "go"}},
+        )
+        """
+    )
+    # The scheduling process returns from schedule() and exits right away.
+    # Carry this test's sys.path (which conftest seeded with the Hermes install)
+    # so the bare subprocess can import the plugin package; the detached worker
+    # it spawns is stdlib-only and needs none of this.
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
+    subprocess.run(
+        [sys.executable, "-c", script], cwd=str(repo_root), check=True, timeout=10, env=env
+    )
+    # Poll from this process; the scheduler is already gone. A daemon-thread
+    # worker would have died with it and never settled.
+    poller = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
+    completion = _wait_settled(poller, "run-1:n:0", deadline_s=6)
+    assert completion.outcome == "success"
+    assert completion.output == "done: go"
+
+
 def test_poll_unknown_handle_is_not_settled(tmp_path, store_dir) -> None:
     ex = _executor(tmp_path, store_dir)
     completion = ex.poll("run-1:n:0")

@@ -18,15 +18,19 @@ Kanban backend is durable through the board DB.
 
 from __future__ import annotations
 
-import os
-import signal
+import json
 import subprocess
-import tempfile
-import threading
+import sys
+from pathlib import Path
 from typing import Optional, Sequence
 
 from .base import Completion
-from .store import CompletionStore, clip_output
+from .store import CompletionStore
+
+# The detached worker, run by absolute file path (never `-m`) so the fresh child
+# stays stdlib-only - see _detached_runner for why the worker must outlive the
+# short-lived advancing process.
+_RUNNER_PATH = str(Path(__file__).with_name("_detached_runner.py"))
 
 
 class ProfileNotSpecified(ValueError):
@@ -103,7 +107,13 @@ class DirectExecutor:
         call, so a long agent node stays visible in the run state while it
         works and a concurrent tick (which sees the started marker below)
         cannot double-start it. A missing profile fails fast on the caller's
-        thread — it is the operator's misconfiguration to see."""
+        thread — it is the operator's misconfiguration to see.
+
+        The agent runs in a DETACHED process (its own session), not a daemon
+        thread of this caller: the advancing process is short-lived and exits
+        right after this returns, so a thread-bound worker would be killed
+        mid-flight and the node would hang unsettled (t_a06d9af5). The detached
+        worker outlives the scheduler and writes its own settled completion."""
         handle = _handle(run_id, node_id, iteration)
         current = self.poll(handle)
         if current.settled or current.started:
@@ -111,40 +121,6 @@ class DirectExecutor:
         profile = _profile_of(params)
         if not profile:
             raise ProfileNotSpecified(f"global node {node_id!r} has no profile")
-        # The started marker lands before the thread spawns, so any other
-        # process polling this handle sees in-flight work. (Two processes
-        # racing through this method in the same few ms could still double-
-        # spawn; the completion store is idempotent — last write wins.)
-        self.store.write(handle, Completion(settled=False, started=True))
-        threading.Thread(
-            target=self._run_to_completion,
-            args=(handle, dict(params)),
-            name=f"hw-direct-{handle}",
-            daemon=True,
-        ).start()
-        return handle
-
-    def poll(self, handle: str) -> Completion:
-        return self.store.read(handle)
-
-    # --- internals --------------------------------------------------------
-
-    def _run_to_completion(self, handle: str, params: dict) -> None:
-        """Runner thread body: always settles the handle, even on a crash in
-        the invocation plumbing — an unsettled handle would strand the node."""
-        try:
-            completion = self._invoke(params)
-        except Exception as exc:  # noqa: BLE001 - must settle, never strand
-            completion = Completion(
-                settled=True,
-                outcome="failure",
-                output=f"agent invocation crashed: {exc}",
-            )
-        completion.started = True
-        self.store.write(handle, completion)
-
-    def _invoke(self, params: dict) -> Completion:
-        profile = _profile_of(params)
         argv = build_agent_argv(
             self.hermes_bin,
             profile,
@@ -157,64 +133,43 @@ class DirectExecutor:
         timeout = params.get("timeout_seconds")
         if timeout is None:
             timeout = self.timeout_seconds
+        completion_path = self.store.path_for(handle)
         # HERMES_PROFILE is what tools (e.g. kanban_comment) read to attribute
         # authorship; -p activates the profile, the env var pins it for the
         # child regardless of how it loads config. Mirrors the Kanban worker.
-        env = {**os.environ, "HERMES_PROFILE": profile}
-        # Capture to temp files, NOT pipes. The agent can spawn a detached child
-        # that outlives it and inherits its stdio (e.g. the `hermes send`
-        # delivery worker); a PIPE read — and subprocess's own timeout cleanup
-        # read — then blocks until that grandchild closes the pipe, so the node
-        # hangs forever past its timeout. A file has no reader/EOF coupling.
-        # start_new_session puts the worker in its own process group so the
-        # timeout path can SIGKILL the whole tree, detached children included.
-        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
-            try:
-                proc = subprocess.Popen(
-                    argv,
-                    stdin=subprocess.DEVNULL,
-                    stdout=out,
-                    stderr=err,
-                    env=env,
-                    start_new_session=True,
-                )
-            except FileNotFoundError as exc:
-                return Completion(
+        spec = {
+            "argv": argv,
+            "timeout": timeout,
+            "completion_path": str(completion_path),
+            "env": {"HERMES_PROFILE": profile},
+        }
+        # The started marker lands before the worker spawns, so any other process
+        # polling this handle sees in-flight work and does not double-start it.
+        # (Two processes racing here in the same few ms could still double-spawn;
+        # the completion store is idempotent — last write wins.)
+        self.store.write(handle, Completion(settled=False, started=True))
+        spec_path = completion_path.with_name(completion_path.name + ".req.json")
+        self.store.root.mkdir(parents=True, exist_ok=True)
+        spec_path.write_text(json.dumps(spec))
+        try:
+            subprocess.Popen(
+                [sys.executable, _RUNNER_PATH, str(spec_path)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception as exc:  # noqa: BLE001 - never leave the node stranded as started
+            self.store.write(
+                handle,
+                Completion(
                     settled=True,
                     outcome="failure",
-                    output=f"agent runner {self.hermes_bin!r} not found: {exc}",
-                )
-            try:
-                proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                _kill_process_group(proc)
-                return Completion(
-                    settled=True,
-                    outcome="failure",
-                    output=f"agent timed out after {timeout:g}s",
-                )
-            stdout = _read_text(out)
-            stderr = _read_text(err)
-        if proc.returncode == 0:
-            return Completion(settled=True, outcome="success", output=clip_output(stdout))
-        detail = stderr.strip() or stdout.strip()
-        return Completion(settled=True, outcome="failure", output=clip_output(detail))
+                    output=f"could not launch direct worker: {exc}",
+                    started=True,
+                ),
+            )
+        return handle
 
-
-def _read_text(handle) -> str:
-    handle.seek(0)
-    return handle.read().decode("utf-8", "replace")
-
-
-def _kill_process_group(proc: subprocess.Popen) -> None:
-    """SIGKILL the worker's whole process group — start_new_session made the
-    worker the group leader, so any detached child it spawned dies too — then
-    reap it so no zombie lingers."""
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        proc.kill()
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        pass
+    def poll(self, handle: str) -> Completion:
+        return self.store.read(handle)
