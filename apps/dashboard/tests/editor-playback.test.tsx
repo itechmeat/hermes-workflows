@@ -320,6 +320,15 @@ describe("FlowEditor playback", () => {
     // The mount attach check enters playback and renders the run nodes.
     await waitFor(() => expect(container.querySelector('[data-status="running"]')).not.toBeNull());
 
+    // The node must stay pointer-interactive while the run plays: ReactFlow sets
+    // pointer-events:none on a node that is neither selectable nor draggable and
+    // has no click/mouse handler, which would make the double-click and the open
+    // affordance inert. (fireEvent ignores pointer-events, so this is the only
+    // way to guard the regression in jsdom.)
+    const wrapper = container.querySelector('[data-id="build"]') as HTMLElement;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper.style.pointerEvents).not.toBe("none");
+
     // Open a node mid-run via its open affordance. Double-click drives the same
     // openNode path, but ReactFlow's pointer gesture is undrivable in jsdom
     // (d3-drag throws on mousedown), so the button stands in for it here. The

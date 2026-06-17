@@ -451,7 +451,13 @@ export function FlowEditor({
                 edgeTypes={CANVAS_EDGE_TYPES}
                 nodesDraggable={!playing}
                 nodesConnectable={!playing}
-                elementsSelectable={!playing}
+                // Nodes stay selectable while a run plays: ReactFlow gates a
+                // node's pointer-events on selectable|draggable|onClick|mouse*,
+                // so a non-selectable node with no click handler is inert - the
+                // double-click and the open affordance never reach it. Editing
+                // stays locked by the draggable/connectable/onConnect/delete/
+                // onPaneClick gates below, not by making the node inert.
+                elementsSelectable
                 onNodesChange={ctrl.onNodesChange}
                 onEdgesChange={ctrl.onEdgesChange}
                 onConnect={playing ? undefined : ctrl.onConnect}
