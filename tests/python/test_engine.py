@@ -57,6 +57,57 @@ def test_run_schedules_the_entry_node(engine: Engine) -> None:
     assert _node(run, "plan")["hermes_task_id"]
 
 
+def test_prompt_node_entry_text_reaches_the_first_scheduled_card(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A Prompt node wired as the entry (prompt -> agent_task) must have its
+    authored text layered into the FIRST dispatched card at run start. Regression
+    for a run whose entry-successor card body carried no prompt-node text: the
+    prompt node resolves instantly and its successor schedules in the same first
+    advance, so the layered text has to be present on that first card."""
+    spec = tmp_path / "prompt-entry.workflow.yaml"
+    spec.write_text(
+        "id: prompt-entry\n"
+        "name: Prompt Entry\n"
+        "version: 1\n"
+        "scope:\n"
+        "  type: project\n"
+        "  projects: [demo]\n"
+        "trigger: { type: manual }\n"
+        "defaults: { profile: eng }\n"
+        "nodes:\n"
+        "  - id: brief\n"
+        "    type: prompt\n"
+        "    prompt: \"Ship the urgent fix first; keep the change minimal.\"\n"
+        "  - id: work\n"
+        "    type: agent_task\n"
+        "    title: Do the work\n"
+        "    prompt: \"Implement the feature per the plan.\"\n"
+        "  - id: done\n"
+        "    type: finish\n"
+        "    outcome: success\n"
+        "edges:\n"
+        "  - { from: brief, to: work }\n"
+        "  - { from: work, to: done, condition: { type: node_status, node: work, equals: success } }\n"
+        "  - { from: work, to: done, condition: { type: node_status, node: work, equals: failure } }\n"
+    )
+
+    run = engine.run(str(spec), "pe-1")
+
+    # The prompt node resolved instantly; its successor is the first card.
+    assert _node(run, "brief")["status"] == "completed"
+    card_id = _node(run, "work")["hermes_task_id"]
+    assert card_id
+    body = engine.kanban.board_conn.execute(
+        "SELECT body FROM tasks WHERE id = ?", (card_id,)
+    ).fetchone()[0]
+    # The prompt-node text is the node's PRIMARY instruction, and the node's own
+    # prompt follows it - neither is dropped.
+    assert "Ship the urgent fix first" in body
+    assert "Implement the feature per the plan." in body
+    assert "PRIMARY INSTRUCTION for this node" in body
+
+
 def test_idempotent_tick_creates_no_duplicate(engine: Engine) -> None:
     engine.run(str(SPEC), "run-1")
     task_id = engine.status("run-1")["nodes"]["plan"]["hermes_task_id"]
