@@ -5,6 +5,7 @@ import {
   handleToEdgeData,
   edgeSourceHandle,
   edgeConditionLabel,
+  nodeTypeLabel,
   sourceHandlesFor,
   defaultHandleIds,
   shownHandleSpecs,
@@ -179,6 +180,12 @@ describe("conditional-edge handle mapping", () => {
       "out",
     ]);
     expect(sourceHandlesFor("finish")).toEqual([]);
+    // A Prompt node is a single-output pass-through: only the plain `out` handle.
+    expect(sourceHandlesFor("prompt").map((h) => h.id)).toEqual(["out"]);
+  });
+
+  it("labels the prompt node type", () => {
+    expect(nodeTypeLabel("prompt")).toBe("Prompt");
   });
 });
 

@@ -27,6 +27,7 @@ import type {
   FinishNode,
   ReviewOption,
   WaitNode,
+  PromptNode,
 } from "./nodes.ts";
 import { parseUi } from "./ui.ts";
 import type { UiLayout } from "./ui.ts";
@@ -41,7 +42,15 @@ export interface LoadResult {
   ui?: UiLayout;
 }
 
-const NODE_TYPES = new Set(["agent_task", "script", "condition", "human_review", "finish", "wait"]);
+const NODE_TYPES = new Set([
+  "agent_task",
+  "script",
+  "condition",
+  "human_review",
+  "finish",
+  "wait",
+  "prompt",
+]);
 const SCOPE_TYPES = new Set(["global", "project", "projects"]);
 const REVIEW_OPTIONS = new Set(["approved", "rejected", "needs_changes"]);
 const MEMORY_PROVIDERS = new Set(["auto", "open_second_brain", "none"]);
@@ -304,6 +313,8 @@ function parseNode(value: unknown, index: number): WorkflowNode {
       return parseScript(value, base, id);
     case "condition":
       return { ...base, type: "condition" };
+    case "prompt":
+      return parsePrompt(value, base, id);
     case "human_review":
       return parseHumanReview(value, base, id);
     case "wait":
@@ -432,6 +443,14 @@ function parseHumanReview(value: Rec, base: { id: string }, id: string): HumanRe
       return text as ReviewOption;
     });
   }
+  return node;
+}
+
+function parsePrompt(value: Rec, base: { id: string }, id: string): PromptNode {
+  const node: PromptNode = { ...base, type: "prompt" };
+  // The text is optional; keep the key absent when unspecified so the round-trip
+  // stays lossless for a bare pass-through Prompt node.
+  if (value["prompt"] !== undefined) node.prompt = str(value["prompt"], `node '${id}'.prompt`);
   return node;
 }
 

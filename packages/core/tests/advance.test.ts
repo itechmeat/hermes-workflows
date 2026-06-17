@@ -345,3 +345,33 @@ describe("advance — wait nodes", () => {
     expect(bad.run_status).toBe("failed");
   });
 });
+
+describe("advance — prompt node", () => {
+  // A prompt node is routing-only: it resolves instantly and follows its edge,
+  // so a fresh run with a Prompt entry node schedules its downstream agent_task
+  // in the same tick (the prompt node itself runs no worker).
+  const promptFlow = fromObject({
+    id: "pf",
+    name: "PF",
+    version: 1,
+    scope: { type: "global" },
+    trigger: { type: "manual" },
+    defaults: { profile: "p" },
+    nodes: [
+      { id: "p", type: "prompt", prompt: "primary instruction" },
+      { id: "a", type: "agent_task", prompt: "work" },
+      { id: "done", type: "finish" },
+    ],
+    edges: [
+      { from: "p", to: "a" },
+      { from: "a", to: "done" },
+    ],
+  }).workflow;
+
+  test("a Prompt entry node resolves instantly and schedules its downstream agent_task", () => {
+    const result = advance(promptFlow, createRunState(promptFlow, "r1"));
+    expect(result.node_updates["p"]).toBe("completed");
+    expect(result.schedule).toEqual(["a"]);
+    expect(result.run_status).toBe("running");
+  });
+});

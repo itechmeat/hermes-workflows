@@ -57,6 +57,7 @@ export interface FlowEditorProps {
 // the picker and a placed node stay visually consistent with no duplicate list.
 const NODE_TYPES: NodeType[] = [
   "agent_task",
+  "prompt",
   "script",
   "condition",
   "human_review",

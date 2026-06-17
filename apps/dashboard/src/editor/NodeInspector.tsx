@@ -218,6 +218,21 @@ export function NodeInspector({
         </>
       )}
 
+      {wf.type === "prompt" && (
+        <Field label="Prompt">
+          <Textarea
+            className="hw-textarea--tall"
+            aria-label="Prompt"
+            value={wf.prompt ?? ""}
+            onChange={(e) => onChange({ prompt: e.target.value || undefined })}
+          />
+          <p className="hw-note">
+            Layered above the prompt of each agent task this node connects to, as the primary
+            instruction. Optional.
+          </p>
+        </Field>
+      )}
+
       {wf.type === "script" && (
         <>
           <Field label="Command">

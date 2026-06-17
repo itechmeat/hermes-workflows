@@ -113,7 +113,11 @@ export function advance(workflow: Workflow, run: RunState): AdvanceResult {
         setStatus(id, "running");
         break;
       case "condition":
-        setStatus(id, "completed"); // routing-only, resolves instantly
+      case "prompt":
+        // Routing-only: both resolve instantly and follow their outgoing edge.
+        // A prompt node does no work; its authored text was layered into the
+        // downstream agent_task prompt at compile time.
+        setStatus(id, "completed");
         routeQueue.push(id);
         break;
       case "finish":

@@ -83,11 +83,17 @@ const REVIEW_HANDLES: SourceHandleSpec[] = [
   { id: "out", label: "always", tone: "plain" },
 ];
 
+// A pass-through node (a Prompt node) has a single plain output: it does no
+// work and never branches, so it exposes only the `out` handle.
+const PASS_HANDLES: SourceHandleSpec[] = [{ id: "out", label: "out", tone: "plain" }];
+
 /** The source handles a node type CAN expose (full ordered set). A `human_review`
- *  branches on its review decision; every other non-terminal node branches on its
- *  own success/failure outcome. `finish` is terminal and has none. */
+ *  branches on its review decision; a `prompt` is a single-output pass-through;
+ *  every other non-terminal node branches on its own success/failure outcome.
+ *  `finish` is terminal and has none. */
 export function sourceHandlesFor(type: string): SourceHandleSpec[] {
   if (type === "finish") return [];
+  if (type === "prompt") return PASS_HANDLES;
   if (type === "human_review") return REVIEW_HANDLES;
   return STATUS_HANDLES;
 }
@@ -212,6 +218,7 @@ export const NODE_TYPE_LABEL: Record<string, string> = {
   human_review: "Human review",
   finish: "Finish",
   wait: "Wait",
+  prompt: "Prompt",
 };
 
 export function nodeTypeLabel(type: string): string {

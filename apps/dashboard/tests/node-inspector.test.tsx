@@ -202,6 +202,20 @@ describe("NodeInspector", () => {
     expect(onChange).toHaveBeenCalledWith({ title: "Quality gate" });
   });
 
+  it("edits a prompt node's text, clearing it to undefined when emptied", () => {
+    const onChange = vi.fn();
+    const node = flowNode({ id: "p", type: "prompt", prompt: "ship it" });
+    render(<NodeInspector node={node} onChange={onChange} />);
+
+    const field = screen.getByLabelText("Prompt");
+    expect(field).toHaveValue("ship it");
+    fireEvent.change(field, { target: { value: "ship the urgent fix first" } });
+    expect(onChange).toHaveBeenCalledWith({ prompt: "ship the urgent fix first" });
+    // Emptying the optional field keeps it absent, not "".
+    fireEvent.change(field, { target: { value: "" } });
+    expect(onChange).toHaveBeenCalledWith({ prompt: undefined });
+  });
+
   it("edits agent_task workdir and workspace type", async () => {
     const onChange = vi.fn();
     const node = flowNode({ id: "build", type: "agent_task", prompt: "x" });

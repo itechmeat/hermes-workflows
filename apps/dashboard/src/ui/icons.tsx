@@ -126,6 +126,17 @@ export function FileIcon(): React.ReactElement {
   );
 }
 
+// Prompt node — a speech bubble with text lines (authored instruction text).
+export function PromptIcon(): React.ReactElement {
+  return (
+    <Svg>
+      <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5.6a8.5 8.5 0 0 1-.9-3.9A8.38 8.38 0 0 1 12.5 3a8.38 8.38 0 0 1 8.5 8.5Z" />
+      <line x1="8" y1="10" x2="16" y2="10" />
+      <line x1="8" y1="13.5" x2="13" y2="13.5" />
+    </Svg>
+  );
+}
+
 // --- navigation -------------------------------------------------------------
 
 // Workflows — stacked layers.

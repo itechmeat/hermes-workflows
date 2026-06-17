@@ -24,6 +24,11 @@ export interface CompiledKanbanTask {
   /** Placeholder -> `{{nodes.<id>.output}}` references the engine resolves into
    *  the prompt at schedule time. Carried verbatim; the engine substitutes. */
   input_mapping?: Record<string, string>;
+  /** Authored text from a Prompt node feeding this task (an edge
+   *  `prompt -> agent_task`). The engine layers it ABOVE the resolved prompt as
+   *  the primary instruction, the same way the operator's run `--input` layers.
+   *  Absent when no Prompt node feeds this task. */
+  node_prompt?: string;
   model?: string;
   skills?: string[];
   workspace?: "scratch" | "worktree";
@@ -105,6 +110,22 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
 
   const defaultRetries = workflow.defaults?.max_retries;
 
+  // A Prompt node does no work; its authored text layers above the prompt of
+  // every agent_task it directly feeds (an edge `prompt -> agent_task`). Resolve
+  // that text per target here so the engine can layer it at schedule time. When
+  // several Prompt nodes feed one task their texts join in edge order.
+  const promptNodeText = new Map<string, string>();
+  for (const node of workflow.nodes) {
+    if (node.type === "prompt" && node.prompt) promptNodeText.set(node.id, node.prompt);
+  }
+  const nodePromptByTarget = new Map<string, string>();
+  for (const edge of workflow.edges) {
+    const text = promptNodeText.get(edge.from);
+    if (text === undefined) continue;
+    const prev = nodePromptByTarget.get(edge.to);
+    nodePromptByTarget.set(edge.to, prev === undefined ? text : `${prev}\n\n${text}`);
+  }
+
   for (const node of workflow.nodes) {
     if (node.type === "script") {
       const step: CompiledScript = { node: node.id, kind: "script", command: node.command };
@@ -132,6 +153,8 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     };
     if (node.title !== undefined) task.title = node.title;
     if (node.input_mapping !== undefined) task.input_mapping = node.input_mapping;
+    const nodePrompt = nodePromptByTarget.get(node.id);
+    if (nodePrompt !== undefined) task.node_prompt = nodePrompt;
     if (node.adopt !== undefined) task.adopt = node.adopt;
     if (node.task_ref !== undefined) task.task_ref = node.task_ref;
     if (node.review_profile !== undefined) task.review_profile = node.review_profile;

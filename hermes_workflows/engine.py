@@ -855,6 +855,13 @@ class Engine:
                 for nid, node in run["nodes"].items()
             }
             prompt = resolve_input_mapping(prompt, mapping, channels)
+        # A Prompt node feeding this task (an edge ``prompt -> agent_task``)
+        # contributes its authored text as the node's PRIMARY instruction,
+        # layered above the node's own prompt - the same mechanism as the
+        # operator input, sourced from a graph node instead of the CLI.
+        node_prompt = params.get("node_prompt")
+        if node_prompt:
+            prompt = _layer_node_prompt(prompt, node_prompt)
         # The run-level operator input (if any) is layered ABOVE every agent_task
         # node's prompt as the highest-priority block: it overrides conflicting
         # node instructions and otherwise binds as an additional constraint.
@@ -1119,6 +1126,22 @@ def _run_result_output(run: dict) -> Optional[str]:
         if best_seq is None or seq >= best_seq:
             best, best_seq = node["output"], seq
     return best
+
+
+def _layer_node_prompt(prompt: str, node_prompt: str) -> str:
+    """Layer a Prompt node's authored text above an agent_task's own prompt as
+    the node's primary instruction. When the node's own prompt is empty the
+    Prompt node text becomes the whole instruction (no wrapper noise); otherwise
+    the node's own prompt follows as additional context."""
+    if not prompt.strip():
+        return node_prompt
+    return (
+        "PRIMARY INSTRUCTION for this node. Follow this first; treat the node "
+        "instructions below as additional context where they do not conflict.\n\n"
+        f"{node_prompt}\n\n"
+        "--- node instructions ---\n\n"
+        f"{prompt}"
+    )
 
 
 def _layer_operator_input(prompt: str, operator_input: str) -> str:

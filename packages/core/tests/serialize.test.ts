@@ -68,6 +68,29 @@ describe("serializeWorkflow", () => {
     expect(round.workflow).toEqual(wf);
   });
 
+  test("round-trips a prompt node (with text and bare)", () => {
+    const wf = fromObject({
+      id: "pn",
+      name: "PN",
+      version: 1,
+      scope: { type: "global" },
+      trigger: { type: "manual" },
+      nodes: [
+        { id: "p", type: "prompt", prompt: "primary instruction" },
+        { id: "bare", type: "prompt" },
+        { id: "a", type: "agent_task", prompt: "work", profile: "x" },
+        { id: "done", type: "finish" },
+      ],
+      edges: [
+        { from: "p", to: "a" },
+        { from: "bare", to: "a" },
+        { from: "a", to: "done" },
+      ],
+    }).workflow;
+    const round = parseWorkflow(serializeWorkflow(wf));
+    expect(round.workflow).toEqual(wf);
+  });
+
   test("round-trips the enabled flag", () => {
     for (const enabled of [true, false] as const) {
       const wf = fromObject({

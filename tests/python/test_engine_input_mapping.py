@@ -175,3 +175,60 @@ def test_absent_run_input_leaves_the_prompt_byte_identical(tmp_path: Path) -> No
     eng._schedule_node(fake, run, "r1", "b", params)
 
     assert fake.captured["prompt"] == "base prompt"
+
+
+def test_node_prompt_layers_above_the_node_prompt(tmp_path: Path) -> None:
+    """A Prompt node's text (compiled onto the task as node_prompt) is layered
+    above the node's own prompt as the primary instruction, before it."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {"workflow_id": "w", "origin": None, "nodes": {"b": {"status": "pending"}}}
+    params = {
+        "node": "b",
+        "kind": "agent",
+        "prompt": "do the work",
+        "node_prompt": "ship the urgent fix first",
+    }
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    prompt = fake.captured["prompt"]
+    assert "ship the urgent fix first" in prompt
+    assert "do the work" in prompt
+    assert "primary instruction" in prompt.lower()
+    assert prompt.index("ship the urgent fix first") < prompt.index("do the work")
+
+
+def test_node_prompt_becomes_the_whole_prompt_when_node_prompt_is_empty(tmp_path: Path) -> None:
+    """An agent_task with an empty own prompt fed by a Prompt node runs on the
+    Prompt node text alone - no wrapper noise around an empty instruction."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {"workflow_id": "w", "origin": None, "nodes": {"b": {"status": "pending"}}}
+    params = {"node": "b", "kind": "agent", "prompt": "", "node_prompt": "investigate the outage"}
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    assert fake.captured["prompt"] == "investigate the outage"
+
+
+def test_operator_input_layers_above_a_node_prompt(tmp_path: Path) -> None:
+    """Precedence: operator --input is highest, the Prompt node text is the
+    node's primary instruction below it, then the node's own prompt."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {
+        "workflow_id": "w",
+        "origin": None,
+        "input": "operator override",
+        "nodes": {"b": {"status": "pending"}},
+    }
+    params = {
+        "node": "b",
+        "kind": "agent",
+        "prompt": "own prompt",
+        "node_prompt": "prompt node text",
+    }
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    prompt = fake.captured["prompt"]
+    assert prompt.index("operator override") < prompt.index("prompt node text")
+    assert prompt.index("prompt node text") < prompt.index("own prompt")

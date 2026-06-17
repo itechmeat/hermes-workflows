@@ -14,6 +14,7 @@ const ALL_TYPES: NodeType[] = [
   "human_review",
   "finish",
   "wait",
+  "prompt",
 ];
 
 // The node views render @xyflow `Handle`s, which need the ReactFlow store.
