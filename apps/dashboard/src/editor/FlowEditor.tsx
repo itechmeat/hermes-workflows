@@ -441,7 +441,12 @@ export function FlowEditor({
                 onConnect={playing ? undefined : ctrl.onConnect}
                 onMoveEnd={ctrl.onMoveEnd}
                 onNodeClick={playing ? undefined : onNodeClick}
-                onNodeDoubleClick={playing ? undefined : onNodeDoubleClick}
+                // Double-click opens the node inspector in BOTH modes; while a
+                // run plays it opens read-only (the inspector is fully
+                // disabled). Zoom-on-double-click is held during a run so the
+                // inspect gesture is not swallowed by a canvas zoom.
+                onNodeDoubleClick={onNodeDoubleClick}
+                zoomOnDoubleClick={!playing}
                 onEdgeClick={playing ? undefined : onEdgeClick}
                 onEdgeMouseEnter={onEdgeMouseEnter}
                 onEdgeMouseLeave={onEdgeMouseLeave}

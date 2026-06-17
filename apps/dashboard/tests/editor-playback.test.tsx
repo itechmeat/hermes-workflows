@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FlowEditor } from "../src/editor/FlowEditor";
 import type { WorkflowsApi } from "../src/api/client";
@@ -288,6 +288,38 @@ describe("FlowEditor playback", () => {
     expect(playButton().textContent).toMatch(/running…/i);
     expect(screen.getByRole("button", { name: /add node/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
+  });
+
+  it("opens a node read-only while the run plays", async () => {
+    const listRuns = vi.fn(async () => [runSummary("running")]);
+    const { container } = render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ listRuns })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+
+    // The mount attach check enters playback and renders the run nodes.
+    await waitFor(() => expect(container.querySelector('[data-status="running"]')).not.toBeNull());
+
+    // Open a node mid-run via its open affordance. Double-click drives the same
+    // openNode path, but ReactFlow's pointer gesture is undrivable in jsdom
+    // (d3-drag throws on mousedown), so the button stands in for it here. The
+    // button sits in an unmeasured (hidden) node subtree, so it is queried by
+    // aria-label and clicked with fireEvent (role queries skip hidden nodes).
+    const openBtn = await waitFor(() => {
+      const el = document.querySelector('[aria-label="Open node build"]');
+      if (el === null) throw new Error("open button not rendered yet");
+      return el as HTMLElement;
+    });
+    fireEvent.click(openBtn);
+
+    // The inspector opens fully disabled: a disabled <fieldset> renders every
+    // control read-only, so the live run can never be edited from here.
+    const promptField = await screen.findByLabelText("Prompt");
+    expect(promptField).toBeDisabled();
   });
 
   it("hands off to the inspector when the active run found on mount settles", async () => {

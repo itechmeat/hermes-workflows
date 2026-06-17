@@ -10,8 +10,9 @@ import type { RunFlowNode } from "./runView";
 // It keeps the same info the editor node shows — type, id, title, and the
 // agent_task's `profile · model` — and adds the run status on its OWN line, so
 // starting a run augments the card rather than overwriting its info line. In
-// the inspector an open button reveals the node-detail modal (the editor
-// playback canvas provides no selector, so a running node is not inspectable).
+// an open button reveals the node-detail modal when `onSelect` is wired; both
+// the run inspector and editor playback wire it, so a running node is
+// inspectable from either (read-only in playback, alongside double-click open).
 export function RunNodeView({ data, selected }: NodeProps<RunFlowNode>): React.ReactElement {
   const { node, status, approvalPending, onSelect } = data;
   const meta = nodeMetaLine(node);
