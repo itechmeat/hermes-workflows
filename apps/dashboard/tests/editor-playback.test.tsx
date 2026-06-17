@@ -290,6 +290,22 @@ describe("FlowEditor playback", () => {
     expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
   });
 
+  it("shows the run-log panel while the run plays", async () => {
+    const listRuns = vi.fn(async () => [runSummary("running")]);
+    render(
+      <FlowEditor
+        detail={detail}
+        client={stubClient({ listRuns })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+
+    // The curated run-log panel - present on the Runs inspector - now also
+    // surfaces during editor playback, fed from the same run state.
+    expect(await screen.findByText(/run started/i)).toBeInTheDocument();
+  });
+
   it("opens a node read-only while the run plays", async () => {
     const listRuns = vi.fn(async () => [runSummary("running")]);
     const { container } = render(

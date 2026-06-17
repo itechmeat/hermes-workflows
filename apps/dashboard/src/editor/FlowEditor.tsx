@@ -23,6 +23,8 @@ import { NodeOpenProvider } from "./nodeOpenContext";
 import { CANVAS_NODE_TYPES } from "../run/canvasNodeTypes";
 import { CANVAS_EDGE_TYPES } from "./edges/canvasEdgeTypes";
 import { overlayRunStatus } from "../run/runView";
+import { RunLogPanel } from "../run/RunLogPanel";
+import { deriveRunLogEvents, mergeRunLog, type LoggedRunEvent } from "../run/runLog";
 import { Button, Menu, Modal, ToastHost, useToasts, type MenuItem } from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
 import {
@@ -206,6 +208,19 @@ export function FlowEditor({
   // Editing locks once a run is underway; the brief mount attach check does
   // not lock the canvas, it only holds the Play button.
   const playing = playback.phase === "starting" || playback.phase === "playing";
+
+  // The curated, timestamped run log - the same panel the Runs inspector shows -
+  // surfaces during playback, derived from the polled run state. Reset when the
+  // playing run changes so a new run does not inherit the prior run's entries.
+  const playbackRun = playback.run;
+  const [runLog, setRunLog] = useState<LoggedRunEvent[]>([]);
+  useEffect(() => {
+    setRunLog([]);
+  }, [playbackRun?.run_id]);
+  useEffect(() => {
+    if (playbackRun === null) return;
+    setRunLog((prev) => mergeRunLog(prev, deriveRunLogEvents(playbackRun), Date.now()));
+  }, [playbackRun]);
 
   const openNode = useCallback(
     (id: string) => {
@@ -460,6 +475,7 @@ export function FlowEditor({
                 <Controls />
               </ReactFlow>
             </NodeOpenProvider>
+            <RunLogPanel events={runLog} />
           </div>
         </div>
       </div>
