@@ -28,7 +28,7 @@ isn't enough, a workflow is the layer above it.
 
 ```mermaid
 flowchart LR
-    You["You — visual editor"] -->|draw a graph| WF["Workflow spec<br/>(agent · script · condition · human_review · finish)"]
+    You["You — visual editor"] -->|draw a graph| WF["Workflow spec<br/>(agent · prompt · script · condition · human_review · wait · finish)"]
     WF -->|compiles to, no second engine| N["Hermes natives:<br/>Kanban · Cron · Profiles · delivery router · /api/skills"]
     N --> Run["Autonomous run<br/>branching · inter-node data · review gates"]
     Run -->|telemetry · traces| Insp["Run inspector"]
@@ -43,10 +43,12 @@ flowchart LR
   `@xyflow/react` editor (edit every node field, duplicate, auto-layout), validate, preview the
   compiled Hermes plan, then press **Play** to run it in place — the canvas shows live per-node
   progress and hands off to the run inspector when it settles.
-- **Five node types.** `agent_task` (a prompt assigned to a profile, with a per-node model and
-  skills picked from the host `/api/skills` catalog), `script` (a deterministic shell step, gated
-  by an enable flag and an env allowlist), `condition` (branch on a node's outcome or a review
-  decision), `human_review` (pause for a channel-agnostic decision), and `finish`.
+- **Seven node types.** `agent_task` (a prompt assigned to a profile, with a per-node model and
+  skills picked from the host `/api/skills` catalog), `prompt` (a block of authored text layered
+  above a downstream `agent_task` as its primary instruction), `script` (a deterministic shell
+  step, gated by an enable flag and an env allowlist), `condition` (branch on a node's outcome or
+  a review decision), `human_review` (pause for a channel-agnostic decision), `wait` (a worker-free
+  wait for an external signal, e.g. a merged PR), and `finish`.
 - **Triggers.** `manual`, `cron`, or an event trigger (`webhook` / `github` / `api`) — see
   [the schema doc](docs/workflow-schema.md#triggers) for the current support boundary.
 - **Inter-node data flow.** A node consumes a prior node's output via
