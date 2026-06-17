@@ -200,6 +200,48 @@ describe("FlowEditor playback", () => {
     expect(calls).toEqual(["save", "run"]);
   });
 
+  it("starts the run with an operator directive entered in the Run input modal", async () => {
+    const client = stubClient();
+    render(<FlowEditor detail={detail} client={client} onOpenRun={vi.fn()} pollMs={10_000} />);
+
+    await waitFor(() => expect(playButton()).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: /run input/i }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: /operator input/i }),
+      "ship the urgent fix first",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^run$/i }));
+
+    await waitFor(() =>
+      expect(client.runWorkflow).toHaveBeenCalledWith("deploy", {
+        input: "ship the urgent fix first",
+      }),
+    );
+  });
+
+  it("starts with no input when the plain Play button is used", async () => {
+    const client = stubClient();
+    render(<FlowEditor detail={detail} client={client} onOpenRun={vi.fn()} pollMs={10_000} />);
+
+    await clickPlay();
+
+    // No options object: a bare start keeps the run input null.
+    expect(client.runWorkflow).toHaveBeenCalledWith("deploy");
+  });
+
+  it("does not send a whitespace-only directive as input", async () => {
+    const client = stubClient();
+    render(<FlowEditor detail={detail} client={client} onOpenRun={vi.fn()} pollMs={10_000} />);
+
+    await waitFor(() => expect(playButton()).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: /run input/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /operator input/i }), "   ");
+    await userEvent.click(screen.getByRole("button", { name: /^run$/i }));
+
+    await waitFor(() => expect(client.runWorkflow).toHaveBeenCalled());
+    expect(client.runWorkflow).toHaveBeenCalledWith("deploy");
+  });
+
   it("does not start the run when the pre-play save fails", async () => {
     const saveWorkflow = vi.fn(async () => {
       throw new Error("disk full");

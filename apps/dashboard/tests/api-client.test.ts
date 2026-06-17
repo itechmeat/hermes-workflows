@@ -155,6 +155,15 @@ describe("workflows API client", () => {
     expect(JSON.parse(String(h.last().init?.body))).toEqual({});
   });
 
+  it("forwards an operator input directive to the run endpoint", async () => {
+    const h = harness();
+    h.reply({ run_id: "wf-1-abc", status: "running" });
+    await h.client.runWorkflow("wf-1", { input: "ship the urgent fix first" });
+    expect(JSON.parse(String(h.last().init?.body))).toEqual({
+      input: "ship the urgent fix first",
+    });
+  });
+
   it("lists runs and unwraps the envelope (active by default)", async () => {
     const h = harness();
     const run = { run_id: "r1", workflow_id: "wf-1", status: "running" };

@@ -20,9 +20,11 @@ export interface RunPlayback {
   run: RunState | null;
   /** Attach, start, or poll failure, surfaced to the operator. */
   error: string | null;
-  /** Start the run. Ignored unless the playback is idle (double-start guard;
-   *  also inert while the mount attach check is pending). */
-  play: () => void;
+  /** Start the run, optionally with a free-form operator input layered above
+   *  every agent_task prompt at highest priority for this run. Ignored unless
+   *  the playback is idle (double-start guard; also inert while the mount attach
+   *  check is pending). */
+  play: (input?: string) => void;
 }
 
 export function useRunPlayback(options: {
@@ -116,47 +118,56 @@ export function useRunPlayback(options: {
     if (shouldHandOff(status)) handOff(runId);
   }, [runId, status, handOff]);
 
-  const play = useCallback(() => {
-    if (phase !== "idle") return;
-    setPhase("starting");
-    setStartError(null);
-    api
-      .runWorkflow(workflowId)
-      .then((started) => {
-        // A fast run can already be settled in the start response — hand over
-        // immediately instead of stalling on a poll that would never observe
-        // an active state.
-        if (shouldHandOff(started.status)) {
-          handOff(started.run_id);
-          return;
-        }
-        setRunId(started.run_id);
-        setPhase("playing");
-      })
-      .catch((error: unknown) => {
-        const startMessage = `Run failed to start: ${errorMessage(error)}`;
-        setStartError(startMessage);
-        // A refused start may mean another surface holds the active run
-        // (single-flight 409) — re-check and adopt it so the canvas shows the
-        // real state alongside the refusal.
-        findActiveRun()
-          .then((active) => {
-            if (!mounted.current) return;
-            if (active === undefined) {
+  const play = useCallback(
+    (input?: string) => {
+      if (phase !== "idle") return;
+      setPhase("starting");
+      setStartError(null);
+      // Only send options when there is a directive to send: a bare start keeps
+      // the single-arg call shape the run endpoint and the rest of the surface
+      // already expect.
+      const trimmed = input?.trim();
+      const startCall = trimmed
+        ? api.runWorkflow(workflowId, { input: trimmed })
+        : api.runWorkflow(workflowId);
+      startCall
+        .then((started) => {
+          // A fast run can already be settled in the start response — hand over
+          // immediately instead of stalling on a poll that would never observe
+          // an active state.
+          if (shouldHandOff(started.status)) {
+            handOff(started.run_id);
+            return;
+          }
+          setRunId(started.run_id);
+          setPhase("playing");
+        })
+        .catch((error: unknown) => {
+          const startMessage = `Run failed to start: ${errorMessage(error)}`;
+          setStartError(startMessage);
+          // A refused start may mean another surface holds the active run
+          // (single-flight 409) — re-check and adopt it so the canvas shows the
+          // real state alongside the refusal.
+          findActiveRun()
+            .then((active) => {
+              if (!mounted.current) return;
+              if (active === undefined) {
+                setPhase("idle");
+                return;
+              }
+              adopt(active);
+            })
+            .catch((checkError: unknown) => {
+              if (!mounted.current) return;
               setPhase("idle");
-              return;
-            }
-            adopt(active);
-          })
-          .catch((checkError: unknown) => {
-            if (!mounted.current) return;
-            setPhase("idle");
-            setStartError(
-              `${startMessage}; active-run check also failed: ${errorMessage(checkError)}`,
-            );
-          });
-      });
-  }, [api, workflowId, phase, handOff, findActiveRun, adopt]);
+              setStartError(
+                `${startMessage}; active-run check also failed: ${errorMessage(checkError)}`,
+              );
+            });
+        });
+    },
+    [api, workflowId, phase, handOff, findActiveRun, adopt],
+  );
 
   return { phase, run, error: startError ?? pollError, play };
 }

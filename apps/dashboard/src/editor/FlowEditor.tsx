@@ -25,7 +25,16 @@ import { CANVAS_EDGE_TYPES } from "./edges/canvasEdgeTypes";
 import { overlayRunStatus } from "../run/runView";
 import { RunLogPanel } from "../run/RunLogPanel";
 import { deriveRunLogEvents, mergeRunLog, type LoggedRunEvent } from "../run/runLog";
-import { Button, Menu, Modal, ToastHost, useToasts, type MenuItem } from "../ui/components";
+import {
+  Button,
+  Field,
+  Menu,
+  Modal,
+  Textarea,
+  ToastHost,
+  useToasts,
+  type MenuItem,
+} from "../ui/components";
 import { useHeaderSlots } from "../ui/PluginHeader";
 import {
   ArrowLeftIcon,
@@ -33,6 +42,7 @@ import {
   FileIcon,
   LayoutIcon,
   PlayIcon,
+  PromptIcon,
   PlusIcon,
   SaveIcon,
   ShieldCheckIcon,
@@ -154,6 +164,12 @@ export function FlowEditor({
   // The edge the pointer is over, for the blue hover highlight + lift-above-
   // nodes. Kept here (not in the edge model) so hover never dirties the graph.
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  // The optional run-wide operator directive and the modal that captures it.
+  // Layered above every agent_task prompt at highest priority for the run it
+  // starts (the same directive the `/workflow run --input` CLI supplies); the
+  // plain Play button starts with no input.
+  const [runInputOpen, setRunInputOpen] = useState(false);
+  const [runInput, setRunInput] = useState("");
   // Profile/model option lists for the inspector selects (the user's Hermes
   // roster + configured models). Best-effort: empty on failure.
   const [profiles, setProfiles] = useState<string[]>([]);
@@ -236,16 +252,26 @@ export function FlowEditor({
     if (saved) onSaved?.(saved);
   }, [ctrl, onSaved]);
 
-  const handlePlay = useCallback(async () => {
-    // Run what the operator sees: a dirty graph is saved first, and a failed
-    // save (already shown in the status label) aborts the start.
-    if (ctrl.dirty) {
-      const saved = await ctrl.save();
-      if (saved === null) return;
-      onSaved?.(saved);
-    }
-    playback.play();
-  }, [ctrl, playback, onSaved]);
+  const handlePlay = useCallback(
+    async (input?: string) => {
+      // Run what the operator sees: a dirty graph is saved first, and a failed
+      // save (already shown in the status label) aborts the start.
+      if (ctrl.dirty) {
+        const saved = await ctrl.save();
+        if (saved === null) return;
+        onSaved?.(saved);
+      }
+      playback.play(input);
+    },
+    [ctrl, playback, onSaved],
+  );
+
+  // Start from the run-input modal: carry the typed directive into the run,
+  // then close the modal. The text is kept so a refused start can be retried.
+  const handleRunWithInput = useCallback(() => {
+    setRunInputOpen(false);
+    void handlePlay(runInput);
+  }, [handlePlay, runInput]);
 
   const handleInspectorChange = useCallback(
     (patch: Partial<WorkflowNode>) => {
@@ -374,17 +400,29 @@ export function FlowEditor({
   const actions = (
     <>
       {onOpenRun !== undefined && (
-        <Button
-          variant="primary"
-          // Held while the mount attach check runs (phase "attaching"), while
-          // a run is underway, and while the pre-play save is in flight (so a
-          // rapid double-click cannot queue a second save).
-          disabled={playback.phase !== "idle" || ctrl.status.kind === "saving"}
-          onClick={handlePlay}
-        >
-          <PlayIcon />
-          {PLAY_LABEL[playback.phase]}
-        </Button>
+        <>
+          <Button
+            variant="primary"
+            // Held while the mount attach check runs (phase "attaching"), while
+            // a run is underway, and while the pre-play save is in flight (so a
+            // rapid double-click cannot queue a second save).
+            disabled={playback.phase !== "idle" || ctrl.status.kind === "saving"}
+            // Bare start: no operator input. The () wrapper drops the click
+            // event so it is never mistaken for the input directive.
+            onClick={() => void handlePlay()}
+          >
+            <PlayIcon />
+            {PLAY_LABEL[playback.phase]}
+          </Button>
+          <Button
+            aria-label="Run input"
+            title="Run with an operator directive"
+            disabled={playback.phase !== "idle" || ctrl.status.kind === "saving"}
+            onClick={() => setRunInputOpen(true)}
+          >
+            <PromptIcon />
+          </Button>
+        </>
       )}
       <Menu
         label={
@@ -486,6 +524,39 @@ export function FlowEditor({
           </div>
         </div>
       </div>
+
+      {runInputOpen && (
+        <Modal
+          title="Run input"
+          ariaLabel="Run with an operator directive"
+          onClose={() => setRunInputOpen(false)}
+          footer={
+            <>
+              <Button onClick={() => setRunInputOpen(false)}>Cancel</Button>
+              <Button variant="primary" onClick={handleRunWithInput}>
+                <PlayIcon />
+                Run
+              </Button>
+            </>
+          }
+        >
+          <Field label="Operator input" htmlFor="hw-run-input">
+            <Textarea
+              id="hw-run-input"
+              aria-label="Operator input"
+              rows={6}
+              value={runInput}
+              placeholder="A run-wide directive layered above every agent task at highest priority."
+              onChange={(e) => setRunInput(e.target.value)}
+            />
+          </Field>
+          <p className="hw-note">
+            Optional. Steers this run only - it overrides conflicting node
+            instructions and otherwise binds as an additional constraint. Leave
+            empty to run the graph as authored.
+          </p>
+        </Modal>
+      )}
 
       {editing && ctrl.selectedNode !== null && (
         <Modal
