@@ -45,6 +45,11 @@ export interface CompiledKanbanTask {
   /** Per-node override of the per-card completion subscription; unset inherits
    *  the workflow-level `subscribe_cards` (see AgentTaskNode.notify_completion). */
   notify_completion?: boolean;
+  /** Run this node OFF the board (no Kanban card), via the direct profile
+   *  runner, so internal orchestration steps do not clutter the operator's
+   *  board (see AgentTaskNode.board). Set only when the node opted out with
+   *  `board: false`; absent means the node creates a card as before. */
+  off_board?: boolean;
 }
 
 /** A script node compiled for local execution by the plugin's ScriptExecutor.
@@ -155,6 +160,9 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     if (node.input_mapping !== undefined) task.input_mapping = node.input_mapping;
     const nodePrompt = nodePromptByTarget.get(node.id);
     if (nodePrompt !== undefined) task.node_prompt = nodePrompt;
+    // `board: false` runs the node off the project board (no card); carried as
+    // a positive flag so an absent value never reads as off-board downstream.
+    if (node.board === false) task.off_board = true;
     if (node.adopt !== undefined) task.adopt = node.adopt;
     if (node.task_ref !== undefined) task.task_ref = node.task_ref;
     if (node.review_profile !== undefined) task.review_profile = node.review_profile;

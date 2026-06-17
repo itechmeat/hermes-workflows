@@ -268,3 +268,37 @@ describe("compileToHermesPlan — prompt node", () => {
     expect(plan.kanban_tasks.find((t) => t.node === "a")?.node_prompt).toBe("first\n\nsecond");
   });
 });
+
+describe("compileToHermesPlan — off-board nodes", () => {
+  test("board: false marks the compiled task off_board; default stays absent", () => {
+    const plan = compileToHermesPlan(
+      wf(
+        [
+          { id: "internal", type: "agent_task", prompt: "orchestrate", board: false },
+          { id: "onboard", type: "agent_task", prompt: "work" },
+          { id: "done", type: "finish" },
+        ],
+        [
+          { from: "internal", to: "onboard" },
+          { from: "onboard", to: "done" },
+        ],
+      ),
+    );
+    expect(plan.kanban_tasks.find((t) => t.node === "internal")?.off_board).toBe(true);
+    // An on-board node (board absent, or true) carries no off_board flag.
+    expect(plan.kanban_tasks.find((t) => t.node === "onboard")?.off_board).toBeUndefined();
+  });
+
+  test("board: true is explicitly on-board (no off_board flag)", () => {
+    const plan = compileToHermesPlan(
+      wf(
+        [
+          { id: "a", type: "agent_task", prompt: "work", board: true },
+          { id: "done", type: "finish" },
+        ],
+        [{ from: "a", to: "done" }],
+      ),
+    );
+    expect(plan.kanban_tasks.find((t) => t.node === "a")?.off_board).toBeUndefined();
+  });
+});

@@ -91,6 +91,28 @@ describe("serializeWorkflow", () => {
     expect(round.workflow).toEqual(wf);
   });
 
+  test("round-trips an agent_task board flag (off-board and explicit on-board)", () => {
+    const wf = fromObject({
+      id: "ob",
+      name: "OB",
+      version: 1,
+      scope: { type: "project" },
+      trigger: { type: "manual" },
+      defaults: { profile: "p" },
+      nodes: [
+        { id: "internal", type: "agent_task", prompt: "orchestrate", board: false },
+        { id: "onboard", type: "agent_task", prompt: "work", board: true },
+        { id: "done", type: "finish" },
+      ],
+      edges: [
+        { from: "internal", to: "onboard" },
+        { from: "onboard", to: "done" },
+      ],
+    }).workflow;
+    const round = parseWorkflow(serializeWorkflow(wf));
+    expect(round.workflow).toEqual(wf);
+  });
+
   test("round-trips the enabled flag", () => {
     for (const enabled of [true, false] as const) {
       const wf = fromObject({

@@ -108,6 +108,78 @@ def test_prompt_node_entry_text_reaches_the_first_scheduled_card(
     assert "PRIMARY INSTRUCTION for this node" in body
 
 
+def test_off_board_node_creates_no_card_and_routes_via_the_direct_runner(tmp_path: Path) -> None:
+    """A project agent_task with ``board: false`` runs OFF the board: no Kanban
+    card is created (the operator board is not cluttered by internal steps), it
+    settles through the direct runner, and its on-board successor still gets a
+    real card. Regression for project runs materialising every internal step as
+    a board card (t_b79a0dd4)."""
+    from hermes_workflows.executor import DirectExecutor, ScriptExecutor
+
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    eng = Engine(
+        core_cli=["bun", "run", str(CLI)],
+        db_path=str(tmp_path / "runs.db"),
+        kanban=KanbanExecutor(board),
+        direct=DirectExecutor(
+            hermes_bin=fake_hermes_bin(tmp_path / "hermes"),
+            store_dir=tmp_path / "store",
+            timeout_seconds=30,
+        ),
+        # A script executor makes _executor_for wrap the scope in a composite,
+        # which is what routes off-board nodes to the direct runner.
+        script=ScriptExecutor(store_dir=tmp_path / "script", env_allowlist=[], enabled=lambda: True),
+    )
+    try:
+        spec = tmp_path / "off-board.workflow.yaml"
+        spec.write_text(
+            "id: off-board\n"
+            "name: Off Board\n"
+            "version: 1\n"
+            "scope:\n"
+            "  type: project\n"
+            "  projects: [demo]\n"
+            "trigger: { type: manual }\n"
+            "defaults: { profile: eng }\n"
+            "nodes:\n"
+            "  - id: orchestrate\n"
+            "    type: agent_task\n"
+            "    prompt: \"propose the scope\"\n"
+            "    board: false\n"
+            "  - id: build\n"
+            "    type: agent_task\n"
+            "    prompt: \"do the work\"\n"
+            "  - id: done\n"
+            "    type: finish\n"
+            "    outcome: success\n"
+            "edges:\n"
+            "  - { from: orchestrate, to: build }\n"
+            "  - { from: build, to: done, condition: { type: node_status, node: build, equals: success } }\n"
+            "  - { from: build, to: done, condition: { type: node_status, node: build, equals: failure } }\n"
+        )
+
+        run = eng.run(str(spec), "ob-1")
+        # The off-board node runs via the direct runner: its handle is the
+        # run:node:iteration token, NOT a t_ Kanban id, and no card was created.
+        orch_handle = _node(run, "orchestrate")["hermes_task_id"]
+        assert orch_handle == "ob-1:orchestrate:0"
+        assert board.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 0
+
+        # Drive the off-board node to settle, then the on-board successor lands a
+        # real card.
+        run = _advance_until(
+            eng, str(spec), "ob-1", lambda r: _node(r, "build")["status"] == "scheduled"
+        )
+        build_handle = _node(run, "build")["hermes_task_id"]
+        assert build_handle.startswith("t_")
+        rows = board.execute("SELECT current_step_key FROM tasks").fetchall()
+        # Exactly one card on the board - the on-board work item, never the
+        # internal orchestration step.
+        assert [r[0] for r in rows] == ["build"]
+    finally:
+        board.close()
+
+
 def test_idempotent_tick_creates_no_duplicate(engine: Engine) -> None:
     engine.run(str(SPEC), "run-1")
     task_id = engine.status("run-1")["nodes"]["plan"]["hermes_task_id"]

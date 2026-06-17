@@ -21,8 +21,26 @@ during editor playback.
   as an authorable graph node. Routing-only: it creates no Kanban card and runs
   no worker. When the agent task's own prompt is empty the Prompt node text
   becomes the whole instruction; the run `--input`, when set, still sits above it.
+- **Operator-input field on the editor Run affordance.** The editor can now
+  supply a run-wide operator directive: a Run-input button next to Play opens a
+  modal with an optional textarea whose text is layered above every `agent_task`
+  prompt at highest priority for that run (the same directive the
+  `/workflow run --input` CLI supplies). The plain Play button keeps its
+  no-input start.
+- **Off-board agent_task nodes.** A project-scope `agent_task` can set
+  `board: false` to run off the project board through the direct profile runner:
+  no Kanban card is created, so internal orchestration steps no longer clutter
+  the operator's board - real cards stay reserved for the actual work (an
+  `adopt` node, or an epic card the run opens). Off-board nodes run without a
+  project worktree, so they are for reasoning/orchestration steps; a no-op in
+  `global` scope.
 
 ### Fixed
+
+- **Prompt-node text reaches the first dispatched card.** A regression guard
+  asserts a Prompt node wired as the entry layers its authored text into the
+  first scheduled card body at run start (the node resolves instantly and its
+  successor schedules in the same advance).
 
 - **Panning the canvas no longer marks the workflow dirty.** A pure pan or zoom
   no longer flips the editor to "unsaved"; the viewport still rides along on the

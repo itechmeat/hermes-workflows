@@ -410,6 +410,10 @@ function parseAgentTask(value: Rec, base: { id: string }, id: string): AgentTask
     }
     node.notify_completion = value["notify_completion"];
   }
+  if (value["board"] !== undefined) {
+    if (typeof value["board"] !== "boolean") fail(`node '${id}'.board must be a boolean`);
+    node.board = value["board"];
+  }
   return node;
 }
 

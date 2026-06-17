@@ -31,6 +31,13 @@ def _composite():
     return CompositeExecutor(scope=scope, script=script), scope, script
 
 
+def _composite_with_direct():
+    scope = _Recorder("scope", "t_abc123")
+    script = _Recorder("script", "script:run-1:lint:0")
+    direct = _Recorder("direct", "run-1:work:0")
+    return CompositeExecutor(scope=scope, script=script, direct=direct), scope, script, direct
+
+
 def test_schedule_routes_script_kind_to_the_script_executor() -> None:
     comp, scope, script = _composite()
     handle = comp.schedule(
@@ -69,3 +76,44 @@ def test_poll_routes_other_handles_to_the_scope_executor() -> None:
     assert comp.poll("t_abc123").output == "scope"
     assert scope.polled == ["t_abc123"]
     assert not script.polled
+
+
+def test_schedule_routes_off_board_nodes_to_the_direct_runner() -> None:
+    comp, scope, script, direct = _composite_with_direct()
+    handle = comp.schedule(
+        run_id="run-1", node_id="work", workflow_id="wf",
+        params={"kind": "agent", "prompt": "do", "off_board": True, "assignee": "p"},
+    )
+    assert handle == direct.handle
+    assert direct.scheduled and not scope.scheduled and not script.scheduled
+
+
+def test_schedule_keeps_on_board_nodes_on_the_scope_executor() -> None:
+    comp, scope, script, direct = _composite_with_direct()
+    comp.schedule(
+        run_id="run-1", node_id="work", workflow_id="wf",
+        params={"kind": "agent", "prompt": "do"},
+    )
+    assert scope.scheduled and not direct.scheduled
+
+
+def test_poll_routes_direct_shaped_handles_to_the_direct_runner() -> None:
+    comp, scope, script, direct = _composite_with_direct()
+    assert comp.poll("run-1:work:0").output == "direct"
+    assert direct.polled == ["run-1:work:0"]
+    assert not scope.polled
+    # A Kanban id still routes to the scope executor even with a direct backend.
+    assert comp.poll("t_abc123").output == "scope"
+    assert scope.polled == ["t_abc123"]
+
+
+def test_off_board_without_a_direct_runner_fails_loud_in_project_scope() -> None:
+    import pytest
+
+    comp, scope, script = _composite()  # no direct; scope is Kanban-like (has adopt)
+    scope.adopt = lambda task_id, *, assignee: task_id  # mark scope as Kanban-backed
+    with pytest.raises(ValueError, match="off-board"):
+        comp.schedule(
+            run_id="run-1", node_id="work", workflow_id="wf",
+            params={"kind": "agent", "prompt": "do", "off_board": True},
+        )

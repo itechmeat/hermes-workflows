@@ -127,7 +127,17 @@ deep-link resolution are host surfaces pending upstream Hermes support.
       Implement the feature according to the plan.
     max_retries: 1
     timeout_seconds: 3600
+    board: true                   # default; set false to run off the board
   ```
+  By default a project-scope agent_task creates a Kanban card the worker pool
+  drives. Set `board: false` to run the node **off the board** through the direct
+  profile runner: no card is created, so internal orchestration steps do not
+  clutter the operator's board - reserve real cards for the actual work (an
+  `adopt` node driving an existing card, or an epic card the run itself opens).
+  An off-board node runs without a project worktree, so it is for
+  reasoning/orchestration steps, not for nodes that must commit to the repo. In
+  `global` scope it is a no-op (every node already runs through the direct
+  runner).
   An agent_task can instead **drive an existing board card** rather than create
   one — the native Kanban flow where the work is the card:
   ```yaml

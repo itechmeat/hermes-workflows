@@ -67,6 +67,28 @@ describe("NodeInspector", () => {
     expect(onChange).toHaveBeenCalledWith({ notify_completion: undefined });
   });
 
+  it("takes an agent_task off the board when 'Run on the project board' is unchecked", async () => {
+    const onChange = vi.fn();
+    const node = flowNode({ id: "build", type: "agent_task", prompt: "p" });
+    render(<NodeInspector node={node} onChange={onChange} />);
+
+    const toggle = screen.getByRole("checkbox", { name: /run on the project board/i });
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    expect(onChange).toHaveBeenCalledWith({ board: false });
+  });
+
+  it("restores an off-board agent_task to the board (board omitted)", async () => {
+    const onChange = vi.fn();
+    const node = flowNode({ id: "build", type: "agent_task", prompt: "p", board: false });
+    render(<NodeInspector node={node} onChange={onChange} />);
+
+    const toggle = screen.getByRole("checkbox", { name: /run on the project board/i });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+    expect(onChange).toHaveBeenCalledWith({ board: undefined });
+  });
+
   it("edits a wait node's PR reference and timeout", () => {
     const onChange = vi.fn();
     const node = flowNode({

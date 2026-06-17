@@ -797,6 +797,10 @@ class Engine:
         effective = node_pref if node_pref is not None else subscribe_cards
         if not effective:
             return
+        # An off-board node has no card to subscribe (it ran via the direct
+        # runner), so there is nothing to ping on - skip it.
+        if params and params.get("off_board"):
+            return
         origin = run.get("origin")
         if not origin or (params and params.get("kind") == "script"):
             return
@@ -821,7 +825,9 @@ class Engine:
         # composite routes script steps to the script backend by kind, leaving
         # the single-executor advance loop otherwise unchanged.
         if self.script is not None:
-            return CompositeExecutor(scope=base, script=self.script)
+            # `direct` is the off-board backend for `board: false` nodes (a no-op
+            # in global scope, where `base` already is the direct runner).
+            return CompositeExecutor(scope=base, script=self.script, direct=self.direct)
         return base
 
     def _scope_executor(self, scope: dict, run: dict) -> NodeExecutor:
