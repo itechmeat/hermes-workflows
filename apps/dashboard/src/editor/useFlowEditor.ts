@@ -169,12 +169,12 @@ export function useFlowEditor(detail: SpecDetail, client: WorkflowsApi): FlowEdi
     [setEdges],
   );
 
-  const onMoveEnd = useCallback((event: unknown, next: Viewport) => {
-    // Always track the viewport so a save persists the current view, but only
-    // mark dirty on a user gesture: xyflow's programmatic fitView on mount fires
-    // onMoveEnd with a null event, which must not dirty an untouched graph.
+  const onMoveEnd = useCallback((_event: unknown, next: Viewport) => {
+    // Track the viewport so a later save persists the current view, but never
+    // mark the graph dirty: panning or zooming the canvas is not a workflow
+    // change, so it must not flip an otherwise-untouched graph to "unsaved".
+    // The latest viewport rides along on the next genuine save.
     setViewport(next);
-    if (event !== null && event !== undefined) setDirty(true);
   }, []);
 
   const selectNode = useCallback((id: string | null) => setSelectedNodeId(id), []);

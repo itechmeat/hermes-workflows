@@ -145,17 +145,20 @@ describe("useFlowEditor", () => {
     expect(result.current.dirty).toBe(true);
   });
 
-  it("marks dirty on a user pan/zoom but not on a programmatic fitView", () => {
+  it("tracks the viewport on pan/zoom but does not mark the graph dirty", () => {
     const { result } = renderHook(() => useFlowEditor(detail, stubClient()));
-    const viewport = { x: 1, y: 2, zoom: 1.5 };
 
     // programmatic fitView fires onMoveEnd with a null event
-    act(() => result.current.onMoveEnd(null, viewport));
+    act(() => result.current.onMoveEnd(null, { x: 1, y: 2, zoom: 1.5 }));
     expect(result.current.dirty).toBe(false);
 
-    // a user gesture carries an event
-    act(() => result.current.onMoveEnd(new MouseEvent("mouseup"), viewport));
-    expect(result.current.dirty).toBe(true);
+    // a user pan/zoom carries an event: the viewport is tracked so a later
+    // save persists the current view, but panning the canvas is not itself a
+    // workflow change and must not dirty an otherwise-untouched graph.
+    const panned = { x: 9, y: 9, zoom: 2 };
+    act(() => result.current.onMoveEnd(new MouseEvent("mouseup"), panned));
+    expect(result.current.dirty).toBe(false);
+    expect(result.current.viewport).toEqual(panned);
   });
 
   it("marks dirty on an edge removal", () => {
