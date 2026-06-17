@@ -65,14 +65,6 @@ const NODE_TYPES: NodeType[] = [
 /** Which header-tool panel is open in a modal, if any. */
 type Tool = "validate" | "compile" | null;
 
-function statusLabel(status: SaveStatus, dirty: boolean): string {
-  if (status.kind === "saving") return "Saving…";
-  if (status.kind === "error") return `Save failed: ${status.message}`;
-  if (dirty) return "Unsaved changes";
-  if (status.kind === "saved") return "Saved";
-  return "No changes";
-}
-
 // Surfaces a failed save as a prominent, dismissible toast (the inline bar
 // label is easy to miss). The message is the core's human-readable validation
 // reason - e.g. "incomplete_branch: node 'collect' branches on node_status but
@@ -97,6 +89,38 @@ function SaveErrorToast({ status }: { status: SaveStatus }): null {
       data: { testId: "save-error-toast" },
     });
   }, [status, toasts]);
+  return null;
+}
+
+// Surfaces a run start / poll / attach failure as a toast - the editor header
+// no longer carries an inline error. The toast is closed when the error clears
+// (a self-healing poll failure disappears on the next good poll) and replaced
+// when a different message arrives, so at most one run-error toast is shown.
+function PlaybackErrorToast({ error }: { error: string | null }): null {
+  const toasts = useToasts();
+  const idRef = useRef<string | null>(null);
+  const shownFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (error === null) {
+      if (idRef.current !== null) {
+        toasts.close(idRef.current);
+        idRef.current = null;
+      }
+      shownFor.current = null;
+      return;
+    }
+    if (shownFor.current === error) return; // same message, one toast
+    shownFor.current = error;
+    if (idRef.current !== null) toasts.close(idRef.current);
+    idRef.current = toasts.add({
+      title: "Run error",
+      description: error,
+      type: "error",
+      priority: "high",
+      timeout: 0, // an error stays until it self-heals or the operator dismisses it
+      data: { testId: "playback-error-toast" },
+    });
+  }, [error, toasts]);
   return null;
 }
 
@@ -381,20 +405,13 @@ export function FlowEditor({
         items={toolItems}
         disabled={playing}
       />
-      {playback.error !== null && (
-        <span role="alert" className="hw-bar-status hw-error">
-          {playback.error}
-        </span>
-      )}
-      <span role="status" className="hw-bar-status">
-        {statusLabel(ctrl.status, ctrl.dirty)}
-      </span>
     </>
   );
 
   return (
     <ToastHost>
       <SaveErrorToast status={ctrl.status} />
+      <PlaybackErrorToast error={playback.error} />
       {slots ? (
         <>
           {slots.leftHost ? createPortal(title, slots.leftHost) : null}

@@ -217,7 +217,8 @@ describe("FlowEditor playback", () => {
     await userEvent.click(screen.getByRole("button", { name: /auto-layout/i }));
     await clickPlay();
 
-    await screen.findByText(/save failed: disk full/i);
+    const toast = await screen.findByTestId("save-error-toast");
+    expect(toast.textContent).toMatch(/disk full/i);
     expect(runWorkflow).not.toHaveBeenCalled();
     expect(playButton()).toBeEnabled();
   });
@@ -237,8 +238,8 @@ describe("FlowEditor playback", () => {
 
     await clickPlay();
 
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/workflow is disabled/i);
+    const toast = await screen.findByTestId("playback-error-toast");
+    expect(toast.textContent).toMatch(/workflow is disabled/i);
     // The editor returns to idle so the operator can fix the cause and retry.
     expect(playButton()).toBeEnabled();
   });
@@ -261,10 +262,10 @@ describe("FlowEditor playback", () => {
 
     await clickPlay();
 
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/network down/i);
+    const toast = await screen.findByTestId("playback-error-toast");
+    expect(toast.textContent).toMatch(/network down/i);
     // The next successful poll clears the error instead of killing playback.
-    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument(), {
+    await waitFor(() => expect(screen.queryByTestId("playback-error-toast")).not.toBeInTheDocument(), {
       timeout: 1000,
     });
   });
@@ -356,9 +357,9 @@ describe("FlowEditor playback", () => {
       />,
     );
 
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/active-run check failed/i);
-    expect(alert.textContent).toMatch(/runs store unreachable/i);
+    const toast = await screen.findByTestId("playback-error-toast");
+    expect(toast.textContent).toMatch(/active-run check failed/i);
+    expect(toast.textContent).toMatch(/runs store unreachable/i);
     expect(playButton()).toBeEnabled();
   });
 
@@ -384,8 +385,8 @@ describe("FlowEditor playback", () => {
 
     await clickPlay();
 
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/already has an active run/i);
+    const toast = await screen.findByTestId("playback-error-toast");
+    expect(toast.textContent).toMatch(/already has an active run/i);
     await waitFor(() => expect(playButton().textContent).toMatch(/running…/i));
     expect(playButton()).toBeDisabled();
   });

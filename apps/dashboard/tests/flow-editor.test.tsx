@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FlowEditor } from "../src/editor/FlowEditor";
 import type { WorkflowsApi } from "../src/api/client";
@@ -77,8 +77,9 @@ describe("FlowEditor", () => {
 
   it("starts clean with Save disabled", () => {
     render(<FlowEditor detail={detail} client={stubClient()} />);
+    // A disabled Save button is the only "no changes" signal now; the header
+    // carries no status text.
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
-    expect(screen.getByText(/no changes/i)).toBeInTheDocument();
   });
 
   it("stays clean on mount even when the spec has no saved viewport (fitView)", () => {
@@ -159,8 +160,9 @@ describe("FlowEditor", () => {
     render(<FlowEditor detail={detail} client={stubClient()} />);
     await userEvent.click(screen.getByRole("button", { name: /auto-layout/i }));
     await userEvent.click(screen.getByRole("button", { name: /save/i }));
-    // Give the save round-trip a tick to settle, then assert no toast surfaced.
-    expect(await screen.findByText(/saved/i)).toBeInTheDocument();
+    // A successful save clears dirty, re-disabling the Save button; the header
+    // carries no status text now, so the button state is the settle signal.
+    await waitFor(() => expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled());
     expect(screen.queryByTestId("save-error-toast")).not.toBeInTheDocument();
   });
 });

@@ -1221,7 +1221,8 @@ a.hw-o2b:focus-visible {
   box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
   color: var(--color-foreground, #e6edf3);
 }
-.hw-toast--save-error {
+.hw-toast--save-error,
+.hw-toast--error {
   border-color: var(--color-destructive, #c0392b);
 }
 .hw-toast__body {
@@ -1233,7 +1234,8 @@ a.hw-o2b:focus-visible {
   font-size: 13px;
   margin: 0 0 2px;
 }
-.hw-toast--save-error .hw-toast__title {
+.hw-toast--save-error .hw-toast__title,
+.hw-toast--error .hw-toast__title {
   color: var(--color-destructive, #c0392b);
 }
 .hw-toast__description {
