@@ -115,20 +115,40 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
 
   const defaultRetries = workflow.defaults?.max_retries;
 
-  // A Prompt node does no work; its authored text layers above the prompt of
-  // every agent_task it directly feeds (an edge `prompt -> agent_task`). Resolve
-  // that text per target here so the engine can layer it at schedule time. When
-  // several Prompt nodes feed one task their texts join in edge order.
+  // A Prompt node does no work; its authored text is a PRIMARY INSTRUCTION for
+  // every agent_task DOWNSTREAM of it — from where it is embedded onward,
+  // following edges transitively, not merely its immediate successor. A Prompt
+  // node may sit anywhere in any workflow; an empty one (no text) is a pass-
+  // through no-op and contributes nothing. When several Prompt nodes reach the
+  // same task their texts join in node-declaration order. Resolve the per-target
+  // text here so the engine layers it at schedule time.
   const promptNodeText = new Map<string, string>();
   for (const node of workflow.nodes) {
     if (node.type === "prompt" && node.prompt) promptNodeText.set(node.id, node.prompt);
   }
-  const nodePromptByTarget = new Map<string, string>();
+  const adjacency = new Map<string, string[]>();
   for (const edge of workflow.edges) {
-    const text = promptNodeText.get(edge.from);
+    const outs = adjacency.get(edge.from) ?? [];
+    outs.push(edge.to);
+    adjacency.set(edge.from, outs);
+  }
+  const nodePromptByTarget = new Map<string, string>();
+  // Iterate Prompt nodes in declaration order so a task reached by several gets
+  // their texts in a stable order. For each, walk everything reachable downstream
+  // and layer its text onto each node once (the seen-set also breaks cycles).
+  for (const node of workflow.nodes) {
+    const text = promptNodeText.get(node.id);
     if (text === undefined) continue;
-    const prev = nodePromptByTarget.get(edge.to);
-    nodePromptByTarget.set(edge.to, prev === undefined ? text : `${prev}\n\n${text}`);
+    const seen = new Set<string>([node.id]);
+    const queue = [...(adjacency.get(node.id) ?? [])];
+    while (queue.length > 0) {
+      const target = queue.shift() as string;
+      if (seen.has(target)) continue;
+      seen.add(target);
+      const prev = nodePromptByTarget.get(target);
+      nodePromptByTarget.set(target, prev === undefined ? text : `${prev}\n\n${text}`);
+      for (const next of adjacency.get(target) ?? []) queue.push(next);
+    }
   }
 
   for (const node of workflow.nodes) {

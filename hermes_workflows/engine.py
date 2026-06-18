@@ -1136,16 +1136,26 @@ def _run_result_output(run: dict) -> Optional[str]:
 
 def _layer_node_prompt(prompt: str, node_prompt: str) -> str:
     """Layer a Prompt node's authored text above an agent_task's own prompt as
-    the node's primary instruction. When the node's own prompt is empty the
-    Prompt node text becomes the whole instruction (no wrapper noise); otherwise
-    the node's own prompt follows as additional context."""
+    the operator's run directive. The directive has the highest authority over
+    every DECISION the step makes (what to select, the scope, the version,
+    whether to release, ...), but it is carried out THROUGH this step's own task,
+    never instead of it: the directive must not make a step overstep its role -
+    a read-only step stays read-only, a step does not take over another step's
+    work or create artifacts outside its stated scope. This keeps the authored
+    Prompt the priority instruction without letting it short-circuit the graph.
+    When the step has no own prompt the directive becomes the whole instruction."""
     if not prompt.strip():
         return node_prompt
     return (
-        "PRIMARY INSTRUCTION for this node. Follow this first; treat the node "
-        "instructions below as additional context where they do not conflict.\n\n"
+        "OPERATOR DIRECTIVE for this run (highest authority). It governs every "
+        "decision you make in this step - what to select, the scope, the version, "
+        "whether to release, and so on:\n\n"
         f"{node_prompt}\n\n"
-        "--- node instructions ---\n\n"
+        "Carry out this directive ONLY through this step's own task described "
+        "below. Do NOT take over another step's work, create or modify anything "
+        "outside this step's stated scope, or break this step's constraints - a "
+        "read-only step stays read-only. Honour the directive within your role.\n\n"
+        "--- this step's task ---\n\n"
         f"{prompt}"
     )
 
