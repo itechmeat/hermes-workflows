@@ -165,18 +165,24 @@ deep-link resolution are host surfaces pending upstream Hermes support.
   Running a workflow with script nodes requires `execution.scripts_enabled` and
   exposes only `execution.script_env_allowlist` vars — see `execution.md`.
 - **prompt** — a block of authored text with one input and one output, and no
-  work of its own. Placed before an agent_task (an edge `prompt -> agent_task`),
-  its text layers above that task's own prompt as the primary instruction - the
-  same layering the run `--input` applies (see `execution.md`), packaged as a
-  graph node. Routing-only: it resolves instantly and follows its edge, creating
-  no Kanban card and running no worker. The text is optional.
+  work of its own. Its text becomes the operator directive for every agent_task
+  reachable DOWNSTREAM of it (a transitive walk over the edges), so a Prompt node
+  governs the whole sub-flow from its insertion point, not just its immediate
+  successor. The directive holds the highest authority over each step's decisions
+  (what to select, the scope, the version, whether to release) but is carried out
+  only through that step's own role - a read-only step stays read-only and no
+  step takes over another's work - the same layering the run `--input` applies
+  (see `execution.md`), packaged as a graph node. Routing-only: it resolves
+  instantly and follows its edge, creating no Kanban card and running no worker.
+  The text is optional; several Prompt nodes feeding one task join in
+  node-declaration order.
   ```yaml
   - id: brief
     type: prompt
     prompt: "Ship the urgent fix first; keep the change minimal."
   ```
-  When the downstream agent_task's own prompt is empty the Prompt node text
-  becomes the whole instruction; a run `--input`, when set, still sits above it.
+  When a downstream agent_task's own prompt is empty the Prompt node text becomes
+  the whole instruction; a run `--input`, when set, still sits above it.
 - **condition** — a routing-only node; its outgoing edges carry the conditions.
 - **human_review** — pauses the run; `options: [approved, rejected, needs_changes]`.
   The resolution may carry an optional operator note, consumable downstream as

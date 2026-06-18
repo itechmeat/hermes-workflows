@@ -194,7 +194,7 @@ def test_node_prompt_layers_above_the_node_prompt(tmp_path: Path) -> None:
     prompt = fake.captured["prompt"]
     assert "ship the urgent fix first" in prompt
     assert "do the work" in prompt
-    assert "primary instruction" in prompt.lower()
+    assert "operator directive" in prompt.lower()
     assert prompt.index("ship the urgent fix first") < prompt.index("do the work")
 
 

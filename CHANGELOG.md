@@ -15,11 +15,15 @@ during editor playback.
 ### Added
 
 - **Prompt node.** A new `prompt` node type: an optional block of authored text
-  with one input and one output, nothing else. Placed before an `agent_task` (an
-  edge `prompt -> agent_task`), its text layers above that task's own prompt as
-  the primary instruction - the same layering the run `--input` applies, packaged
+  with one input and one output, nothing else. Its text becomes the operator
+  directive for every `agent_task` reachable downstream of it (a transitive walk
+  over the edges), so a Prompt node governs the whole sub-flow from its insertion
+  point. The directive holds the highest authority over each step's decisions but
+  is carried out only through that step's own role - a read-only step stays
+  read-only, so a run-wide directive cannot make a step overstep and
+  short-circuit the graph. The same layering the run `--input` applies, packaged
   as an authorable graph node. Routing-only: it creates no Kanban card and runs
-  no worker. When the agent task's own prompt is empty the Prompt node text
+  no worker. When an agent task's own prompt is empty the Prompt node text
   becomes the whole instruction; the run `--input`, when set, still sits above it.
 - **Operator-input field on the editor Run affordance.** The editor can now
   supply a run-wide operator directive: a Run-input button next to Play opens a

@@ -101,11 +101,11 @@ def test_prompt_node_entry_text_reaches_the_first_scheduled_card(
     body = engine.kanban.board_conn.execute(
         "SELECT body FROM tasks WHERE id = ?", (card_id,)
     ).fetchone()[0]
-    # The prompt-node text is the node's PRIMARY instruction, and the node's own
+    # The prompt-node text is the run's operator directive, and the node's own
     # prompt follows it - neither is dropped.
     assert "Ship the urgent fix first" in body
     assert "Implement the feature per the plan." in body
-    assert "PRIMARY INSTRUCTION for this node" in body
+    assert "OPERATOR DIRECTIVE for this run" in body
 
 
 def test_off_board_node_creates_no_card_and_routes_via_the_direct_runner(tmp_path: Path) -> None:
