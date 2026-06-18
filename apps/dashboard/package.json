@@ -1,6 +1,6 @@
 {
   "name": "@hermes-workflows/dashboard",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Visual workflow editor + run inspector frontend for the Hermes Workflows dashboard plugin.",
   "type": "module",

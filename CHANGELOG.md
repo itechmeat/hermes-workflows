@@ -4,7 +4,7 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.4.0 - 2026-06-17
+## 0.4.0 - 2026-06-18
 
 A Prompt node that packages the operator-input mechanism as an authorable graph
 node, plus a set of editor legibility fixes: panning no longer marks the graph
@@ -45,7 +45,6 @@ during editor playback.
   asserts a Prompt node wired as the entry layers its authored text into the
   first scheduled card body at run start (the node resolves instantly and its
   successor schedules in the same advance).
-
 - **Panning the canvas no longer marks the workflow dirty.** A pure pan or zoom
   no longer flips the editor to "unsaved"; the viewport still rides along on the
   next genuine save.
