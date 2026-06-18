@@ -824,10 +824,16 @@ class Engine:
         # Script nodes run locally in any scope: wrap the scope executor so the
         # composite routes script steps to the script backend by kind, leaving
         # the single-executor advance loop otherwise unchanged.
-        if self.script is not None:
-            # `direct` is the off-board backend for `board: false` nodes (a no-op
-            # in global scope, where `base` already is the direct runner).
-            return CompositeExecutor(scope=base, script=self.script, direct=self.direct)
+        # Wrap in a composite whenever EITHER a script backend or a direct
+        # backend exists: script nodes route to the script executor, and
+        # `board: false` nodes route off-board to `direct`. Gating only on
+        # `script` would silently send off-board tasks back to the board (a card)
+        # in a kanban+direct setup with no script backend.
+        if self.script is not None or self.direct is not None:
+            # With no script backend, route `kind == script` to the scope
+            # executor (the prior behaviour) rather than dropping it.
+            script_target = self.script if self.script is not None else base
+            return CompositeExecutor(scope=base, script=script_target, direct=self.direct)
         return base
 
     def _scope_executor(self, scope: dict, run: dict) -> NodeExecutor:

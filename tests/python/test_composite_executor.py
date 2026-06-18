@@ -89,7 +89,7 @@ def test_schedule_routes_off_board_nodes_to_the_direct_runner() -> None:
 
 
 def test_schedule_keeps_on_board_nodes_on_the_scope_executor() -> None:
-    comp, scope, script, direct = _composite_with_direct()
+    comp, scope, _script, direct = _composite_with_direct()
     comp.schedule(
         run_id="run-1", node_id="work", workflow_id="wf",
         params={"kind": "agent", "prompt": "do"},
@@ -98,7 +98,7 @@ def test_schedule_keeps_on_board_nodes_on_the_scope_executor() -> None:
 
 
 def test_poll_routes_direct_shaped_handles_to_the_direct_runner() -> None:
-    comp, scope, script, direct = _composite_with_direct()
+    comp, scope, _script, direct = _composite_with_direct()
     assert comp.poll("run-1:work:0").output == "direct"
     assert direct.polled == ["run-1:work:0"]
     assert not scope.polled
@@ -110,7 +110,7 @@ def test_poll_routes_direct_shaped_handles_to_the_direct_runner() -> None:
 def test_off_board_without_a_direct_runner_fails_loud_in_project_scope() -> None:
     import pytest
 
-    comp, scope, script = _composite()  # no direct; scope is Kanban-like (has adopt)
+    comp, scope, _script = _composite()  # no direct; scope is Kanban-like (has adopt)
     scope.adopt = lambda task_id, *, assignee: task_id  # mark scope as Kanban-backed
     with pytest.raises(ValueError, match="off-board"):
         comp.schedule(

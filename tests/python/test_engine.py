@@ -180,6 +180,55 @@ def test_off_board_node_creates_no_card_and_routes_via_the_direct_runner(tmp_pat
         board.close()
 
 
+def test_off_board_routes_to_direct_even_without_a_script_backend(tmp_path: Path) -> None:
+    """Off-board routing must not depend on a script backend: an engine wired
+    with kanban + direct but script=None still routes a board:false node to the
+    direct runner (no card), not back onto the board. Guards the _executor_for
+    gate (it must wrap in a composite when EITHER script or direct exists)."""
+    from hermes_workflows.executor import DirectExecutor
+
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    eng = Engine(
+        core_cli=["bun", "run", str(CLI)],
+        db_path=str(tmp_path / "runs.db"),
+        kanban=KanbanExecutor(board),
+        direct=DirectExecutor(
+            hermes_bin=fake_hermes_bin(tmp_path / "hermes"),
+            store_dir=tmp_path / "store",
+            timeout_seconds=30,
+        ),
+        # No script backend: the off-board path must still engage.
+        script=None,
+    )
+    try:
+        spec = tmp_path / "off-board-noscript.workflow.yaml"
+        spec.write_text(
+            "id: off-board-noscript\n"
+            "name: Off Board No Script\n"
+            "version: 1\n"
+            "scope:\n"
+            "  type: project\n"
+            "  projects: [demo]\n"
+            "trigger: { type: manual }\n"
+            "defaults: { profile: eng }\n"
+            "nodes:\n"
+            "  - id: orchestrate\n"
+            "    type: agent_task\n"
+            "    prompt: \"propose the scope\"\n"
+            "    board: false\n"
+            "  - id: done\n"
+            "    type: finish\n"
+            "    outcome: success\n"
+            "edges:\n"
+            "  - { from: orchestrate, to: done }\n"
+        )
+        run = eng.run(str(spec), "obns-1")
+        assert _node(run, "orchestrate")["hermes_task_id"] == "obns-1:orchestrate:0"
+        assert board.execute("SELECT COUNT(*) FROM tasks").fetchone()[0] == 0
+    finally:
+        board.close()
+
+
 def test_idempotent_tick_creates_no_duplicate(engine: Engine) -> None:
     engine.run(str(SPEC), "run-1")
     task_id = engine.status("run-1")["nodes"]["plan"]["hermes_task_id"]
