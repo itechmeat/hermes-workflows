@@ -160,6 +160,12 @@ edges:
       cmdRunCreate(db, spec, "p-enum", undefined, undefined, undefined, '{"region":"apac"}'),
     ).rejects.toThrow(/not allowed/);
   });
+
+  test("enforces a required param even when --params is omitted", async () => {
+    // No --params at all: a template with a required param must still fail at
+    // run-create, not leak through as an unresolved {{params.region}} later.
+    await expect(cmdRunCreate(db, spec, "p-omit")).rejects.toThrow(/region/);
+  });
 });
 
 describe("cli commands — single-flight guard", () => {

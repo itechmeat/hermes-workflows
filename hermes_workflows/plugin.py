@@ -131,7 +131,7 @@ def register(ctx: Any) -> None:
             "workflow",
             _handle_command,
             description="Run and manage Workflows (list / run / status / review / cancel / explain).",
-            args_hint="run <id> [name=value ...] | status <run> | review <run> <node> <decision> | cancel <run> | list",
+            args_hint="run <id> [project] [name=value ...] | status <run> | review <run> <node> <decision> | cancel <run> | list",
         )
 
 
@@ -166,10 +166,16 @@ def _parse_run_args(tail: list[str]) -> tuple[Optional[str], dict[str, str]]:
     for token in tail:
         if "=" in token:
             name, value = token.split("=", 1)
-            if name:
-                params[name] = value
+            if not name:
+                raise ValueError(f"invalid param {token!r}: expected name=value")
+            params[name] = value
         elif project_id is None:
             project_id = token
+        else:
+            # A second bare token is ambiguous (a typo'd param missing its `=`,
+            # or a stray arg). Fail loud rather than silently dropping it and
+            # starting a run with unintended arguments.
+            raise ValueError(f"unexpected argument {token!r}: use name=value for params")
     return project_id, params
 
 

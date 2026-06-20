@@ -159,7 +159,15 @@ function resolveRunParams(
   declared: WorkflowParam[] | undefined,
   paramsJson: string | undefined,
 ): Record<string, ParamValue> | undefined {
-  if (paramsJson === undefined || paramsJson.trim() === "") return undefined;
+  const declaredParams = declared ?? [];
+  // No --params: a non-template workflow is untouched, but a template still
+  // validates against an empty value set so a missing REQUIRED param fails at
+  // run-create (and declared defaults are applied) rather than leaking through
+  // as an unresolved {{params.X}} at schedule time.
+  if (paramsJson === undefined || paramsJson.trim() === "") {
+    if (declaredParams.length === 0) return undefined;
+    return fillParams(declaredParams, {});
+  }
   let raw: unknown;
   try {
     raw = JSON.parse(paramsJson);
@@ -169,7 +177,7 @@ function resolveRunParams(
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new ParamFillError("--params must be a JSON object of name=value pairs");
   }
-  return fillParams(declared ?? [], raw as Record<string, ParamValue>);
+  return fillParams(declaredParams, raw as Record<string, ParamValue>);
 }
 
 export async function cmdRunCreate(

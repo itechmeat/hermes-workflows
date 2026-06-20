@@ -359,9 +359,13 @@ export function FlowEditor({
         setParamError(`Fill required: ${missing.map((p) => p.label).join(", ")}`);
         return;
       }
-      // Send only the non-empty values; the core coerces strings to the declared
-      // types and drops nothing it needs (an omitted optional uses its default).
-      const entries = Object.entries(runParamValues).filter(([, v]) => v.trim() !== "");
+      // Send only DECLARED params with a non-empty value: keying off the schema
+      // (not the raw state map) prunes any stale value left over from a param
+      // that was since renamed or removed. The core coerces strings to the
+      // declared types; an omitted optional uses its default.
+      const entries = declaredParams
+        .map((p) => [p.name, runParamValues[p.name] ?? ""] as const)
+        .filter(([, v]) => v.trim() !== "");
       params = entries.length > 0 ? Object.fromEntries(entries) : undefined;
     }
     setParamError(null);

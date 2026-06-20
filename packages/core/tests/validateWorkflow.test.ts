@@ -458,6 +458,25 @@ describe("validateWorkflow — {{params.X}} references", () => {
     expect(codes(w)).toContain("unknown_param_ref");
   });
 
+  test("validates param refs in prompt nodes too, not only agent_task", () => {
+    const w = wf(
+      base({
+        params: [{ name: "region", type: "text", label: "Region" }],
+        nodes: [
+          { id: "p1", type: "prompt", prompt: "prep {{params.tier}}" },
+          { id: "a", type: "agent_task", prompt: "run" },
+          { id: "done", type: "finish" },
+        ],
+        edges: [
+          { from: "p1", to: "a" },
+          { from: "a", to: "done" },
+        ],
+      }),
+    );
+    // `tier` is undeclared and referenced from a PROMPT node -> rejected.
+    expect(codes(w)).toContain("unknown_param_ref");
+  });
+
   test("rejects a param ref when the workflow declares no params", () => {
     expect(
       codes(

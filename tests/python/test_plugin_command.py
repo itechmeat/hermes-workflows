@@ -73,6 +73,25 @@ def test_parse_run_args_params_only_no_project() -> None:
     assert params == {"count": "3"}
 
 
+def test_parse_run_args_rejects_a_stray_bare_token() -> None:
+    # A second bare token (after the project) is ambiguous - a typo'd param
+    # missing its `=`. Fail loud rather than silently dropping it.
+    with pytest.raises(ValueError):
+        plugin._parse_run_args(["acme", "oops", "region=eu"])
+
+
+def test_parse_run_args_rejects_an_empty_param_name() -> None:
+    with pytest.raises(ValueError):
+        plugin._parse_run_args(["=value"])
+
+
+def test_run_subcommand_reports_a_malformed_arg_as_text(home: Path) -> None:
+    # The slash handler never raises to the gateway: a malformed run arg comes
+    # back as a short failure line.
+    out = plugin._handle_command("run feature-development oops extra")
+    assert "failed" in out.lower()
+
+
 def test_tokenize_keeps_quoted_param_value_as_one_token() -> None:
     # A text param value with spaces is quoted by the slash-command emitter and
     # must survive tokenisation as a single name=value token.
