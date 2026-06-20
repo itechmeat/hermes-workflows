@@ -4,6 +4,29 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.5.1 - 2026-06-20
+
+A patch release with two follow-up fixes to the v0.5.0 `adopt` blocked-card
+time-box. Both remove a case where an `adopt` node waited out the full 6h
+backstop instead of settling promptly.
+
+### Fixed
+
+- **Dependency-ordered adopt.** When a driven scope contains internal dependency
+  links, the engine now drives the cards in dependency order (prerequisites
+  first) instead of all at once, so a dependent is never claimed before its
+  prerequisites are done. A worker would otherwise self-`kanban block` the
+  dependent, and a worker block does not auto-clear, which previously left the
+  run waiting out the time-box. Reuses the existing sequential `adopt_seq`
+  machinery. A scope with no internal links keeps the existing parallel
+  behavior.
+- **Skip un-completable umbrella cards.** An umbrella/epic card (title prefixed
+  `(meta)` or `(epic)`) with incomplete children has no leaf work of its own.
+  The engine now excludes such cards from the driven set and drives their
+  executable children instead; a scope that is only umbrella cards fails the
+  node fast with guidance, rather than promoting an un-completable card and
+  waiting out the backstop.
+
 ## 0.5.0 - 2026-06-20
 
 Parameterized workflows can now be instantiated with real values from every
