@@ -97,3 +97,18 @@ class CompositeExecutor:
         if send is None:
             raise ValueError("native review requires a Kanban-backed (project) scope")
         send(task_id, reviewer=reviewer)
+
+    def scope_links(self, ids: list[str]) -> list[tuple[str, str]]:
+        """Internal dependency links among an adopt scope, via the scope backend.
+        Returns ``[]`` when the scope backend has no link view (e.g. a global /
+        Direct scope), so adopt-ordering degrades to the parallel default rather
+        than failing."""
+        fn = getattr(self.scope, "scope_links", None)
+        return fn(ids) if fn is not None else []
+
+    def is_umbrella(self, task_id: str) -> bool:
+        """Whether a card is an un-completable umbrella, via the scope backend.
+        Returns ``False`` when the scope backend cannot tell (e.g. a global /
+        Direct scope), so adopt drives the card as-is rather than excluding it."""
+        fn = getattr(self.scope, "is_umbrella", None)
+        return fn(task_id) if fn is not None else False

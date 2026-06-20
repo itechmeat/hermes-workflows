@@ -610,6 +610,54 @@ def test_adopt_fails_fast_when_scope_is_only_an_umbrella(tmp_path: Path) -> None
         board.close()
 
 
+def test_adopt_scope_features_work_through_the_composite_executor(tmp_path: Path) -> None:
+    """In production the scope executor is wrapped in a CompositeExecutor (a
+    `direct`/`script` backend is always wired). The umbrella-skip and dependency
+    -ordering must reach the Kanban backend THROUGH that wrapper - the engine
+    queries them by `getattr`, so the composite has to forward both. This guards
+    the prod path the other adopt tests (bare KanbanExecutor) do not exercise."""
+    from hermes_workflows.executor import DirectExecutor
+
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        epic = kb.create_task(board, title="(meta) umbrella", created_by="op", triage=True)
+        c1 = kb.create_task(board, title="prereq child", created_by="op", triage=True)
+        c2 = kb.create_task(board, title="dependent child", created_by="op", triage=True)
+        kb.link_tasks(board, epic, c1)  # children depend on the epic
+        kb.link_tasks(board, epic, c2)
+        kb.link_tasks(board, c1, c2)  # and c2 depends on c1
+        # Wire a `direct` backend so _executor_for wraps the Kanban scope in a
+        # CompositeExecutor, exactly as the real plugin does.
+        eng = Engine(
+            core_cli=CLI,
+            db_path=str(tmp_path / "runs.db"),
+            kanban=KanbanExecutor(board),
+            direct=DirectExecutor(store_dir=str(tmp_path / "direct")),
+        )
+        spec = _spec(tmp_path, _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True))
+
+        run = eng.run(spec, "r")
+        _surface_ids(board, run["nodes"]["collect"]["hermes_task_id"], [epic, c2, c1])
+
+        run = eng.advance(spec, "r")
+        # Umbrella excluded (is_umbrella forwarded) and the remaining children
+        # driven in dependency order (scope_links forwarded): c1 before c2.
+        assert run["nodes"]["drive"]["driven_task_ids"] == [c1]
+        assert _status(board, epic) == "triage"
+        assert _status(board, c2) == "triage"
+
+        _complete(board, c1)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [c2]
+
+        _complete(board, c2)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "completed"
+        assert run["nodes"]["drive"]["outcome"] == "success"
+    finally:
+        board.close()
+
+
 def test_extract_task_ids_block() -> None:
     from hermes_workflows.engine import _extract_task_ids_block
 
