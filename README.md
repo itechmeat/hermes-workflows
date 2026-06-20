@@ -84,6 +84,17 @@ the editor seeded with a minimal valid graph), add nodes, set a `cron` trigger i
 on a schedule, and press **Play** to try it. Authoring, run-control, and the compile preview all
 live in the dashboard — full tour in [`docs/dashboard.md`](docs/dashboard.md).
 
+### Hermes compatibility
+
+A node's output is captured from the worker session's final result
+(`task_runs.summary` for board nodes, the oneshot `-z` final message for global /
+off-board nodes). That output must survive a mid-run context auto-compression,
+which rotates the session id. Run on a Hermes build that includes the
+compression session-rotation fixes ([#48584](https://github.com/NousResearch/hermes-agent/pull/48584)
+and [#48633](https://github.com/NousResearch/hermes-agent/pull/48633)); on an
+older host a long worker that auto-compresses mid-run can drop its final turn,
+and an `adopt` that depends on a final `task_ids` block would then fail closed.
+
 ## Documentation
 
 | Topic | Doc |

@@ -5,6 +5,16 @@ Design notes:
 - ``hermes_cli.kanban_db.create_task`` does not accept the workflow columns or
   ``model_override``, so those are stamped with a follow-up UPDATE, guarded by
   feature detection (older boards simply skip them).
+- Cards are created through ``kanban_db`` directly, NOT the ``kanban_create``
+  tool, so Hermes' tool-level ``kanban.auto_subscribe_on_create`` (#48635) never
+  fires for workflow cards: the engine subscribes the run's originating chat
+  explicitly (``bridge/notify``). A project worker that itself calls
+  ``kanban_create`` is dispatcher-spawned with no delivery channel, so that path
+  is a no-op too.
+- Node output is read from ``task_runs.summary`` (the worker session's final
+  result). That final turn must survive a mid-run auto-compression session
+  rotation, which requires a Hermes build with #48584 + #48633 (see README,
+  "Hermes compatibility").
 - Idempotency uses the native ``idempotency_key`` so a repeated advance tick
   never creates a duplicate card. The key includes an iteration so a loop
   re-entry (fix -> validate) creates a fresh card.

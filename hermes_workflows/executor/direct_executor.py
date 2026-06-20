@@ -10,6 +10,12 @@ and oneshot (``-z``) prints ONLY the agent's final message to stdout — which
 becomes the node output. Carrying model/skills here is what makes a global
 node honour the same per-node selections a project node already does.
 
+Because the captured output IS that final message, a long node that hits a
+mid-run context auto-compression (session rotation) must run on a Hermes build
+with the compression fixes #48584 + #48633, or the final turn can be lost
+(see README, "Hermes compatibility"). Off-board nodes (``board: false``) route
+here too and are exactly the long-reasoning steps that hit compression.
+
 There are no Kanban cards here, so the completion is persisted to a small
 file-backed store keyed by an idempotent handle (``run:node:iteration``). That
 keeps a multi-step global workflow durable across tick processes, just as the

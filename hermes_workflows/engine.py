@@ -41,6 +41,13 @@ _STUCK_CARD_STATUSES = frozenset({"ready", "triage", "todo", "review"})
 # How many consecutive dispatch failures on a parked driven card before an adopt
 # node settles failure rather than polling it forever.
 _ADOPT_STUCK_FAILURES = 3
+# How long an adopt node tolerates a driven card sitting `blocked` (a worker ran
+# `kanban block`, or an un-completable umbrella/parent card) before settling the
+# node failure instead of polling forever. A worker-initiated block does not
+# auto-clear, so without this an un-recoverable block wedges the run in `running`
+# indefinitely (observed 15h+). A legitimate dependency-block that clears within
+# the window still recovers normally. Generous by default; tunable per Engine.
+_ADOPT_BLOCKED_TIMEOUT_SECONDS = 6 * 60 * 60
 
 # Backstop for the inline drain: a cyclic script-only workflow could stay
 # inline-eligible indefinitely, so cap the synchronous steps per call and let
@@ -126,6 +133,10 @@ class Engine:
         # disables tracing entirely: no writer object, zero trace I/O on the
         # tick path (observability.trace_enabled gates the wiring).
         self.trace = trace
+        # How long an adopt node tolerates a driven card stuck `blocked` before
+        # settling the node failure (see _ADOPT_BLOCKED_TIMEOUT_SECONDS). An
+        # instance attribute so a caller (and tests) can tune it.
+        self.adopt_blocked_timeout_seconds = _ADOPT_BLOCKED_TIMEOUT_SECONDS
 
     # --- core CLI helpers -------------------------------------------------
 
@@ -401,6 +412,12 @@ class Engine:
                 self._card_terminal(executor, node, handle, completion, review_profile)
                 for handle, completion in zip(handles, completions)
             ]
+            # Reset the blocked time-box once no driven card is blocked any more,
+            # so a block that clears and later recurs starts a fresh window.
+            if node.get("adopt_blocked_since") is not None and not any(
+                c.status == "blocked" for c in completions
+            ):
+                node.pop("adopt_blocked_since", None)
             # Bound the wait: a driven card the dispatcher cannot make progress on
             # (consecutive_failures climbing while it sits un-run) would otherwise
             # be polled forever - the silent-hang this guards against. Settle the
@@ -489,12 +506,41 @@ class Engine:
                     self._merge_telemetry(node)
                     settled_cards.extend(handles)
             elif any(c.status == "blocked" for c in completions):
-                # An underlying card was blocked (e.g. a worker error ran
-                # `kanban block`). The node stays active so the tick keeps polling
-                # and auto-recovers when it is unblocked, but we must not leave the
-                # run silently inert: surface it for an operator notice (once, via
-                # the notified markers).
-                blocked_nodes.append(node_id)
+                # An underlying card is blocked (a worker ran `kanban block`, or
+                # an un-completable umbrella/parent card). The node stays active
+                # so the tick keeps polling and auto-recovers when it is
+                # unblocked - but bounded: a worker-initiated block does not
+                # auto-clear, so without a time-box an un-recoverable block wedges
+                # the run in `running` forever. Record when the block was first
+                # seen and settle the node failure once the window elapses.
+                now = int(time.time())
+                if node.get("adopt_blocked_since") is None:
+                    node["adopt_blocked_since"] = now
+                elapsed = now - int(node["adopt_blocked_since"])
+                if elapsed >= int(self.adopt_blocked_timeout_seconds):
+                    blocked = next(
+                        h for h, c in zip(handles, completions) if c.status == "blocked"
+                    )
+                    seq += 1
+                    node["status"] = "completed"
+                    node["outcome"] = "failure"
+                    node["seq"] = seq
+                    node["output"] = (
+                        f"adopt blocked: driven card {blocked} sat `blocked` for "
+                        f"{elapsed}s (>= {self.adopt_blocked_timeout_seconds}s) with no "
+                        f"recovery; settling the node failure instead of polling forever. "
+                        f"A worker-initiated block does not auto-clear - unblock the card, "
+                        f"or keep an un-completable umbrella/parent card out of the adopt "
+                        f"scope (drive its executable children instead)."
+                    )
+                    node.pop("adopt_blocked_since", None)
+                    self._merge_telemetry(node)
+                    settled_cards.extend(handles)
+                    stuck_nodes.append(node_id)
+                else:
+                    # Within the window: surface it for an operator notice (once,
+                    # via the notified markers) and keep polling.
+                    blocked_nodes.append(node_id)
             elif any(c.started for c in completions) and node["status"] == "scheduled":
                 # The executor reports the work has visibly begun (e.g. the Direct
                 # runner thread is live) — show a truthful "running" instead of a
