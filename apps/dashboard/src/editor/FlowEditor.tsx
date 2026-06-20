@@ -27,14 +27,18 @@ import { RunLogPanel } from "../run/RunLogPanel";
 import { deriveRunLogEvents, mergeRunLog, type LoggedRunEvent } from "../run/runLog";
 import {
   Button,
+  Checkbox,
   Field,
+  Input,
   Menu,
   Modal,
+  Select,
   Textarea,
   ToastHost,
   useToasts,
   type MenuItem,
 } from "../ui/components";
+import type { WorkflowParam, ParamValue } from "@hermes-workflows/core/templates/params.ts";
 import { useHeaderSlots } from "../ui/PluginHeader";
 import {
   ArrowLeftIcon,
@@ -144,6 +148,66 @@ const PLAY_LABEL: Record<PlaybackPhase, string> = {
   playing: "Running…",
 };
 
+/** Initial form values for a template's params: the declared default rendered as
+ *  a string (the controlled inputs are string-backed; the core coerces on run). */
+function initialParamValues(params: WorkflowParam[]): Record<string, string> {
+  return Object.fromEntries(
+    params.map((p) => [p.name, p.default !== undefined ? String(p.default) : ""]),
+  );
+}
+
+/** One field per declared template param, rendered natively from the param's
+ *  type (enum -> select, bool -> checkbox, int/text -> input). Controlled by a
+ *  string-valued map; the core validates and coerces the values at run-create
+ *  (a bad value surfaces as a start error), so the form stays a thin collector. */
+function RunParamFields({
+  params,
+  values,
+  onChange,
+}: {
+  params: WorkflowParam[];
+  values: Record<string, string>;
+  onChange: (name: string, value: string) => void;
+}): React.ReactElement {
+  return (
+    <>
+      {params.map((param) => {
+        const id = `hw-param-${param.name}`;
+        const label = param.optional ? `${param.label} (optional)` : param.label;
+        const options = param.options ?? [];
+        return (
+          <Field key={param.name} label={label} htmlFor={id}>
+            {param.type === "enum" && options.length > 0 ? (
+              <Select
+                value={values[param.name] ?? ""}
+                onValueChange={(v) => onChange(param.name, v)}
+                items={options.map((o) => ({ value: o, label: o }))}
+                placeholder="Select…"
+              />
+            ) : param.type === "bool" ? (
+              <Checkbox
+                checked={values[param.name] === "true"}
+                onCheckedChange={(on) => onChange(param.name, on ? "true" : "false")}
+                aria-label={param.label}
+              />
+            ) : (
+              <Input
+                id={id}
+                type={param.type === "int" ? "number" : "text"}
+                value={values[param.name] ?? ""}
+                onChange={(e) => onChange(param.name, e.target.value)}
+              />
+            )}
+            {param.help !== undefined && param.help !== "" && (
+              <p className="hw-note">{param.help}</p>
+            )}
+          </Field>
+        );
+      })}
+    </>
+  );
+}
+
 export function FlowEditor({
   detail,
   client,
@@ -170,6 +234,15 @@ export function FlowEditor({
   // plain Play button starts with no input.
   const [runInputOpen, setRunInputOpen] = useState(false);
   const [runInput, setRunInput] = useState("");
+  // Template params declared on the workflow: when present, the run modal renders
+  // a field per param. The core validates and coerces the values at run-create
+  // (and substitutes them as {{params.X}}); the form only collects them.
+  const declaredParams = useMemo(() => detail.workflow.params ?? [], [detail.workflow.params]);
+  const hasParams = declaredParams.length > 0;
+  const [runParamValues, setRunParamValues] = useState<Record<string, string>>(() =>
+    initialParamValues(declaredParams),
+  );
+  const [paramError, setParamError] = useState<string | null>(null);
   // Profile/model option lists for the inspector selects (the user's Hermes
   // roster + configured models). Best-effort: empty on failure.
   const [profiles, setProfiles] = useState<string[]>([]);
@@ -253,7 +326,7 @@ export function FlowEditor({
   }, [ctrl, onSaved]);
 
   const handlePlay = useCallback(
-    async (input?: string) => {
+    async (input?: string, params?: Record<string, ParamValue>) => {
       // Run what the operator sees: a dirty graph is saved first, and a failed
       // save (already shown in the status label) aborts the start.
       if (ctrl.dirty) {
@@ -261,17 +334,35 @@ export function FlowEditor({
         if (saved === null) return;
         onSaved?.(saved);
       }
-      playback.play(input);
+      playback.play(input, params);
     },
     [ctrl, playback, onSaved],
   );
 
-  // Start from the run-input modal: carry the typed directive into the run,
-  // then close the modal. The text is kept so a refused start can be retried.
+  // Start from the run modal: a light required-presence check catches an empty
+  // required field inline (the core still does the authoritative type/enum
+  // validation at run-create and surfaces a bad value as a start error). Carry
+  // the typed directive + collected param values into the run, then close the
+  // modal. The field values are kept so a refused start can be retried.
   const handleRunWithInput = useCallback(() => {
+    let params: Record<string, ParamValue> | undefined;
+    if (hasParams) {
+      const missing = declaredParams.filter(
+        (p) => p.optional !== true && (runParamValues[p.name] ?? "").trim() === "",
+      );
+      if (missing.length > 0) {
+        setParamError(`Fill required: ${missing.map((p) => p.label).join(", ")}`);
+        return;
+      }
+      // Send only the non-empty values; the core coerces strings to the declared
+      // types and drops nothing it needs (an omitted optional uses its default).
+      const entries = Object.entries(runParamValues).filter(([, v]) => v.trim() !== "");
+      params = entries.length > 0 ? Object.fromEntries(entries) : undefined;
+    }
+    setParamError(null);
     setRunInputOpen(false);
-    void handlePlay(runInput);
-  }, [handlePlay, runInput]);
+    void handlePlay(runInput, params);
+  }, [hasParams, declaredParams, runParamValues, handlePlay, runInput]);
 
   const handleInspectorChange = useCallback(
     (patch: Partial<WorkflowNode>) => {
@@ -407,21 +498,25 @@ export function FlowEditor({
             // a run is underway, and while the pre-play save is in flight (so a
             // rapid double-click cannot queue a second save).
             disabled={playback.phase !== "idle" || ctrl.status.kind === "saving"}
-            // Bare start: no operator input. The () wrapper drops the click
-            // event so it is never mistaken for the input directive.
-            onClick={() => void handlePlay()}
+            // A parameterized workflow must collect its param values first, so
+            // Play opens the run modal; otherwise it is a bare start with no
+            // operator input. The () wrapper drops the click event so it is
+            // never mistaken for the input directive.
+            onClick={() => (hasParams ? setRunInputOpen(true) : void handlePlay())}
           >
             <PlayIcon />
             {PLAY_LABEL[playback.phase]}
           </Button>
-          <Button
-            aria-label="Run input"
-            title="Run with an operator directive"
-            disabled={playback.phase !== "idle" || ctrl.status.kind === "saving"}
-            onClick={() => setRunInputOpen(true)}
-          >
-            <PromptIcon />
-          </Button>
+          {!hasParams && (
+            <Button
+              aria-label="Run input"
+              title="Run with an operator directive"
+              disabled={playback.phase !== "idle" || ctrl.status.kind === "saving"}
+              onClick={() => setRunInputOpen(true)}
+            >
+              <PromptIcon />
+            </Button>
+          )}
         </>
       )}
       <Menu
@@ -527,12 +622,22 @@ export function FlowEditor({
 
       {runInputOpen && (
         <Modal
-          title="Run input"
-          ariaLabel="Run with an operator directive"
-          onClose={() => setRunInputOpen(false)}
+          title={hasParams ? "Run workflow" : "Run input"}
+          ariaLabel={hasParams ? "Run the workflow with parameters" : "Run with an operator directive"}
+          onClose={() => {
+            setRunInputOpen(false);
+            setParamError(null);
+          }}
           footer={
             <>
-              <Button onClick={() => setRunInputOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => {
+                  setRunInputOpen(false);
+                  setParamError(null);
+                }}
+              >
+                Cancel
+              </Button>
               <Button variant="primary" onClick={handleRunWithInput}>
                 <PlayIcon />
                 Run
@@ -540,6 +645,20 @@ export function FlowEditor({
             </>
           }
         >
+          {hasParams && (
+            <RunParamFields
+              params={declaredParams}
+              values={runParamValues}
+              onChange={(name, value) =>
+                setRunParamValues((prev) => ({ ...prev, [name]: value }))
+              }
+            />
+          )}
+          {paramError !== null && (
+            <p className="hw-error" role="alert">
+              {paramError}
+            </p>
+          )}
           <Field label="Operator input" htmlFor="hw-run-input">
             <Textarea
               id="hw-run-input"

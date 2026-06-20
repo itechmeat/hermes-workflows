@@ -12,6 +12,7 @@ import type {
   Trigger,
 } from "@hermes-workflows/core/schema/workflow.ts";
 import type { WorkflowNode, NodeType, ReviewOption } from "@hermes-workflows/core/schema/nodes.ts";
+import type { ParamValue } from "@hermes-workflows/core/templates/params.ts";
 import type {
   RunState,
   RunStatus,
@@ -151,6 +152,10 @@ export interface RunOptions {
    *  priority for this run (overrides conflicting node instructions, augments
    *  the rest). */
   input?: string;
+  /** Resolved template parameter values for a parameterized workflow, validated
+   *  by the core against the declared params and substituted as `{{params.X}}`
+   *  into node prompts. Omitted for a non-template workflow. */
+  params?: Record<string, ParamValue>;
 }
 
 export interface O2BStatus {

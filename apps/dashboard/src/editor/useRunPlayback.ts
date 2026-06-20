@@ -8,7 +8,8 @@
 // `onHandOff`. Every failure is exposed via `error` — never swallowed.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkflowsApi } from "../api/client";
-import type { RunState, RunSummary } from "../api/types";
+import type { RunState, RunSummary, RunOptions } from "../api/types";
+import type { ParamValue } from "@hermes-workflows/core/templates/params.ts";
 import { shouldHandOff } from "../run/runView";
 import { errorMessage, RUN_POLL_MS, useRunPolling } from "../run/useRunPolling";
 
@@ -21,10 +22,10 @@ export interface RunPlayback {
   /** Attach, start, or poll failure, surfaced to the operator. */
   error: string | null;
   /** Start the run, optionally with a free-form operator input layered above
-   *  every agent_task prompt at highest priority for this run. Ignored unless
-   *  the playback is idle (double-start guard; also inert while the mount attach
-   *  check is pending). */
-  play: (input?: string) => void;
+   *  every agent_task prompt at highest priority, and resolved template params
+   *  substituted into node prompts. Ignored unless the playback is idle
+   *  (double-start guard; also inert while the mount attach check is pending). */
+  play: (input?: string, params?: Record<string, ParamValue>) => void;
 }
 
 export function useRunPlayback(options: {
@@ -119,17 +120,21 @@ export function useRunPlayback(options: {
   }, [runId, status, handOff]);
 
   const play = useCallback(
-    (input?: string) => {
+    (input?: string, params?: Record<string, ParamValue>) => {
       if (phase !== "idle") return;
       setPhase("starting");
       setStartError(null);
-      // Only send options when there is a directive to send: a bare start keeps
+      // Only send options when there is something to send: a bare start keeps
       // the single-arg call shape the run endpoint and the rest of the surface
       // already expect.
       const trimmed = input?.trim();
-      const startCall = trimmed
-        ? api.runWorkflow(workflowId, { input: trimmed })
-        : api.runWorkflow(workflowId);
+      const options: RunOptions = {};
+      if (trimmed) options.input = trimmed;
+      if (params && Object.keys(params).length > 0) options.params = params;
+      const startCall =
+        Object.keys(options).length > 0
+          ? api.runWorkflow(workflowId, options)
+          : api.runWorkflow(workflowId);
       startCall
         .then((started) => {
           // A fast run can already be settled in the start response — hand over

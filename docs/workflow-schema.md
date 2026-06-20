@@ -109,8 +109,24 @@ Param `type` is `text | enum | int | bool`; an `enum` may set `strict: false` to
 accept any value (validated downstream). From this one schema the core emits a
 form, a ready-to-paste `/workflow <key> name=val` command, a `hermes://` deep
 link, and an agent-seed prompt (`packages/core/src/templates/params.ts`); the
-compile preview surfaces them as a `catalog`. The working chat slash command and
-deep-link resolution are host surfaces pending upstream Hermes support.
+compile preview surfaces them as a `catalog`.
+
+A node prompt interpolates a param as `{{params.<name>}}`; a reference to an
+undeclared param is rejected at author time (`unknown_param_ref`). Supply values
+when starting a run and the core validates them against the declared params
+(unknown name, missing required, bad enum/int/bool all fail loud), then
+substitutes each placeholder at schedule time. Three surfaces instantiate off
+the same schema:
+
+- the dashboard Run button opens a form (one field per param) when the workflow
+  declares any;
+- `/workflow run <id> [project] name=value …` in chat (quote a value with
+  spaces);
+- the run API `POST /workflows/{id}/run` with a `params` object.
+
+The `hermes://` deep-link resolution and a fully conversational agent-seed fill
+remain host surfaces pending upstream Hermes support; the emitters and catalog
+already produce what those surfaces consume.
 
 ## Node types (MVP)
 

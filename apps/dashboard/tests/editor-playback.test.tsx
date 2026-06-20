@@ -528,3 +528,67 @@ describe("FlowEditor playback", () => {
     expect(runWorkflow).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("FlowEditor template params", () => {
+  const paramWorkflow: Workflow = {
+    ...workflow,
+    params: [
+      { name: "target", type: "text", label: "Target" },
+      { name: "notes", type: "text", label: "Notes", optional: true },
+    ],
+  };
+  const paramDetail: SpecDetail = { workflow: paramWorkflow, ui, path: detail.path };
+
+  const runButton = (): HTMLElement => screen.getByRole("button", { name: /^run$/i });
+
+  it("opens the run modal with a field per param instead of a bare start", async () => {
+    const runWorkflow = vi.fn(async () => ({ run_id: RUN_ID, status: "running" as const }));
+    render(
+      <FlowEditor
+        detail={paramDetail}
+        client={stubClient({ runWorkflow })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+    await clickPlay();
+    // Play opened the modal (did not start a bare run).
+    expect(runWorkflow).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Target")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Notes/)).toBeInTheDocument();
+  });
+
+  it("runs with the filled param values, dropping an empty optional", async () => {
+    const runWorkflow = vi.fn(async () => ({ run_id: RUN_ID, status: "running" as const }));
+    render(
+      <FlowEditor
+        detail={paramDetail}
+        client={stubClient({ runWorkflow })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+    await clickPlay();
+    await userEvent.type(screen.getByLabelText("Target"), "prod");
+    await userEvent.click(runButton());
+    await waitFor(() =>
+      expect(runWorkflow).toHaveBeenCalledWith("deploy", { params: { target: "prod" } }),
+    );
+  });
+
+  it("blocks the run and shows an error when a required param is empty", async () => {
+    const runWorkflow = vi.fn(async () => ({ run_id: RUN_ID, status: "running" as const }));
+    render(
+      <FlowEditor
+        detail={paramDetail}
+        client={stubClient({ runWorkflow })}
+        onOpenRun={vi.fn()}
+        pollMs={10_000}
+      />,
+    );
+    await clickPlay();
+    await userEvent.click(runButton());
+    await screen.findByRole("alert");
+    expect(runWorkflow).not.toHaveBeenCalled();
+  });
+});
