@@ -456,7 +456,9 @@ class Engine:
                 if seq_state and seq_state.get("pending"):
                     # Sequential adopt: this card is terminal but more remain.
                     # Stash its result, promote the next card on the shared branch,
-                    # and keep the node active rather than settling.
+                    # and keep the node active rather than settling. `pending` is
+                    # already in dependency order with any umbrella card filtered
+                    # out (see `_adopt_cards`), so the next id is safe to drive.
                     seq_state.setdefault("outputs", []).extend(batch_outputs)
                     seq_state["failed"] = bool(seq_state.get("failed")) or batch_failed
                     next_id = seq_state["pending"][0]
@@ -998,14 +1000,43 @@ class Engine:
             if adopt is None:
                 raise ValueError("adopt requires a Kanban-backed (project) scope")
             assignee = params.get("assignee") or ""
-            # Sequential is only meaningful for more than one card: promote the
+            # Proactively drop un-completable umbrella/parent cards: an epic/meta
+            # container with incomplete children holds no leaf work of its own, so
+            # driving it just self-blocks and burns the time-box. Drive its
+            # executable children instead (they are force-promoted past the parent
+            # gate). A scope that is ONLY umbrellas has nothing to run - fail fast.
+            is_umbrella = getattr(executor, "is_umbrella", None)
+            excluded = [t for t in ids if is_umbrella and is_umbrella(t)] if is_umbrella else []
+            drivable = [t for t in ids if t not in excluded]
+            if not drivable:
+                raise ValueError(
+                    f"adopt scope contains only un-completable umbrella/parent card(s) "
+                    f"{excluded}; nothing executable to drive. Adopt the executable "
+                    f"children instead of the umbrella card."
+                )
+            if excluded:
+                print(
+                    f"hermes-workflows: adopt {node_id} skipping un-completable "
+                    f"umbrella card(s) {excluded}; driving executable children",
+                    file=sys.stderr,
+                )
+            # Respect internal dependencies within the scope: if a driven card
+            # depends on another in the same scope, drive in dependency order
+            # (prerequisites first) so a dependent is never claimed before its
+            # prerequisites are done. A parallel claim would let a worker
+            # self-`kanban block` the dependent, and a worker block does not
+            # auto-clear - the run would then wait out the time-box.
+            scope_links = getattr(executor, "scope_links", None)
+            links = scope_links(drivable) if scope_links else []
+            ordered = _topological_order(drivable, links)
+            # Sequential is meaningful only for more than one card: promote the
             # first now and queue the rest; the poll loop promotes N+1 once N is
             # terminal, so workers build on prior committed work on one branch.
-            sequential = sequential and len(ids) > 1
+            sequential = (sequential or bool(links)) and len(ordered) > 1
             if sequential:
-                driven = [adopt(ids[0], assignee=assignee)]
+                driven = [adopt(ordered[0], assignee=assignee)]
             else:
-                driven = [adopt(task_id, assignee=assignee) for task_id in ids]
+                driven = [adopt(task_id, assignee=assignee) for task_id in ordered]
         except (UnresolvedInput, ValueError) as exc:
             node["status"] = "completed"
             node["outcome"] = "failure"
@@ -1022,7 +1053,7 @@ class Engine:
         node["status"] = "scheduled"
         if sequential:
             node["adopt_seq"] = {
-                "pending": ids[1:],
+                "pending": ordered[1:],
                 "assignee": assignee,
                 "outputs": [],
                 "failed": False,
@@ -1250,6 +1281,32 @@ def _trace_snapshot(run: dict) -> dict:
 
 def _max_seq(run: dict) -> int:
     return max((node.get("seq") or 0 for node in run["nodes"].values()), default=0)
+
+
+def _topological_order(ids: list[str], links: list[tuple[str, str]]) -> list[str]:
+    """Order ``ids`` so every card comes after its in-scope prerequisites.
+    ``links`` are ``(parent, child)`` edges (child depends on parent). Stable: the
+    original order is preserved among cards with no dependency between them. A
+    cycle (which native ``link_tasks`` prevents) degrades to original order for
+    the unresolved tail rather than dropping cards."""
+    present = set(ids)
+    deps: dict[str, set[str]] = {i: set() for i in ids}
+    for parent, child in links:
+        if parent in present and child in present and parent != child:
+            deps[child].add(parent)
+    ordered: list[str] = []
+    placed: set[str] = set()
+    while len(ordered) < len(ids):
+        progressed = False
+        for i in ids:
+            if i not in placed and deps[i] <= placed:
+                ordered.append(i)
+                placed.add(i)
+                progressed = True
+        if not progressed:  # cycle - append the rest in original order
+            ordered.extend(i for i in ids if i not in placed)
+            break
+    return ordered
 
 
 def _first(items: Optional[Sequence[str]]) -> Optional[str]:

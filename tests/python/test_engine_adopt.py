@@ -508,6 +508,108 @@ def test_adopt_sequential_fails_closed_when_promoting_the_next_card_errors(tmp_p
         board.close()
 
 
+def test_adopt_auto_sequences_a_dependency_linked_scope(tmp_path: Path) -> None:
+    """When the driven scope has internal dependency links, the engine drives in
+    dependency order (prerequisites first) WITHOUT an explicit `sequential` flag,
+    so a dependent card is never claimed before its prerequisites are done. A
+    parallel adopt would let a worker self-`kanban block` the dependent, and a
+    worker block does not auto-clear - the run would then burn the time-box
+    (t_a105aff2)."""
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        a = kb.create_task(board, title="prereq A", created_by="op", triage=True)
+        b = kb.create_task(board, title="prereq B", created_by="op", triage=True)
+        c = kb.create_task(board, title="dependent C", created_by="op", triage=True)
+        kb.link_tasks(board, a, c)  # C depends on A
+        kb.link_tasks(board, b, c)  # C depends on B
+        eng = _engine(tmp_path, board)
+        # No `sequential` flag: the default would be parallel, but the internal
+        # links flip it to dependency-ordered driving.
+        spec = _spec(tmp_path, _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True))
+
+        run = eng.run(spec, "r")
+        # Surface ids with the dependent listed FIRST to prove the engine reorders.
+        _surface_ids(board, run["nodes"]["collect"]["hermes_task_id"], [c, a, b])
+
+        run = eng.advance(spec, "r")
+        # A prerequisite is promoted first; the dependent stays unclaimed.
+        assert run["nodes"]["drive"]["driven_task_ids"] == [a]
+        assert _status(board, a) == "ready"
+        assert _status(board, c) == "triage"
+
+        _complete(board, a)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["driven_task_ids"] == [b]
+        assert _status(board, c) == "triage"
+
+        _complete(board, b)
+        run = eng.advance(spec, "r")
+        # Both prerequisites done -> the dependent is driven now (no manual unblock).
+        assert run["nodes"]["drive"]["driven_task_ids"] == [c]
+        assert _status(board, c) == "ready"
+
+        _complete(board, c)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "completed"
+        assert run["nodes"]["drive"]["outcome"] == "success"
+    finally:
+        board.close()
+
+
+def test_adopt_skips_an_umbrella_parent_and_drives_its_children(tmp_path: Path) -> None:
+    """An umbrella/meta card with incomplete children has no leaf work of its own;
+    adopting it just self-blocks and burns the time-box. The engine excludes it
+    from the driven set and drives its executable children instead (t_4d434dc6)."""
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        epic = kb.create_task(board, title="(meta) portable workflows", created_by="op", triage=True)
+        child = kb.create_task(board, title="real implementation", created_by="op", triage=True)
+        kb.link_tasks(board, epic, child)  # child depends on the epic (board epic convention)
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec("{{nodes.collect.output.task_ids}}", collect=True))
+
+        run = eng.run(spec, "r")
+        _surface_ids(board, run["nodes"]["collect"]["hermes_task_id"], [epic, child])
+
+        run = eng.advance(spec, "r")
+        node = run["nodes"]["drive"]
+        # The umbrella is skipped; only the executable child is driven.
+        assert node["driven_task_ids"] == [child]
+        assert _status(board, child) == "ready"
+        assert _status(board, epic) == "triage"  # never promoted
+
+        _complete(board, child)
+        run = eng.advance(spec, "r")
+        assert run["nodes"]["drive"]["status"] == "completed"
+        assert run["nodes"]["drive"]["outcome"] == "success"
+    finally:
+        board.close()
+
+
+def test_adopt_fails_fast_when_scope_is_only_an_umbrella(tmp_path: Path) -> None:
+    """A scope that is ONLY an un-completable umbrella (its executable children are
+    not in scope) has nothing to drive: fail the node fast with guidance instead
+    of promoting the umbrella and waiting out the 6h time-box (t_4d434dc6)."""
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        epic = kb.create_task(board, title="(meta) umbrella only", created_by="op", triage=True)
+        child = kb.create_task(board, title="work not in scope", created_by="op", triage=True)
+        kb.link_tasks(board, epic, child)  # epic has an incomplete child -> un-completable leaf
+        eng = _engine(tmp_path, board)
+        spec = _spec(tmp_path, _adopt_spec(epic))  # adopt the umbrella alone
+
+        run = eng.run(spec, "r")
+        node = run["nodes"]["drive"]
+        assert node["status"] == "completed"
+        assert node["outcome"] == "failure"
+        assert node.get("abort_run") is True
+        assert "umbrella" in (node["output"] or "").lower()
+        assert _status(board, epic) == "triage"  # never promoted
+        assert run["status"] == "failed"
+    finally:
+        board.close()
+
+
 def test_extract_task_ids_block() -> None:
     from hermes_workflows.engine import _extract_task_ids_block
 

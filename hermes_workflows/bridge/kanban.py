@@ -36,6 +36,46 @@ from hermes_cli import kanban_db as kb
 _WORKFLOW_COLUMNS = ("workflow_template_id", "current_step_key")
 CREATED_BY = "hermes-workflows"
 
+# Title prefixes that mark a card as an umbrella/epic container - the board's
+# documented epic convention (`(meta) <theme>`). Such a card holds no leaf work
+# of its own; the real work lives in its children. Matched case-insensitively on
+# the stripped title.
+_UMBRELLA_TITLE_PREFIXES = ("(meta)", "(epic)")
+
+
+def scope_links(conn: sqlite3.Connection, ids: Iterable[str]) -> list[tuple[str, str]]:
+    """The internal ``(parent, child)`` dependency links among ``ids`` - edges
+    where both ends are inside the given scope. ``child`` depends on ``parent``
+    (``parent`` must be done before ``child`` becomes ready)."""
+    idset = list(dict.fromkeys(ids))
+    if len(idset) < 2:
+        return []
+    marks = ",".join("?" for _ in idset)
+    rows = conn.execute(
+        f"SELECT parent_id, child_id FROM task_links "
+        f"WHERE parent_id IN ({marks}) AND child_id IN ({marks})",
+        (*idset, *idset),
+    ).fetchall()
+    return [(r["parent_id"], r["child_id"]) for r in rows]
+
+
+def is_umbrella_card(conn: sqlite3.Connection, task_id: str) -> bool:
+    """Whether a card is an un-completable umbrella/epic: titled with an umbrella
+    marker AND a parent of at least one child that is not yet done. Such a card
+    has no leaf work of its own, so driving it directly only self-blocks."""
+    task = kb.get_task(conn, task_id)
+    if task is None:
+        return False
+    title = (task.title or "").strip().lower()
+    if not any(title.startswith(prefix) for prefix in _UMBRELLA_TITLE_PREFIXES):
+        return False
+    children = conn.execute(
+        "SELECT t.status FROM tasks t JOIN task_links l ON l.child_id = t.id "
+        "WHERE l.parent_id = ?",
+        (task_id,),
+    ).fetchall()
+    return any(c["status"] not in ("done", "archived") for c in children)
+
 
 def dispatch_board(
     board: str,

@@ -48,6 +48,16 @@ class KanbanExecutor:
         returning its id as the handle. See :func:`kanban.adopt_task`."""
         return kanban.adopt_task(self.board_conn, task_id, assignee=assignee)
 
+    def scope_links(self, ids: list[str]) -> list[tuple[str, str]]:
+        """Internal ``(parent, child)`` dependency links among the adopt scope.
+        See :func:`kanban.scope_links`."""
+        return kanban.scope_links(self.board_conn, ids)
+
+    def is_umbrella(self, task_id: str) -> bool:
+        """Whether a card is an un-completable umbrella/epic container.
+        See :func:`kanban.is_umbrella_card`."""
+        return kanban.is_umbrella_card(self.board_conn, task_id)
+
     def send_to_review(self, task_id: str, *, reviewer: str) -> None:
         """Route a completed driven card through the native review stage (assign
         reviewer, done -> review). See :func:`kanban.route_to_review`."""
