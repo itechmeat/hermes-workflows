@@ -126,6 +126,12 @@ export interface NodeRunState {
   output?: string;
   /** Epoch seconds a `wait` node first began polling, for its optional timeout. */
   wait_started_at?: number;
+  /**
+   * Epoch seconds an `adopt` node first observed a driven card sitting `blocked`,
+   * for its time-box. Persisted so the elapsed wait accumulates across ticks (the
+   * node state is reloaded each tick); cleared when the card recovers.
+   */
+  adopt_blocked_since?: number;
   error?: string;
   /**
    * Monotonic completion order within the run, assigned by the bridge each time

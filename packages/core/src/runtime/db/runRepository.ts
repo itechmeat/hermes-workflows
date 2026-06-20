@@ -108,6 +108,7 @@ interface NodeRow {
   reviewed_task_ids: string | null;
   wait_started_at: string | null;
   adopt_seq_json: string | null;
+  adopt_blocked_since: string | null;
   task_ids_json: string | null;
   outcome: string | null;
   review_decision: string | null;
@@ -243,8 +244,8 @@ export class RunRepository {
     this.db
       .query(
         `INSERT INTO workflow_node_runs
-           (id, run_id, node_id, status, hermes_task_id, driven_task_ids, reviewed_task_ids, wait_started_at, adopt_seq_json, task_ids_json, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
-         VALUES ($id, $run, $node, $status, $task, $driven, $reviewed, $waitStarted, $adoptSeq, $taskIds, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
+           (id, run_id, node_id, status, hermes_task_id, driven_task_ids, reviewed_task_ids, wait_started_at, adopt_seq_json, adopt_blocked_since, task_ids_json, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
+         VALUES ($id, $run, $node, $status, $task, $driven, $reviewed, $waitStarted, $adoptSeq, $adoptBlocked, $taskIds, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            hermes_task_id = excluded.hermes_task_id,
@@ -252,6 +253,7 @@ export class RunRepository {
            reviewed_task_ids = excluded.reviewed_task_ids,
            wait_started_at = excluded.wait_started_at,
            adopt_seq_json = excluded.adopt_seq_json,
+           adopt_blocked_since = excluded.adopt_blocked_since,
            task_ids_json = excluded.task_ids_json,
            outcome = excluded.outcome,
            review_decision = excluded.review_decision,
@@ -277,6 +279,8 @@ export class RunRepository {
             : null,
         $waitStarted: node.wait_started_at === undefined ? null : String(node.wait_started_at),
         $adoptSeq: node.adopt_seq === undefined ? null : JSON.stringify(node.adopt_seq),
+        $adoptBlocked:
+          node.adopt_blocked_since === undefined ? null : String(node.adopt_blocked_since),
         $taskIds: node.task_ids && node.task_ids.length > 0 ? JSON.stringify(node.task_ids) : null,
         $outcome: node.outcome ?? null,
         $review: node.review_decision ?? null,
@@ -315,6 +319,7 @@ export class RunRepository {
       if (n.adopt_seq_json !== null) {
         node.adopt_seq = JSON.parse(n.adopt_seq_json) as NodeRunState["adopt_seq"];
       }
+      if (n.adopt_blocked_since !== null) node.adopt_blocked_since = Number(n.adopt_blocked_since);
       if (n.task_ids_json !== null) {
         node.task_ids = JSON.parse(n.task_ids_json) as string[];
       }

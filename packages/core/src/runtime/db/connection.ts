@@ -41,6 +41,7 @@ function migrate(db: Database): void {
     "reviewed_task_ids",
     "wait_started_at",
     "adopt_seq_json",
+    "adopt_blocked_since",
     "task_ids_json",
   ]);
 }

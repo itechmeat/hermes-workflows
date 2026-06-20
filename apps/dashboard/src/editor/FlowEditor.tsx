@@ -152,7 +152,12 @@ const PLAY_LABEL: Record<PlaybackPhase, string> = {
  *  a string (the controlled inputs are string-backed; the core coerces on run). */
 function initialParamValues(params: WorkflowParam[]): Record<string, string> {
   return Object.fromEntries(
-    params.map((p) => [p.name, p.default !== undefined ? String(p.default) : ""]),
+    params.map((p) => {
+      if (p.default !== undefined) return [p.name, String(p.default)];
+      // A bool always has a concrete value: an unchecked box means `false`, not
+      // "unset", so it never trips the required-empty check.
+      return [p.name, p.type === "bool" ? "false" : ""];
+    }),
   );
 }
 
