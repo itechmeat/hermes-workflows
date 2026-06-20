@@ -82,6 +82,21 @@ describe("RunRepository — runs", () => {
     expect(loaded?.nodes["done"]?.status).toBe("pending");
   });
 
+  test("round-trips a run's resolved template params", () => {
+    const run = createRunState(workflow, "run-params", undefined, undefined, undefined, {
+      region: "eu",
+      count: 3,
+      flag: true,
+    });
+    repo.saveRun(run);
+    expect(repo.loadRun("run-params")?.params).toEqual({ region: "eu", count: 3, flag: true });
+
+    // An empty/absent param map persists as absent, not as {}.
+    const bare = createRunState(workflow, "run-no-params");
+    repo.saveRun(bare);
+    expect(repo.loadRun("run-no-params")?.params).toBeUndefined();
+  });
+
   test("round-trips a node's typed task_ids channel", () => {
     const run = createRunState(workflow, "run-taskids");
     run.status = "running";

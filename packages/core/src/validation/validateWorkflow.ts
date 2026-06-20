@@ -146,6 +146,7 @@ export function validateWorkflow(workflow: Workflow): ValidationResult {
   }
 
   validateInputMappings(workflow, nodes, err);
+  validateParamRefs(workflow, err);
   validateAdopt(workflow, nodes, err);
   validateWait(workflow, nodes, err);
 
@@ -248,6 +249,30 @@ function validateInputMappings(
         err(
           "non_ancestor_input_mapping",
           `node '${node.id}'.input_mapping.${key} references '${source}', which is not an ancestor of '${node.id}'`,
+        );
+      }
+    }
+  }
+}
+
+// {{params.<name>}} references: a node prompt may interpolate a template param,
+// substituted with its run value at schedule time. Every referenced name must be
+// a declared param, so a typo (or a param referenced by a non-template workflow)
+// fails at author time rather than leaving a literal placeholder in the prompt.
+const PARAM_REF_PATTERN = /\{\{params\.([A-Za-z0-9_-]+)\}\}/g;
+
+function validateParamRefs(workflow: Workflow, err: (code: string, message: string) => void): void {
+  const declared = new Set((workflow.params ?? []).map((p) => p.name));
+  for (const node of workflow.nodes) {
+    if (node.type !== "agent_task" && node.type !== "prompt") continue;
+    const prompt = node.prompt;
+    if (!prompt) continue;
+    for (const match of prompt.matchAll(PARAM_REF_PATTERN)) {
+      const name = match[1] as string;
+      if (!declared.has(name)) {
+        err(
+          "unknown_param_ref",
+          `node '${node.id}' references '{{params.${name}}}' but no param '${name}' is declared`,
         );
       }
     }

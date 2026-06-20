@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from hermes_workflows.resolve import UnresolvedInput, resolve_input_mapping
+from hermes_workflows.resolve import UnresolvedInput, resolve_input_mapping, resolve_params
 
 
 def outputs(**nodes: str | None) -> dict[str, dict[str, str | None]]:
@@ -88,3 +88,43 @@ def test_source_absent_from_outputs_raises() -> None:
 def test_malformed_reference_raises() -> None:
     with pytest.raises(UnresolvedInput):
         resolve_input_mapping("{{d}}", {"d": "nodes.a.output"}, outputs(a="x"))
+
+
+# --- resolve_params: substitute run template params ({{params.<name>}}) -------
+
+
+def test_params_no_placeholder_returns_prompt_unchanged() -> None:
+    assert resolve_params("plain prompt", {"region": "eu"}) == "plain prompt"
+    assert resolve_params("plain prompt", None) == "plain prompt"
+
+
+def test_params_substitutes_a_single_placeholder() -> None:
+    assert resolve_params("deploy to {{params.region}}", {"region": "eu"}) == "deploy to eu"
+
+
+def test_params_substitutes_multiple_and_repeated_placeholders() -> None:
+    out = resolve_params(
+        "{{params.a}} then {{params.b}} then {{params.a}}",
+        {"a": "X", "b": "Y"},
+    )
+    assert out == "X then Y then X"
+
+
+def test_params_coerces_non_string_values_to_text() -> None:
+    assert resolve_params("n={{params.count}} on={{params.flag}}", {"count": 3, "flag": True}) == (
+        "n=3 on=True"
+    )
+
+
+def test_params_missing_value_fails_loud() -> None:
+    with pytest.raises(UnresolvedInput):
+        resolve_params("use {{params.region}}", {})
+    with pytest.raises(UnresolvedInput):
+        resolve_params("use {{params.region}}", None)
+
+
+def test_params_injected_value_is_not_re_scanned() -> None:
+    # A value that itself contains a param-token literal is inserted verbatim,
+    # never re-substituted (single pass over the original prompt).
+    out = resolve_params("{{params.a}}", {"a": "{{params.b}}", "b": "SHOULD_NOT_APPEAR"})
+    assert out == "{{params.b}}"

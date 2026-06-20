@@ -210,6 +210,71 @@ def test_node_prompt_becomes_the_whole_prompt_when_node_prompt_is_empty(tmp_path
     assert fake.captured["prompt"] == "investigate the outage"
 
 
+def test_run_params_substituted_into_node_prompt(tmp_path: Path) -> None:
+    """A run's resolved template params replace {{params.<name>}} placeholders in
+    the node prompt at schedule time."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {
+        "workflow_id": "w",
+        "origin": None,
+        "params": {"region": "eu", "tier": "gold"},
+        "nodes": {"b": {"status": "pending"}},
+    }
+    params = {
+        "node": "b",
+        "kind": "agent",
+        "prompt": "deploy to {{params.region}} as {{params.tier}}",
+    }
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    assert fake.captured["prompt"] == "deploy to eu as gold"
+
+
+def test_run_params_compose_with_input_mapping_and_operator_input(tmp_path: Path) -> None:
+    """Params substitute alongside input_mapping and operator input: the upstream
+    output and the param value both land, under the operator block."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {
+        "workflow_id": "w",
+        "origin": None,
+        "input": "be terse",
+        "params": {"region": "eu"},
+        "nodes": {
+            "a": {"status": "completed", "outcome": "success", "output": "INV", "seq": 1},
+            "b": {"status": "pending"},
+        },
+    }
+    params = {
+        "node": "b",
+        "kind": "agent",
+        "prompt": "scope from {{data}} in {{params.region}}",
+        "input_mapping": {"data": "{{nodes.a.output}}"},
+    }
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    prompt = fake.captured["prompt"]
+    assert "scope from INV in eu" in prompt
+    assert "be terse" in prompt
+
+
+def test_run_param_reference_without_value_fails_loud(tmp_path: Path) -> None:
+    """A {{params.X}} placeholder with no run value settles the node failure
+    loudly rather than scheduling it with an unresolved placeholder."""
+    eng = _engine(tmp_path)
+    fake = FakeExec()
+    run = {"workflow_id": "w", "origin": None, "nodes": {"b": {"status": "pending"}}}
+    params = {"node": "b", "kind": "agent", "prompt": "deploy to {{params.region}}"}
+    eng._schedule_node(fake, run, "r1", "b", params)
+
+    assert fake.captured is None
+    node_b = run["nodes"]["b"]
+    assert node_b["status"] == "completed"
+    assert node_b["outcome"] == "failure"
+    assert not node_b.get("hermes_task_id")
+
+
 def test_operator_input_layers_above_a_node_prompt(tmp_path: Path) -> None:
     """Precedence: operator --input is highest, the Prompt node text is the
     node's primary instruction below it, then the node's own prompt."""

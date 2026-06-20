@@ -4,6 +4,7 @@
  */
 
 import type { ReviewOption } from "./nodes.ts";
+import type { ParamValue } from "../templates/params.ts";
 
 export type RunStatus = "created" | "running" | "waiting" | "completed" | "failed" | "cancelled";
 
@@ -167,5 +168,13 @@ export interface RunState {
    * The engine is the only writer; absent means nothing emitted yet.
    */
   notified?: string[];
+  /**
+   * Resolved template parameter values for this run, validated at run-create
+   * (`fillParams` against the workflow's declared `params`). The engine
+   * substitutes each `{{params.<name>}}` placeholder in a node prompt with its
+   * value at schedule time. Persisted so it applies to every node across ticks;
+   * absent for a non-parameterized workflow or a run started with no params.
+   */
+  params?: Record<string, ParamValue>;
   nodes: Record<string, NodeRunState>;
 }

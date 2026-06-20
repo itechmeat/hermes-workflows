@@ -26,6 +26,8 @@ import type { RunSummary, RunMeta, LatestRun } from "../runtime/db/runRepository
 import { SpecStore, chooseWriteRoot } from "../runtime/specStore.ts";
 import type { SpecSummary, SpecDetail, WriteRoots } from "../runtime/specStore.ts";
 import { fromObject } from "../schema/load.ts";
+import { fillParams, ParamFillError } from "../templates/params.ts";
+import type { ParamValue, WorkflowParam } from "../templates/params.ts";
 
 export interface Explanation {
   id: string;
@@ -146,6 +148,30 @@ function timingMeta(run: RunState, atCreate: boolean): RunMeta {
   return meta;
 }
 
+/**
+ * Validate the supplied raw param values (a JSON object, as sent by every
+ * instantiation surface) against the workflow's declared params and return the
+ * resolved value map. `fillParams` rejects unknown names, enforces required
+ * params, and coerces enum/int/bool. Returns undefined when no params were
+ * supplied. Throws (failing the run-create loudly) on invalid JSON or values.
+ */
+function resolveRunParams(
+  declared: WorkflowParam[] | undefined,
+  paramsJson: string | undefined,
+): Record<string, ParamValue> | undefined {
+  if (paramsJson === undefined || paramsJson.trim() === "") return undefined;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(paramsJson);
+  } catch (error) {
+    throw new ParamFillError(`--params is not valid JSON: ${(error as Error).message}`);
+  }
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new ParamFillError("--params must be a JSON object of name=value pairs");
+  }
+  return fillParams(declared ?? [], raw as Record<string, ParamValue>);
+}
+
 export async function cmdRunCreate(
   dbPath: string,
   specPath: string,
@@ -153,9 +179,11 @@ export async function cmdRunCreate(
   projectId?: string,
   origin?: string,
   input?: string,
+  paramsJson?: string,
 ): Promise<RunState> {
   const workflow = await loadWorkflow(specPath);
-  const run = createRunState(workflow, runId, projectId, origin, input);
+  const params = resolveRunParams(workflow.params, paramsJson);
+  const run = createRunState(workflow, runId, projectId, origin, input, params);
   // Single-flight: throws ActiveRunExistsError when the workflow already has
   // an active run (the bridge maps the error name to HTTP 409).
   repository(dbPath).createRun(run, timingMeta(run, true));

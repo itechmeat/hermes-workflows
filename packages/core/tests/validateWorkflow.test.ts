@@ -430,3 +430,46 @@ describe("validateWorkflow — wait nodes", () => {
     );
   });
 });
+
+describe("validateWorkflow — {{params.X}} references", () => {
+  test("accepts a prompt that references a declared param", () => {
+    const w = wf(
+      base({
+        params: [{ name: "region", type: "text", label: "Region" }],
+        nodes: [
+          { id: "a", type: "agent_task", prompt: "deploy to {{params.region}}" },
+          { id: "done", type: "finish" },
+        ],
+      }),
+    );
+    expect(codes(w)).not.toContain("unknown_param_ref");
+  });
+
+  test("rejects a prompt that references an undeclared param", () => {
+    const w = wf(
+      base({
+        params: [{ name: "region", type: "text", label: "Region" }],
+        nodes: [
+          { id: "a", type: "agent_task", prompt: "deploy {{params.region}} as {{params.tier}}" },
+          { id: "done", type: "finish" },
+        ],
+      }),
+    );
+    expect(codes(w)).toContain("unknown_param_ref");
+  });
+
+  test("rejects a param ref when the workflow declares no params", () => {
+    expect(
+      codes(
+        wf(
+          base({
+            nodes: [
+              { id: "a", type: "agent_task", prompt: "use {{params.x}}" },
+              { id: "done", type: "finish" },
+            ],
+          }),
+        ),
+      ),
+    ).toContain("unknown_param_ref");
+  });
+});

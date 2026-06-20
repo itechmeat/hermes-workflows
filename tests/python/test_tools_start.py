@@ -19,7 +19,9 @@ class FakeEngine:
         self.created: list[str] = []
         self.advances = 0
 
-    def create(self, path: str, run_id: str, project_id=None, origin=None, input=None) -> dict:
+    def create(
+        self, path: str, run_id: str, project_id=None, origin=None, input=None, params=None
+    ) -> dict:
         self.created.append(run_id)
         return {"run_id": run_id, "status": "created", "workflow_id": "wf"}
 

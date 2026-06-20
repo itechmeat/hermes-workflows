@@ -49,6 +49,7 @@ const VALUE_FLAGS = new Set([
   "markdown-file",
   "node",
   "origin",
+  "params",
   "project",
   "project-root",
   "roots",
@@ -158,6 +159,7 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
         str(flags, "project"),
         str(flags, "origin"),
         str(flags, "input"),
+        str(flags, "params"),
       );
     case "run-load":
       return cmdRunLoad(required(db, "--db"), required(str(flags, "id"), "--id"));

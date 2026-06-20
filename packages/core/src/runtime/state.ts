@@ -6,6 +6,7 @@
 
 import type { RunState, RunStatus, NodeStatus, NodeRunState } from "../schema/run.ts";
 import type { Workflow } from "../schema/workflow.ts";
+import type { ParamValue } from "../templates/params.ts";
 
 const RUN_TRANSITIONS: Record<RunStatus, RunStatus[]> = {
   created: ["running", "cancelled"],
@@ -46,6 +47,7 @@ export function createRunState(
   projectId?: string,
   origin?: string,
   input?: string,
+  params?: Record<string, ParamValue>,
 ): RunState {
   const nodes: Record<string, NodeRunState> = {};
   for (const node of workflow.nodes) {
@@ -61,6 +63,7 @@ export function createRunState(
   if (projectId !== undefined) run.project_id = projectId;
   if (origin !== undefined && origin !== "") run.origin = origin;
   if (input !== undefined && input !== "") run.input = input;
+  if (params !== undefined && Object.keys(params).length > 0) run.params = params;
   return run;
 }
 

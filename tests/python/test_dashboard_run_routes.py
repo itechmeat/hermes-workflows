@@ -82,6 +82,20 @@ def test_run_then_inspect(client: TestClient) -> None:
     assert "plan" in body["nodes"]
 
 
+def test_run_with_non_object_params_is_400(client: TestClient) -> None:
+    resp = client.post("/workflows/feature-development/run", json={"params": ["nope"]})
+    assert resp.status_code == 400
+    assert "params" in resp.json()["detail"]
+
+
+def test_run_with_unknown_param_is_400(client: TestClient) -> None:
+    # feature-development declares no params, so any supplied name is rejected by
+    # the core at run-create and surfaced as a 400 (a caller error, not a 500).
+    resp = client.post("/workflows/feature-development/run", json={"params": {"nope": "x"}})
+    assert resp.status_code == 400
+    assert "unknown param" in resp.json()["detail"]
+
+
 def test_get_unknown_run_is_404(client: TestClient) -> None:
     assert client.get("/runs/ghost").status_code == 404
 

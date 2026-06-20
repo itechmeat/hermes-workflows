@@ -23,7 +23,7 @@ from typing import Any, Callable, Optional, Sequence
 
 from . import cli_bridge, notifications, telemetry, wait
 from .executor import CompositeExecutor, NodeExecutor
-from .resolve import UnresolvedInput, resolve_input_mapping, resolve_ref
+from .resolve import UnresolvedInput, resolve_input_mapping, resolve_params, resolve_ref
 
 # Statuses that still need future advances — the tick's liveness condition,
 # shared with the CLI/dashboard start paths that arm the tick.
@@ -152,11 +152,14 @@ class Engine:
         project_id: Optional[str] = None,
         origin: Optional[str] = None,
         input: Optional[str] = None,
+        params: Optional[dict] = None,
     ) -> dict:
         """Record a new run without advancing it — the non-blocking half of
         :meth:`run`, for callers (the dashboard start route) that must return
         before the first node executes. ``input`` is the operator's free-form
-        run input, layered above every agent_task prompt at highest priority."""
+        run input, layered above every agent_task prompt at highest priority.
+        ``params`` are template parameter values (validated by the core against
+        the workflow's declared params, then substituted as ``{{params.X}}``)."""
         args = ["run-create", spec_path, "--db", self.db_path, "--id", run_id]
         if project_id:
             args += ["--project", project_id]
@@ -164,6 +167,8 @@ class Engine:
             args += ["--origin", origin]
         if input:
             args += ["--input", input]
+        if params:
+            args += ["--params", json.dumps(params)]
         created = self._core(args)
         self._trace_emit(
             run_id,
@@ -181,8 +186,9 @@ class Engine:
         project_id: Optional[str] = None,
         origin: Optional[str] = None,
         input: Optional[str] = None,
+        params: Optional[dict] = None,
     ) -> dict:
-        self.create(spec_path, run_id, project_id, origin, input)
+        self.create(spec_path, run_id, project_id, origin, input, params)
         return self.advance(spec_path, run_id)
 
     def status(self, run_id: str) -> dict:
@@ -880,6 +886,11 @@ class Engine:
         operator_input = run.get("input")
         if operator_input:
             prompt = _layer_operator_input(prompt, operator_input)
+        # Run-level template params substituted last, over the fully composed
+        # prompt, so a {{params.X}} placeholder is resolved wherever it appears
+        # (the node's own prompt, a Prompt node's text, or the operator input).
+        # Fails loud on a placeholder with no run value (handled by the caller).
+        prompt = resolve_params(prompt, run.get("params"))
         if prompt == base:
             return params  # nothing layered or substituted: byte-identical
         resolved = dict(params)

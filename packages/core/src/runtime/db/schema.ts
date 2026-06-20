@@ -24,7 +24,11 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   -- array) for run-lifecycle notifications and memory writes. Added after the
   -- initial schema, so connection.ts ALTERs pre-existing databases.
   origin           TEXT,
-  notified         TEXT
+  notified         TEXT,
+  -- Resolved template parameter values (JSON object) for a parameterized run,
+  -- substituted into node prompts as {{params.<name>}}. Added after the initial
+  -- schema, so connection.ts ALTERs pre-existing databases.
+  params_json      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS workflow_node_runs (

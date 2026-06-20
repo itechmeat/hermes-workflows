@@ -393,6 +393,12 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
         raise HTTPException(status_code=400, detail="input must be a string")
     if isinstance(operator_input, str):
         operator_input = operator_input.strip() or None
+    # Template parameter values, validated by the core against the workflow's
+    # declared params at run-create (a bad value surfaces as a 400 below).
+    params = payload.get("params")
+    if params is not None and not isinstance(params, dict):
+        raise HTTPException(status_code=400, detail="params must be an object")
+    params = params or None
     try:
         return tools.start_workflow(
             workflow_id,
@@ -406,6 +412,7 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
             run_id=run_id,
             project_id=project_id,
             input=operator_input,
+            params=params,
             ensure_tick=cron.ensure_workflow_tick,
         )
     except cli_bridge.CoreBridgeError as exc:
@@ -413,6 +420,9 @@ async def run_workflow(workflow_id: str, payload: dict = Body(default={})) -> di
         # The detail names the blocking run so the operator can open/cancel it.
         if exc.kind == "ActiveRunExistsError":
             raise HTTPException(status_code=409, detail=exc.detail) from exc
+        # Bad param values are the caller's error, not a server fault.
+        if exc.kind == "ParamFillError":
+            raise HTTPException(status_code=400, detail=exc.detail) from exc
         raise
 
 

@@ -108,6 +108,7 @@ def start_workflow(
     project_id: Optional[str] = None,
     origin: Optional[str] = None,
     input: Optional[str] = None,
+    params: Optional[dict] = None,
     ensure_tick: Optional[Callable[[], Any]] = None,
     drive_interval_seconds: float = DRIVE_INTERVAL_SECONDS,
 ) -> dict:
@@ -127,7 +128,7 @@ def start_workflow(
     caller's engine holds SQLite connections bound to the calling thread
     (``check_same_thread``), so it must not cross into the drive thread."""
     path = _resolve_spec_path(workflow_id, roots, core_cli)
-    created = engine.create(path, run_id, project_id, origin=origin, input=input)
+    created = engine.create(path, run_id, project_id, origin=origin, input=input, params=params)
     if ensure_tick is not None:
         ensure_tick()
 
@@ -161,9 +162,10 @@ def run_workflow(
     project_id: Optional[str] = None,
     origin: Optional[str] = None,
     input: Optional[str] = None,
+    params: Optional[dict] = None,
 ) -> dict:
     path = _resolve_spec_path(workflow_id, roots, core_cli)
-    run = engine.run(path, run_id, project_id, origin=origin, input=input)
+    run = engine.run(path, run_id, project_id, origin=origin, input=input, params=params)
     return {"run_id": run_id, "status": run["status"]}
 
 

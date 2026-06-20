@@ -68,6 +68,32 @@ def resolve_input_mapping(
     return _substitute(prompt, values)
 
 
+_PARAM_REF = re.compile(r"\{\{params\.([A-Za-z0-9_-]+)\}\}")
+
+
+def resolve_params(prompt: str, params: Optional[Mapping[str, object]]) -> str:
+    """Return ``prompt`` with every ``{{params.<name>}}`` placeholder replaced by
+    its run value. ``params`` is the run's resolved template parameters (validated
+    at run-create). Fail loud, never silent: a placeholder that references a param
+    not present in ``params`` raises rather than leaving a literal token in the
+    prompt - the same contract as ``input_mapping`` resolution. A prompt with no
+    param placeholder is returned unchanged (so a non-template run is untouched)."""
+    names = _PARAM_REF.findall(prompt)
+    if not names:
+        return prompt
+    values = params or {}
+    missing = [name for name in dict.fromkeys(names) if name not in values]
+    if missing:
+        raise UnresolvedInput(
+            "prompt references "
+            + ", ".join(f"{{{{params.{name}}}}}" for name in missing)
+            + " but the run has no such param value"
+        )
+    # Single pass over the original prompt: an injected value is never re-scanned
+    # for another placeholder's token.
+    return _PARAM_REF.sub(lambda m: str(values[m.group(1)]), prompt)
+
+
 def resolve_ref(ref: str, node_channels: Mapping[str, Mapping[str, Optional[str]]]) -> str:
     """Resolve a single value that is either a literal or one
     ``{{nodes.<id>.<channel>}}`` reference (output / review_note). A literal is

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -87,6 +87,78 @@ describe("cli commands — run lifecycle on runs.db", () => {
     const active = cmdRunList(db, true).map((r) => r.run_id);
     expect(active).not.toContain("run-1");
     expect(active).toContain("run-2");
+  });
+});
+
+describe("cli commands — run-create with template params", () => {
+  let dir: string;
+  let db: string;
+  let spec: string;
+
+  const PARAM_SPEC = `id: paramflow
+name: Param Flow
+version: 1
+scope:
+  type: global
+trigger:
+  type: manual
+defaults:
+  profile: worker
+params:
+  - name: region
+    type: enum
+    label: Region
+    options: [eu, us]
+  - name: count
+    type: int
+    label: Count
+    default: 1
+nodes:
+  - id: a
+    type: agent_task
+    prompt: "deploy {{params.region}} x{{params.count}}"
+  - id: done
+    type: finish
+edges:
+  - from: a
+    to: done
+`;
+
+  beforeAll(async () => {
+    dir = await mkdtemp(join(tmpdir(), "hw-cli-params-"));
+    db = join(dir, "runs.db");
+    spec = join(dir, "paramflow.workflow.yaml");
+    await writeFile(spec, PARAM_SPEC);
+  });
+  afterAll(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("validates and persists supplied params, applying declared defaults", async () => {
+    const run = await cmdRunCreate(
+      db,
+      spec,
+      "p-1",
+      undefined,
+      undefined,
+      undefined,
+      '{"region":"eu"}',
+    );
+    // region taken from the supplied value; count from the declared default.
+    expect(run.params).toEqual({ region: "eu", count: 1 });
+    expect(cmdRunLoad(db, "p-1")?.params).toEqual({ region: "eu", count: 1 });
+  });
+
+  test("rejects an unknown param name", async () => {
+    await expect(
+      cmdRunCreate(db, spec, "p-bad", undefined, undefined, undefined, '{"nope":"x"}'),
+    ).rejects.toThrow(/unknown param/);
+  });
+
+  test("rejects a value outside a strict enum", async () => {
+    await expect(
+      cmdRunCreate(db, spec, "p-enum", undefined, undefined, undefined, '{"region":"apac"}'),
+    ).rejects.toThrow(/not allowed/);
   });
 });
 

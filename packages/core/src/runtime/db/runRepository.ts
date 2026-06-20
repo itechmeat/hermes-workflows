@@ -8,6 +8,7 @@
 import type { Database } from "bun:sqlite";
 
 import type { RunState, RunStatus, NodeRunState, NodeTelemetry } from "../../schema/run.ts";
+import type { ParamValue } from "../../templates/params.ts";
 import { ACTIVE_NODE_STATUSES, ACTIVE_RUN_STATUSES } from "../status.ts";
 
 /** The active statuses as a quoted SQL `IN (...)` list. Safe to interpolate:
@@ -96,6 +97,7 @@ interface RunRow {
   error: string | null;
   origin: string | null;
   notified: string | null;
+  params_json: string | null;
 }
 
 interface NodeRow {
@@ -190,8 +192,8 @@ export class RunRepository {
       this.db
         .query(
           `INSERT INTO workflow_runs
-             (id, workflow_id, workflow_version, status, project_id, input_json, started_at, finished_at, error, origin, notified)
-           VALUES ($id, $wf, $ver, $status, $project, $input, $started, $finished, $error, $origin, $notified)
+             (id, workflow_id, workflow_version, status, project_id, input_json, started_at, finished_at, error, origin, notified, params_json)
+           VALUES ($id, $wf, $ver, $status, $project, $input, $started, $finished, $error, $origin, $notified, $params)
            ON CONFLICT(id) DO UPDATE SET
              status = excluded.status,
              project_id = excluded.project_id,
@@ -202,10 +204,12 @@ export class RunRepository {
              started_at = COALESCE(workflow_runs.started_at, excluded.started_at),
              finished_at = excluded.finished_at,
              error = excluded.error,
-             -- origin and notified live on the RunState, which every save carries
-             -- in full, so overwriting with the incoming value is correct.
+             -- origin, notified, and params live on the RunState, which every
+             -- save carries in full, so overwriting with the incoming value is
+             -- correct.
              origin = excluded.origin,
-             notified = excluded.notified`,
+             notified = excluded.notified,
+             params_json = excluded.params_json`,
         )
         .run({
           $id: run.run_id,
@@ -224,6 +228,8 @@ export class RunRepository {
           $error: meta.error ?? null,
           $origin: run.origin ?? null,
           $notified: run.notified && run.notified.length > 0 ? JSON.stringify(run.notified) : null,
+          $params:
+            run.params && Object.keys(run.params).length > 0 ? JSON.stringify(run.params) : null,
         });
 
       for (const node of Object.values(run.nodes)) {
@@ -341,6 +347,10 @@ export class RunRepository {
     if (row.notified !== null) {
       const parsed = JSON.parse(row.notified) as string[];
       if (parsed.length > 0) run.notified = parsed;
+    }
+    if (row.params_json !== null) {
+      const parsed = JSON.parse(row.params_json) as Record<string, ParamValue>;
+      if (parsed && Object.keys(parsed).length > 0) run.params = parsed;
     }
     return run;
   }

@@ -5,7 +5,7 @@ detection at load time (so an O2B problem can never break startup)."""
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Optional
 
 PLUGIN_NAME = "hermes-workflows"
 TOOLSET = "workflows"
@@ -131,16 +131,46 @@ def register(ctx: Any) -> None:
             "workflow",
             _handle_command,
             description="Run and manage Workflows (list / run / status / review / cancel / explain).",
-            args_hint="run <id> | status <run> | review <run> <node> <decision> | cancel <run> | list",
+            args_hint="run <id> [name=value ...] | status <run> | review <run> <node> <decision> | cancel <run> | list",
         )
 
 
 _COMMAND_USAGE = (
-    "Usage: /workflow list | run <id> [project] [--input <operator prompt>] | "
+    "Usage: /workflow list | "
+    "run <id> [project] [name=value ...] [--input <operator prompt>] | "
     "status <run_id> | "
     "review <run_id> <node_id> <approved|rejected|needs_changes> [note] | "
     "cancel <run_id> | explain <id>"
 )
+
+
+def _tokenize(raw_args: str) -> list[str]:
+    """Split the command line, respecting quotes so a ``name="two words"`` param
+    value survives as one token (the slash-command emitter quotes text values).
+    Falls back to a plain whitespace split on an unbalanced quote."""
+    import shlex
+
+    try:
+        return shlex.split(raw_args or "")
+    except ValueError:
+        return (raw_args or "").strip().split()
+
+
+def _parse_run_args(tail: list[str]) -> tuple[Optional[str], dict[str, str]]:
+    """From the tokens after ``run <id>`` (with any ``--input`` already removed),
+    split a positional project id from ``name=value`` template params. The first
+    bare token (no ``=``) is the project; every ``name=value`` token is a param.
+    Core ``fillParams`` validates/coerces the values at run-create."""
+    project_id: Optional[str] = None
+    params: dict[str, str] = {}
+    for token in tail:
+        if "=" in token:
+            name, value = token.split("=", 1)
+            if name:
+                params[name] = value
+        elif project_id is None:
+            project_id = token
+    return project_id, params
 
 
 def _handle_command(raw_args: str = "", **_kwargs: Any) -> str:
@@ -151,7 +181,7 @@ def _handle_command(raw_args: str = "", **_kwargs: Any) -> str:
 
     from . import config, tools
 
-    parts = (raw_args or "").strip().split()
+    parts = _tokenize(raw_args)
     if not parts or parts[0] in ("help", "-h", "--help"):
         return _COMMAND_USAGE
     sub, rest = parts[0], parts[1:]
@@ -172,7 +202,10 @@ def _handle_command(raw_args: str = "", **_kwargs: Any) -> str:
             )
         if sub == "run":
             if not rest:
-                return "Usage: /workflow run <workflow_id> [project] [--input <operator prompt>]"
+                return (
+                    "Usage: /workflow run <workflow_id> [project] [name=value ...] "
+                    "[--input <operator prompt>]"
+                )
             workflow_id = rest[0]
             tail = rest[1:]
             # Everything after `--input` is the operator's free-form run input,
@@ -182,6 +215,9 @@ def _handle_command(raw_args: str = "", **_kwargs: Any) -> str:
                 i = tail.index("--input")
                 operator_input = " ".join(tail[i + 1 :]).strip() or None
                 tail = tail[:i]
+            # The remaining tokens are a positional project and name=value
+            # template params (validated/coerced by the core at run-create).
+            project_id, params = _parse_run_args(tail)
             run_id = f"run_{uuid.uuid4().hex[:12]}"
             result = tools.run_workflow(
                 workflow_id,
@@ -189,8 +225,9 @@ def _handle_command(raw_args: str = "", **_kwargs: Any) -> str:
                 roots=roots,
                 core_cli=core_cli,
                 run_id=run_id,
-                project_id=tail[0] if tail else None,
+                project_id=project_id,
                 input=operator_input,
+                params=params or None,
             )
             return f"Started run {result['run_id']} ({result['status']})."
         if sub == "status":
