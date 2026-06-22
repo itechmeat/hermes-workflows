@@ -89,6 +89,7 @@ interface RunRow {
   id: string;
   workflow_id: string;
   workflow_version: number | null;
+  workflow_path: string | null;
   status: string;
   project_id: string | null;
   input_json: string | null;
@@ -194,9 +195,10 @@ export class RunRepository {
       this.db
         .query(
           `INSERT INTO workflow_runs
-             (id, workflow_id, workflow_version, status, project_id, input_json, started_at, finished_at, error, origin, notified, params_json)
-           VALUES ($id, $wf, $ver, $status, $project, $input, $started, $finished, $error, $origin, $notified, $params)
+             (id, workflow_id, workflow_version, workflow_path, status, project_id, input_json, started_at, finished_at, error, origin, notified, params_json)
+           VALUES ($id, $wf, $ver, $path, $status, $project, $input, $started, $finished, $error, $origin, $notified, $params)
            ON CONFLICT(id) DO UPDATE SET
+             workflow_path = excluded.workflow_path,
              status = excluded.status,
              project_id = excluded.project_id,
              input_json = excluded.input_json,
@@ -217,6 +219,7 @@ export class RunRepository {
           $id: run.run_id,
           $wf: run.workflow_id,
           $ver: run.workflow_version,
+          $path: run.workflow_path ?? null,
           $status: run.status,
           $project: run.project_id ?? null,
           $input:
@@ -347,6 +350,7 @@ export class RunRepository {
       status: row.status as RunStatus,
       nodes,
     };
+    if (row.workflow_path !== null) run.workflow_path = row.workflow_path;
     if (row.project_id !== null) run.project_id = row.project_id;
     if (row.input_json !== null) {
       const parsed = JSON.parse(row.input_json) as unknown;

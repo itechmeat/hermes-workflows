@@ -105,7 +105,7 @@ def guard_scripts_enabled(engine: Engine, spec_path: str) -> None:
 
 
 def _spec_path_for_workflow(engine: Engine, workflow_id: str) -> str:
-    specs = engine._core(["list-specs", "--roots", ",".join(config.spec_roots())])
+    specs = engine._core(["list-specs", "--roots", ",".join(config.cli_spec_roots())])
     for spec in specs:
         if spec["id"] == workflow_id:
             return spec["path"]
@@ -114,6 +114,9 @@ def _spec_path_for_workflow(engine: Engine, workflow_id: str) -> str:
 
 def _spec_path_for_run(engine: Engine, run_id: str) -> str:
     run = engine.status(run_id)
+    stored = engine._stored_spec_path(run)
+    if stored is not None:
+        return stored
     return _spec_path_for_workflow(engine, run["workflow_id"])
 
 
@@ -136,7 +139,7 @@ def _advance_all(engine: Engine) -> dict:
     from .bridge import cron
 
     return engine.tick(
-        config.spec_roots(),
+        config.cli_spec_roots(),
         sync_tick=lambda *, active, script: cron.sync_workflow_tick(active=active),
         tick_script="advance-all",
     )
@@ -147,7 +150,7 @@ def _advance_run(engine: Engine, run_id: str) -> dict:
     The engine's ``ValueError`` (unknown run / unresolvable spec) is surfaced as
     a clean ``SystemExit`` (non-zero with a message), never a traceback."""
     try:
-        return engine.advance_run(config.spec_roots(), run_id)
+        return engine.advance_run(config.cli_spec_roots(), run_id)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 

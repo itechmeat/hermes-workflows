@@ -216,6 +216,13 @@ class Engine:
             raise ValueError(f"unknown run {run_id}")
         return run
 
+    @staticmethod
+    def _stored_spec_path(run: dict) -> Optional[str]:
+        path = run.get("workflow_path")
+        if isinstance(path, str) and path.strip() != "":
+            return path
+        return None
+
     def active_runs(self) -> list[dict]:
         """Every run still needing advances (created / running / waiting). Used by
         the chat-reply gate router to find a run awaiting a decision."""
@@ -344,7 +351,7 @@ class Engine:
 
         advanced: list[dict] = []
         for run in runs:
-            spec_path = path_by_id.get(run["workflow_id"])
+            spec_path = self._stored_spec_path(run) or path_by_id.get(run["workflow_id"])
             if spec_path is None:
                 continue
             try:
@@ -369,6 +376,9 @@ class Engine:
         run = self._load(run_id)
         if run is None:
             raise ValueError(f"unknown run '{run_id}'")
+        stored = self._stored_spec_path(run)
+        if stored is not None:
+            return self.advance(stored, run_id)
         specs = self._core(["list-specs", "--roots", ",".join(spec_roots)])
         spec_path = next(
             (spec["path"] for spec in specs if spec["id"] == run["workflow_id"]), None

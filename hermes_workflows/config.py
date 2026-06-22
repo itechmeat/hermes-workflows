@@ -171,6 +171,25 @@ def spec_roots() -> list[str]:
     return [str(global_workflows_dir()), str(templates_dir())]
 
 
+def project_workflows_dir(cwd: str | os.PathLike[str] | None = None) -> Path | None:
+    """Current repo-local workflows dir (`<cwd>/.hermes/workflows`) when it
+    exists. Used by the shell CLI so `hermes-workflows run <id>` can see a
+    project's own workflows without global registration."""
+    base = Path(cwd) if cwd is not None else Path.cwd()
+    candidate = base / '.hermes' / 'workflows'
+    return candidate if candidate.is_dir() else None
+
+
+def cli_spec_roots(cwd: str | os.PathLike[str] | None = None) -> list[str]:
+    """Spec roots visible to the shell CLI: global + templates, plus the current
+    repo-local workflows dir when running inside a project."""
+    roots = list(spec_roots())
+    project = project_workflows_dir(cwd)
+    if project is not None:
+        roots.append(str(project))
+    return roots
+
+
 # --- plugin settings (Hermes config `plugins.workflows`) ---------------------
 
 # Field descriptors for the Settings page. ``enforced`` marks whether the engine

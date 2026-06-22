@@ -205,7 +205,7 @@ export async function cmdRunCreate(
 ): Promise<RunState> {
   const workflow = await loadWorkflow(specPath);
   const params = resolveRunParams(workflow.params, paramsJson);
-  const run = createRunState(workflow, runId, projectId, origin, input, params);
+  const run = createRunState(workflow, runId, specPath, projectId, origin, input, params);
   // Single-flight: throws ActiveRunExistsError when the workflow already has
   // an active run (the bridge maps the error name to HTTP 409).
   repository(dbPath).createRun(run, timingMeta(run, true));

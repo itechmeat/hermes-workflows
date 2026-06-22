@@ -44,6 +44,7 @@ export function canTransitionNode(from: NodeStatus, to: NodeStatus): boolean {
 export function createRunState(
   workflow: Workflow,
   runId: string,
+  workflowPath?: string,
   projectId?: string,
   origin?: string,
   input?: string,
@@ -60,6 +61,7 @@ export function createRunState(
     status: "created",
     nodes,
   };
+  if (workflowPath !== undefined && workflowPath !== "") run.workflow_path = workflowPath;
   if (projectId !== undefined) run.project_id = projectId;
   if (origin !== undefined && origin !== "") run.origin = origin;
   if (input !== undefined && input !== "") run.input = input;

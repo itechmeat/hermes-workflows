@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   id               TEXT PRIMARY KEY,
   workflow_id      TEXT NOT NULL,
   workflow_version INTEGER,
+  workflow_path    TEXT,
   status           TEXT NOT NULL,
   project_id       TEXT,
   input_json       TEXT,

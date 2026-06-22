@@ -139,3 +139,33 @@ def test_run_arms_the_tick_for_an_active_run(home: Path, capsys) -> None:
     run = _invoke(capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS))
     assert run["status"] == "running"
     assert cron_bridge.find_by_name(cron_bridge.TICK_NAME) is not None
+
+
+def test_run_discovers_repo_local_workflow_and_persists_its_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    h = tmp_path / 'home'
+    (h / 'workflows' / 'global').mkdir(parents=True)
+    monkeypatch.setenv('HERMES_HOME', str(h))
+    monkeypatch.setenv('HERMES_KANBAN_DB', str(tmp_path / 'kanban.db'))
+    cron_dir = tmp_path / 'cron'
+    cron_dir.mkdir()
+    monkeypatch.setattr(cj, 'CRON_DIR', cron_dir)
+    monkeypatch.setattr(cj, 'JOBS_FILE', cron_dir / 'jobs.json')
+    monkeypatch.setattr(cj, 'OUTPUT_DIR', cron_dir / 'output')
+
+    project = tmp_path / 'repo'
+    local_dir = project / '.hermes' / 'workflows'
+    local_dir.mkdir(parents=True)
+    shutil.copy(SPEC, local_dir / 'feature-development.workflow.yaml')
+
+    monkeypatch.chdir(project)
+    run = _invoke(capsys, 'run', 'feature-development')
+    assert run['workflow_path'] == str(local_dir / 'feature-development.workflow.yaml')
+
+    monkeypatch.chdir(tmp_path)
+    status = _invoke(capsys, 'status', run['run_id'])
+    assert status['workflow_path'] == str(local_dir / 'feature-development.workflow.yaml')
+
+    tick = _invoke(capsys, 'advance-all')
+    assert any(r['run_id'] == run['run_id'] for r in tick['advanced'])

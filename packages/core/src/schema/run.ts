@@ -150,6 +150,11 @@ export interface RunState {
   run_id: string;
   workflow_id: string;
   workflow_version: number;
+  /**
+   * Absolute path to the workflow spec this run was created from. Persisted so
+   * repo-local runs remain advanceable even after the caller's cwd changes.
+   */
+  workflow_path?: string;
   status: RunStatus;
   project_id?: string;
   /**
