@@ -141,9 +141,21 @@ function emitSequence(arr: unknown[], depth: number): string[] {
   return lines;
 }
 
-/** Emit `workflow` (and `ui`, when present) as a portable YAML spec string. */
-export function serializeWorkflow(workflow: Workflow, ui?: UiLayout): string {
-  const doc: Record<string, unknown> = { ...workflow };
+/**
+ * Emit `workflow` (and `ui`, when present) as a portable YAML spec string.
+ *
+ * `prelude` lets a caller stamp extra top-level keys ahead of the workflow body
+ * (e.g. template export's `template:` provenance block). It goes through the
+ * same lossless emitter, and the loader ignores unknown top-level keys, so the
+ * emitted document still parses as a workflow. Prelude keys are emitted first;
+ * none collide with workflow field names in practice.
+ */
+export function serializeWorkflow(
+  workflow: Workflow,
+  ui?: UiLayout,
+  prelude?: Record<string, unknown>,
+): string {
+  const doc: Record<string, unknown> = { ...(prelude ?? {}), ...workflow };
   if (ui !== undefined) doc["ui"] = ui;
   return emitMapping(doc, 0).join("\n") + "\n";
 }

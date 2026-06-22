@@ -48,6 +48,26 @@ export type { UiLayout, XyflowLayout, XyflowNodeLayout, Viewport } from "./schem
 
 // Serialization
 export { serializeWorkflow } from "./serialize/serializeWorkflow.ts";
+export { specSha } from "./serialize/specSha.ts";
+export {
+  exportTemplate,
+  templateCacheKey,
+  templateRevision,
+  generationRequest,
+  TEMPLATE_FORMAT,
+  GENERATOR_VERSION,
+} from "./templates/exportTemplate.ts";
+export type {
+  TemplateBundle,
+  TemplateVersion,
+  TemplatePlaceholder,
+  InventoryItem,
+  GuideHints,
+  NodeHint,
+  GenerationRequest,
+  ExportTemplateOptions,
+  PrereqLinks,
+} from "./templates/exportTemplate.ts";
 
 // Template parameters + per-surface emitters (host-mirror of blueprint_catalog)
 export {
