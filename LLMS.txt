@@ -168,10 +168,21 @@ loop or a self-polling wait) — confirm the loop terminates.
 ## Run lifecycle and operations
 
 - Drive runs with the entrypoint: `run <id>` (start + first advance),
-  `status <run-id>`, `cancel <run-id>`, `advance-all`.
-- A multi-node run advances via a singleton **tick** cron, created while runs are
-  active and torn down when none remain. Without it a run stalls after its first
-  step.
+  `status <run-id>`, `cancel <run-id>`, `advance-all`, `advance-run <run-id>`
+  (scoped to one run).
+- A multi-node run advances **event-driven**: when a worker completes or blocks a
+  workflow card it fires the native Kanban lifecycle hooks
+  (`kanban_task_completed` / `kanban_task_blocked`, Hermes #50349), which the
+  plugin observes to spawn a detached `advance-run <run-id>` in seconds, scoped
+  to the owning run. A per-run debounce
+  (`plugins.workflows.event_debounce_seconds`, default 2s) coalesces a burst of
+  parallel-node completions into one spawn.
+- Behind the event path, a singleton **tick** cron (`advance-all`) remains as the
+  coarse safety-net + `wait`-node poll, created while runs are active and torn
+  down when none remain. Its cadence is the configurable
+  `plugins.workflows.tick_schedule` setting (default `every 2m`). A `wait` node
+  or a missed event still settles on the next tick, so a run never stalls after
+  its first step.
 - **Single-flight:** at most one active run per workflow. A stuck or orphaned
   active run blocks new runs (an "active run exists" refusal) — cancel it before
   re-running.

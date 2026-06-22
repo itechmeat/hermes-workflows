@@ -4,7 +4,7 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.6.0 - 2026-06-22
 
 Workflow runs now advance the moment a node finishes instead of waiting out the
 ~2-minute poll. A multi-node run that used to take ~10-12 min wall-clock —
