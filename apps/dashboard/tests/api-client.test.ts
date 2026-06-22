@@ -384,4 +384,26 @@ describe("workflows API client", () => {
     expect(h.last().path).toBe(`${BASE}/workflows/wf-1/export`);
     expect(h.last().init?.method ?? "GET").toBe("GET");
   });
+
+  it("exports a workflow as a template, returning the bundle envelope", async () => {
+    const h = harness();
+    const envelope = {
+      id: "wf-1",
+      cached: false,
+      revision: "9c3a0000",
+      human_version: "fmt1·wf1·r9c3a",
+      spec_sha: "sha256:00",
+      yaml_filename: "wf-1.template.yaml",
+      yaml: "id: wf-1\n",
+      md_filename: "wf-1.template.md",
+      md: "# guide\n",
+    };
+    h.reply(envelope);
+
+    const result = await h.client.exportTemplate("wf-1");
+
+    expect(result).toBe(envelope);
+    expect(h.last().path).toBe(`${BASE}/workflows/wf-1/export-template`);
+    expect(h.last().init?.method ?? "GET").toBe("GET");
+  });
 });
