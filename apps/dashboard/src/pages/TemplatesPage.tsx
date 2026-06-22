@@ -186,6 +186,26 @@ export function TemplatesPage({
     [api],
   );
 
+  const handleExportTemplate = useCallback(
+    (id: string) => {
+      setRunMessage(`Building template for ${id}…`);
+      api
+        .exportTemplate(id)
+        .then((bundle) => {
+          // Two artifacts: the de-bound spec and its adaptation guide.
+          downloadTextFile(bundle.yaml_filename, bundle.yaml);
+          downloadTextFile(bundle.md_filename, bundle.md, "text/markdown");
+          setRunMessage(
+            `Exported template ${id} (${bundle.human_version})${bundle.cached ? " — from cache" : ""}`,
+          );
+        })
+        .catch((err: unknown) =>
+          setRunMessage(err instanceof Error ? err.message : `Failed to export template ${id}`),
+        );
+    },
+    [api],
+  );
+
   const handleImportFile = useCallback(
     (file: File) => {
       setRunMessage(`Importing ${file.name}…`);
@@ -346,6 +366,11 @@ export function TemplatesPage({
                         key: "export-json",
                         label: "Export JSON",
                         onSelect: () => handleExportJson(item.id),
+                      },
+                      {
+                        key: "export-template",
+                        label: "Export as template",
+                        onSelect: () => handleExportTemplate(item.id),
                       },
                       { key: "delete", label: "Delete", onSelect: () => handleDelete(item.id) },
                     ]}

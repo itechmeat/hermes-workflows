@@ -7,6 +7,7 @@ import type {
   CreateWorkflowBody,
   DeleteResult,
   ExportedRun,
+  ExportedTemplate,
   ExportedWorkflow,
   HermesPlan,
   ModelGroup,
@@ -36,6 +37,8 @@ export interface WorkflowsApi {
   deleteWorkflow(id: string): Promise<DeleteResult>;
   setWorkflowEnabled(id: string, enabled: boolean): Promise<SpecDetail>;
   exportWorkflow(id: string): Promise<ExportedWorkflow>;
+  /** Export the workflow as an installation-agnostic template + adaptation guide. */
+  exportTemplate(id: string): Promise<ExportedTemplate>;
   saveWorkflow(id: string, body: SaveWorkflowBody): Promise<SpecDetail>;
   validateWorkflow(id: string): Promise<ValidationResult>;
   compilePreview(id: string): Promise<HermesPlan>;
@@ -108,6 +111,9 @@ export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
 
     exportWorkflow(id) {
       return fetchJSON<ExportedWorkflow>(`${workflow(id)}/export`);
+    },
+    exportTemplate(id) {
+      return fetchJSON<ExportedTemplate>(`${workflow(id)}/export-template`);
     },
 
     saveWorkflow(id, body) {

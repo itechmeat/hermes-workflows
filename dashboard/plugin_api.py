@@ -241,6 +241,25 @@ async def export_workflow(workflow_id: str) -> dict:
     return {"id": workflow_id, "filename": f"{workflow_id}.workflow.yaml", "yaml": body}
 
 
+@router.get("/workflows/{workflow_id}/export-template")
+async def export_workflow_template(workflow_id: str) -> dict:
+    """Export the workflow "as a template": decouple installation-specific
+    bindings into free-form ``${...}`` placeholders and ship an AI-authored
+    adaptation guide. Returns a JSON envelope with BOTH artifacts' contents
+    (``yaml`` + ``md``) so they travel over the host's JSON-only channel. The
+    bundle is cached on (workflow_id, spec_sha, template_format,
+    generator_version); a repeat export of the unchanged version is served from
+    cache with no model call. ``404`` if the workflow is absent."""
+    from hermes_workflows import cli_bridge, template_export
+
+    try:
+        return template_export.export(workflow_id)
+    except cli_bridge.CoreBridgeError as exc:
+        if exc.kind == "NotFoundError":
+            raise HTTPException(status_code=404, detail="workflow not found") from exc
+        raise HTTPException(status_code=500, detail="failed to export template") from exc
+
+
 @router.get("/runs")
 async def list_runs(scope: str = "active", workflow_id: str | None = None) -> dict:
     """List runs for the Runs page. ``scope=active`` (default) keeps the

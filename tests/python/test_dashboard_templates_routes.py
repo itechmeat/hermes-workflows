@@ -87,3 +87,25 @@ def test_disabled_workflow_run_is_409(client: TestClient) -> None:
 def test_toggle_unknown_workflow_is_404(client: TestClient) -> None:
     resp = client.put("/workflows/ghost/enabled", json={"enabled": False})
     assert resp.status_code == 404
+
+
+def test_export_template_returns_both_artifacts(client: TestClient) -> None:
+    # No config.yaml in the temp home → no default model → deterministic
+    # (fail-open) generation, so the route needs no live gateway.
+    resp = client.get("/workflows/feature-development/export-template")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["yaml_filename"] == "feature-development.template.yaml"
+    assert body["md_filename"] == "feature-development.template.md"
+    assert "${PROFILE:" in body["yaml"]
+    assert "product-tech-lead" not in body["yaml"]
+    assert "Prerequisites" in body["md"]
+    assert body["human_version"].startswith("fmt")
+    # Second call is served from cache.
+    again = client.get("/workflows/feature-development/export-template")
+    assert again.json()["cached"] is True
+
+
+def test_export_template_unknown_workflow_is_404(client: TestClient) -> None:
+    resp = client.get("/workflows/ghost/export-template")
+    assert resp.status_code == 404

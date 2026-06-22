@@ -33,6 +33,13 @@ def templates_dir() -> Path:
     return workflows_dir() / "templates"
 
 
+def template_export_dir() -> Path:
+    """Where `export --as-template` writes the generated `.template.yaml` /
+    `.template.md` bundle and its cache sidecar. A repeat export of an unchanged
+    version is served from this directory without re-running the AI generator."""
+    return workflows_dir() / "template-exports"
+
+
 def runs_db_path() -> Path:
     return workflows_dir() / "runs.db"
 

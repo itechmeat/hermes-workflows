@@ -7,6 +7,8 @@ Subcommands:
   status <run_id>                    print a run's current state
   cancel <run_id>                    cancel a run and its still-active nodes
   review <run_id> <node_id> <dec>    resolve a human_review node
+  export <workflow_id> --as-template share a workflow as an installation-
+                                     agnostic template (+ adaptation guide)
 
 Each prints a JSON document to stdout. The installed wrapper (``bin/hermes-
 workflows``) execs this module; cron jobs invoke the same command.
@@ -18,6 +20,7 @@ import argparse
 import json
 import sys
 import uuid
+from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from . import cli_bridge, config
@@ -194,6 +197,18 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
     if args.command == "review":
         spec = _spec_path_for_run(engine, args.run_id)
         return engine.decide_review(spec, args.run_id, args.node_id, args.decision, note=args.note)
+    if args.command == "export":
+        if not args.as_template:
+            raise SystemExit("export currently supports only --as-template")
+        from . import template_export
+
+        out_dir = Path(args.out_dir) if args.out_dir else None
+        try:
+            return template_export.export(args.workflow_id, out_dir=out_dir)
+        except cli_bridge.CoreBridgeError as exc:
+            if exc.kind == "NotFoundError":
+                raise SystemExit(exc.detail) from exc
+            raise
     raise SystemExit(f"unknown command '{args.command}'")
 
 
@@ -228,6 +243,17 @@ def _parser() -> argparse.ArgumentParser:
     p_review.add_argument("decision")
     # Optional operator payload, consumable downstream as {{nodes.<gate>.review_note}}.
     p_review.add_argument("--note", default=None)
+
+    p_export = sub.add_parser("export", help="export a workflow as a shareable template")
+    p_export.add_argument("workflow_id")
+    p_export.add_argument(
+        "--as-template",
+        action="store_true",
+        help="decouple installation bindings into placeholders + an adaptation guide",
+    )
+    p_export.add_argument(
+        "--out-dir", default=None, help="where to write the bundle (default: the export cache dir)"
+    )
 
     return parser
 

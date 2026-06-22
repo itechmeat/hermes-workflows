@@ -145,6 +145,20 @@ export interface ExportedWorkflow {
   yaml: string;
 }
 
+/** The "export as template" bundle: the de-bound spec plus its adaptation
+ *  guide, both as text so they download over the JSON-only channel. */
+export interface ExportedTemplate {
+  id: string;
+  cached: boolean;
+  revision: string;
+  human_version: string;
+  spec_sha: string;
+  yaml_filename: string;
+  yaml: string;
+  md_filename: string;
+  md: string;
+}
+
 /** Optional start options for `POST /workflows/{id}/run`. */
 export interface RunOptions {
   project_id?: string;

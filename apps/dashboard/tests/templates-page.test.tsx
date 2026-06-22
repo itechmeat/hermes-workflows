@@ -44,6 +44,17 @@ function stubClient(overrides: Partial<WorkflowsApi> = {}): WorkflowsApi {
       filename: `${id}.workflow.yaml`,
       yaml: `id: ${id}\n`,
     })),
+    exportTemplate: vi.fn(async (id: string) => ({
+      id,
+      cached: false,
+      revision: "9c3a0000",
+      human_version: "fmt1·wf1·r9c3a",
+      spec_sha: "sha256:00",
+      yaml_filename: `${id}.template.yaml`,
+      yaml: `id: ${id}\n`,
+      md_filename: `${id}.template.md`,
+      md: "# guide\n",
+    })),
     listModels: vi.fn(async () => []),
     listProfiles: vi.fn(async () => []),
     listSkills: vi.fn(async () => []),
@@ -341,6 +352,31 @@ describe("TemplatesPage — row lifecycle actions", () => {
 
     await waitFor(() => expect(exportWorkflow).toHaveBeenCalledWith("deploy"));
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it("exports a workflow as a template (two downloads: spec + guide)", async () => {
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    const exportTemplate = vi.fn(async (id: string) => ({
+      id,
+      cached: false,
+      revision: "9c3a0000",
+      human_version: "fmt1·wf1·r9c3a",
+      spec_sha: "sha256:00",
+      yaml_filename: `${id}.template.yaml`,
+      yaml: `id: ${id}\n`,
+      md_filename: `${id}.template.md`,
+      md: "# guide\n",
+    }));
+    const client = stubClient({ listWorkflows: vi.fn(async () => items), exportTemplate });
+    render(<TemplatesPage client={client} onOpen={() => {}} />);
+
+    await screen.findByText("Deploy");
+    await clickRowAction(0, /export as template/i);
+
+    await waitFor(() => expect(exportTemplate).toHaveBeenCalledWith("deploy"));
+    // One object URL per downloaded artifact: the spec and the guide.
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
 
   it("exports a workflow as a JSON download of the authoring shape", async () => {
