@@ -3,6 +3,7 @@
 Subcommands:
   run <workflow_id> [--project P]   start a run and advance it once
   advance-all                        advance every active run (the tick body)
+  advance-run <run_id>               advance one run (the event-driven path)
   status <run_id>                    print a run's current state
   cancel <run_id>                    cancel a run and its still-active nodes
   review <run_id> <node_id> <dec>    resolve a human_review node
@@ -137,6 +138,16 @@ def _advance_all(engine: Engine) -> dict:
     )
 
 
+def _advance_run(engine: Engine, run_id: str) -> dict:
+    """The scoped advance the event-driven path spawns: advance exactly one run.
+    The engine's ``ValueError`` (unknown run / unresolvable spec) is surfaced as
+    a clean ``SystemExit`` (non-zero with a message), never a traceback."""
+    try:
+        return engine.advance_run(config.spec_roots(), run_id)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
     if args.command == "run":
         spec = _spec_path_for_workflow(engine, args.workflow_id)
@@ -167,6 +178,8 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
         return run
     if args.command == "advance-all":
         return _advance_all(engine)
+    if args.command == "advance-run":
+        return _advance_run(engine, args.run_id)
     if args.command == "status":
         # Opportunistic live read: annotate active nodes with their card's live
         # state so status does not lag the tick. Falls back to the persisted run
@@ -199,6 +212,9 @@ def _parser() -> argparse.ArgumentParser:
     p_run.add_argument("--input", default=None)
 
     sub.add_parser("advance-all", help="advance every active run")
+
+    p_advance_run = sub.add_parser("advance-run", help="advance a single run by id")
+    p_advance_run.add_argument("run_id")
 
     p_status = sub.add_parser("status", help="print a run's state")
     p_status.add_argument("run_id")

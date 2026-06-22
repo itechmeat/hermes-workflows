@@ -53,12 +53,25 @@ The backend is chosen by workflow scope: a project run uses the Kanban backend
 Hermes gateway hosts an embedded dispatcher that ticks every board on disk and
 spawns workers for ready cards, governed by `kanban.max_in_progress[_per_profile]`.
 
-Advancement itself is driven by a transient Cron tick (`hermes-workflows
-advance-all`) — a single named job created while runs are active and removed
-when none remain, so tick jobs never accumulate. `advance` is idempotent: a
-repeated tick never duplicates work (native `idempotency_key`), and loop edges
-(fix to validate) re-run a node on a fresh card keyed by iteration. See
-[execution.md](execution.md) for backend details and limits.
+Advancement is primarily **event-driven**. A worker that completes (or blocks) a
+workflow card fires the native `kanban_task_completed` / `kanban_task_blocked`
+lifecycle hooks (Hermes #50349), which the plugin observes and turns into a
+detached, scoped `hermes-workflows advance-run <run_id>` — the same idempotent
+advance cycle, scoped to the owning run. A multi-node run therefore advances
+node-to-node in **seconds**, not on the next poll.
+
+Behind that, a transient Cron tick (`hermes-workflows advance-all`) remains as
+the coarse **safety-net + `wait`-node poll**: a single named job created while
+runs are active and removed when none remain, so tick jobs never accumulate and
+nothing busy-polls at zero active runs. Its cadence is the configurable
+`plugins.workflows.tick_schedule` setting (config ▸ env ▸ default `every 2m`),
+tunable from the Settings page without a code edit; Hermes cron is
+minute-granular, so a sub-minute value is bounded by the scheduler — sub-minute
+latency comes from the event path, not the tick. `advance` is idempotent: a
+repeated tick or a redundant event spawn never duplicates work (native
+`idempotency_key`), and loop edges (fix to validate) re-run a node on a fresh
+card keyed by iteration. See [execution.md](execution.md) for backend details
+and limits.
 
 ## Native Hermes mapping
 

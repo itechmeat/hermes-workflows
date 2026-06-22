@@ -351,6 +351,26 @@ class Engine:
                 )
         return advanced
 
+    def advance_run(self, spec_roots: Sequence[str], run_id: str) -> dict:
+        """Advance exactly ONE run, resolving its spec by workflow id across
+        ``spec_roots`` — the scoped counterpart to :meth:`advance_all`, used by
+        the event-driven advance path so a single card completion does not
+        re-walk every active run. Reuses the idempotent :meth:`advance` cycle.
+        Raises ``ValueError`` on an unknown run or an unresolvable spec (the CLI
+        surfaces it as a clean, traceback-free error)."""
+        run = self._load(run_id)
+        if run is None:
+            raise ValueError(f"unknown run '{run_id}'")
+        specs = self._core(["list-specs", "--roots", ",".join(spec_roots)])
+        spec_path = next(
+            (spec["path"] for spec in specs if spec["id"] == run["workflow_id"]), None
+        )
+        if spec_path is None:
+            raise ValueError(
+                f"no workflow spec for '{run['workflow_id']}' (run '{run_id}') in roots"
+            )
+        return self.advance(spec_path, run_id)
+
     def advance(self, spec_path: str, run_id: str) -> dict:
         """Advance a run one step, then - when inline mode is enabled and the
         step it just scheduled is inline-eligible (script-only, settled

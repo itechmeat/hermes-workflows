@@ -4,6 +4,36 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+Workflow runs now advance the moment a node finishes instead of waiting out the
+~2-minute poll. A multi-node run that used to take ~10-12 min wall-clock —
+dominated by per-transition tick latency — advances node-to-node in seconds.
+
+### Added
+
+- **Event-driven advance.** A worker that completes or blocks a workflow card
+  fires the native Kanban lifecycle hooks (`kanban_task_completed` /
+  `kanban_task_blocked`, Hermes #50349); the plugin observes them and spawns a
+  detached, scoped `hermes-workflows advance-run <run_id>` — the same idempotent
+  advance cycle, scoped to the owning run — so the run progresses immediately
+  rather than on the next poll. A per-run debounce
+  (`plugins.workflows.event_debounce_seconds`, default 2s) coalesces a burst of
+  parallel-node completions into one spawn. The observers are best-effort and
+  never break the worker's completion path.
+
+### Changed
+
+- **Configurable advance-tick cadence.** The residual `advance-all` tick is no
+  longer pinned to the hardcoded `every 2m`: its schedule is the new
+  `plugins.workflows.tick_schedule` setting (config ▸ env ▸ default `every 2m`),
+  tunable from the Settings page without a code edit. With event-driven advance
+  handling card transitions, the tick is now the coarse safety-net + `wait`-node
+  poll, not the latency driver; Hermes cron is minute-granular, so a sub-minute
+  value is bounded by the scheduler — sub-minute latency comes from the event
+  path. The active/idle lifecycle is unchanged: the tick is torn down at zero
+  active runs (no busy-polling).
+
 ## 0.5.1 - 2026-06-20
 
 A patch release with two follow-up fixes to the v0.5.0 `adopt` blocked-card

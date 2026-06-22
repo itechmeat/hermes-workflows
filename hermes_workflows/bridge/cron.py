@@ -18,7 +18,20 @@ from cron import jobs as cj
 from .. import config
 
 TICK_NAME = "hermes-workflows-tick"
+# Fallback cadence when the configurable `plugins.workflows.tick_schedule`
+# cannot be resolved (e.g. `hermes_cli` absent). The effective default is read
+# from config via `_tick_schedule()`; this constant only guards that path.
 DEFAULT_TICK_SCHEDULE = "every 2m"
+
+
+def _tick_schedule() -> str:
+    """Effective tick cadence: the configurable ``plugins.workflows.tick_schedule``
+    (config ▸ env ▸ default), falling back to ``DEFAULT_TICK_SCHEDULE`` if the
+    config layer is unavailable."""
+    try:
+        return config.tick_schedule()
+    except Exception:
+        return DEFAULT_TICK_SCHEDULE
 
 # Workflow cron triggers are registered with this job-name prefix (see
 # ``register_trigger``); the dashboard Schedules page lists exactly these jobs.
@@ -65,10 +78,13 @@ def register_workflow_trigger(
 
 
 def ensure_workflow_tick(
-    *, schedule: str = DEFAULT_TICK_SCHEDULE, command: Optional[Path] = None
+    *, schedule: Optional[str] = None, command: Optional[Path] = None
 ) -> str:
     """Ensure the singleton tick job exists, running ``hermes-workflows
-    advance-all`` on schedule."""
+    advance-all`` on schedule. ``schedule`` defaults to the configurable
+    ``plugins.workflows.tick_schedule`` (config ▸ env ▸ ``every 2m``), resolved
+    at call time so a Settings-page change takes effect on the next tick
+    (re)creation without a code edit."""
     shim = write_shim("hermes-workflows-tick", "advance-all", command=command)
     return ensure_tick(script=str(shim), schedule=schedule)
 
@@ -109,13 +125,13 @@ def find_by_name(name: str) -> Optional[dict]:
     return None
 
 
-def ensure_tick(*, script: str, schedule: str = DEFAULT_TICK_SCHEDULE) -> str:
+def ensure_tick(*, script: str, schedule: Optional[str] = None) -> str:
     existing = find_by_name(TICK_NAME)
     if existing is not None:
         return existing["id"]
     job = cj.create_job(
         prompt=None,
-        schedule=schedule,
+        schedule=schedule or _tick_schedule(),
         name=TICK_NAME,
         script=script,
         no_agent=True,

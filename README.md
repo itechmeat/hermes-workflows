@@ -11,9 +11,11 @@ isn't enough, a workflow is the layer above it.
 
 ## Why
 
-- **It runs itself.** A workflow advances on a self-terminating cron tick — no babysitting, no human
-  in the loop except an explicit `human_review` gate you place yourself. Set it up once; it works
-  while you don't.
+- **It runs itself.** A workflow advances the moment a node finishes — completion of a card fires a
+  native Kanban lifecycle hook that progresses the run in seconds, with a self-terminating cron tick
+  (cadence configurable, default `every 2m`) as the safety-net + `wait`-node poll. No babysitting, no
+  human in the loop except an explicit `human_review` gate you place yourself. Set it up once; it
+  works while you don't.
 - **Nothing is locked away.** A workflow is a plain spec you export to YAML/JSON, re-import on a
   clean install, and edit by hand or in the visual editor. Data flows between nodes through the run
   state, not a host file path baked into the graph — so it stays portable.

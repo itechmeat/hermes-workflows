@@ -85,6 +85,19 @@ def register(ctx: Any) -> None:
     except Exception:
         pass
 
+    # Event-driven advance: worker-side kanban lifecycle observers that spawn a
+    # scoped `advance-run` the moment a workflow card completes/blocks, so a run
+    # advances in seconds instead of waiting for the residual ~2-minute tick.
+    # Registered unconditionally (the observers self-no-op for non-workflow
+    # cards); the detached advance is the real runtime and logs truthfully.
+    # Lazy import keeps registration cheap — the engine is never imported here.
+    try:
+        from .hooks import register as register_lifecycle_hooks
+
+        register_lifecycle_hooks(ctx)
+    except Exception:
+        pass
+
     ctx.register_tool(
         name="workflow_list",
         toolset=TOOLSET,

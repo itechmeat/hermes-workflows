@@ -87,6 +87,24 @@ def trace_enabled() -> bool:
     return bool(_setting_value("trace_enabled"))
 
 
+def event_debounce_seconds() -> float:
+    """Per-run debounce window (seconds) for the event-driven advance spawn:
+    near-simultaneous card completions on one run coalesce to a single scoped
+    ``advance-run`` within this window. Small by default (~2s)."""
+    return float(_setting_value("event_debounce_seconds"))
+
+
+def tick_schedule() -> str:
+    """Cadence of the residual advance tick (``hermes-workflows advance-all``),
+    resolved config ▸ env ▸ default. With event-driven advance handling card
+    transitions, the tick is a coarse safety-net + the ``wait``-node poll, not
+    the latency driver — so the operator's "configurable interval" ask is met by
+    this one knob without a code edit. Default ``"every 2m"`` keeps today's
+    behaviour; Hermes cron is minute-granular, so a sub-minute value is bounded
+    by the scheduler."""
+    return str(_setting_value("tick_schedule"))
+
+
 def memory_settings() -> dict:
     """Open Second Brain write policy from the enforced settings, for the engine:
     mode + the write_* flags. Driven by the ``open_second_brain.*`` settings."""
@@ -171,6 +189,23 @@ SETTINGS_SCHEMA: dict = {
                 # comma-separated allowlist of env var names. Both are enforced.
                 {"key": "scripts_enabled", "type": "bool", "default": False, "enforced": True},
                 {"key": "script_env_allowlist", "type": "string", "default": "", "enforced": True},
+                # Event-driven advance: a burst of near-simultaneous card
+                # completions on one run (parallel nodes) coalesces to a single
+                # detached `advance-run` spawn within this per-run window. The
+                # residual tick still covers anything the burst missed, so this
+                # only avoids pointless spawns — correctness rides on the
+                # idempotent advance cycle, not the debounce. Enforced.
+                {"key": "event_debounce_seconds", "type": "int", "default": 2, "enforced": True},
+                # Cadence of the residual advance tick (`hermes-workflows
+                # advance-all`). With event-driven advance handling card
+                # transitions, this tick is the coarse safety-net + the poll for
+                # `wait` nodes, not the latency driver — so the operator's
+                # "configurable interval" ask is satisfied by this one knob
+                # without a code edit. Hermes cron is minute-granular, so a
+                # sub-minute value is bounded by the scheduler; the default
+                # stays the historical `every 2m`. Enforced (the cron bridge
+                # reads it when (re)creating the tick).
+                {"key": "tick_schedule", "type": "string", "default": "every 2m", "enforced": True},
             ],
         },
         {
