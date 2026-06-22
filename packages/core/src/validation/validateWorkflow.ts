@@ -302,6 +302,12 @@ function validateAdopt(
     if (node.sequential === true && adopt !== true) {
       err("sequential_without_adopt", `node '${node.id}' has sequential but is not an adopt node`);
     }
+    if (node.stack === true && adopt !== true) {
+      err("stack_without_adopt", `node '${node.id}' has stack but is not an adopt node`);
+    }
+    if (node.branch !== undefined && node.stack !== true) {
+      err("branch_without_stack", `node '${node.id}' has a branch but is not a stacked adopt node`);
+    }
     if (adopt === true && task_ref === undefined) {
       err("adopt_without_task_ref", `adopt node '${node.id}' has no task_ref to drive`);
       continue;

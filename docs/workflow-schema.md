@@ -163,10 +163,19 @@ already produce what those surfaces consume.
     adopt: true
     task_ref: "{{nodes.lock-scope.output.task_ids}}"  # or a literal id, e.g. t_abc123
     review_profile: qa-engineer   # optional native review stage after each card is done
+    stack: true                   # drive the scope STACKED on a shared release branch
+    branch: feat/my-release        # the shared branch (optional; default: workdir's branch)
+    workdir: /srv/projects/foo     # the release working tree (optional; default: board default_workdir)
     prompt: ""                    # unused when adopting (the card carries its own)
   ```
   `task_ref` resolves to the card id(s) to drive; the node settles only when all
-  of them are terminal. See `execution.md` ("Driving existing cards").
+  of them are terminal. With `stack: true` the cards are driven ONE AT A TIME on
+  a shared feature branch: each card runs in a linked worktree based on that
+  branch's current tip (so card N builds on cards 1..N-1), and the engine
+  fast-forwards the branch to include a card's commits before the next card
+  starts. Stacked cards are also told not to self-bump version/CHANGELOG — a
+  single docs-version step owns that once for the whole release. See
+  `execution.md` ("Driving existing cards").
 - **script** — a deterministic shell command run with no LLM (lint, tests, a
   build step). It settles `success`/`failure` by exit code, so it branches on
   `node_status` like any work node. It runs locally in the plugin in any scope.

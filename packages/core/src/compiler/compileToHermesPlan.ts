@@ -42,6 +42,12 @@ export interface CompiledKanbanTask {
   review_profile?: string;
   /** Drive adopted cards one at a time on a shared branch (see AgentTaskNode.sequential). */
   sequential?: boolean;
+  /** Stack a multi-card adopt scope on a shared feature branch (see AgentTaskNode.stack). */
+  stack?: boolean;
+  /** The shared feature branch a stacked adopt drives onto (see AgentTaskNode.branch). */
+  branch?: string;
+  /** Release working tree for a stacked adopt (see AgentTaskNode.workdir). */
+  workdir?: string;
   /** Per-node override of the per-card completion subscription; unset inherits
    *  the workflow-level `subscribe_cards` (see AgentTaskNode.notify_completion). */
   notify_completion?: boolean;
@@ -187,6 +193,9 @@ export function compileToHermesPlan(workflow: Workflow): HermesPlan {
     if (node.task_ref !== undefined) task.task_ref = node.task_ref;
     if (node.review_profile !== undefined) task.review_profile = node.review_profile;
     if (node.sequential !== undefined) task.sequential = node.sequential;
+    if (node.stack !== undefined) task.stack = node.stack;
+    if (node.branch !== undefined) task.branch = node.branch;
+    if (node.workdir !== undefined) task.workdir = node.workdir;
     if (node.notify_completion !== undefined) task.notify_completion = node.notify_completion;
     if (node.model !== undefined) task.model = node.model;
     if (node.skills !== undefined) task.skills = node.skills;

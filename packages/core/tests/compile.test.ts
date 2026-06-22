@@ -66,6 +66,35 @@ describe("compileToHermesPlan — notifications", () => {
     // workflow-level subscribe_cards default.
     expect(byNode["default"]).toBeUndefined();
   });
+
+  test("carries stack, branch, and workdir onto a stacked adopt's compiled task", () => {
+    const wf = fromObject({
+      id: "n",
+      name: "N",
+      version: 1,
+      scope: { type: "project" },
+      trigger: { type: "manual" },
+      defaults: { profile: "p" },
+      nodes: [
+        {
+          id: "drive",
+          type: "agent_task",
+          prompt: "drive",
+          adopt: true,
+          task_ref: "t_abc123",
+          stack: true,
+          branch: "feat/release",
+          workdir: "/srv/projects/foo",
+        },
+        { id: "done", type: "finish" },
+      ],
+      edges: [{ from: "drive", to: "done" }],
+    }).workflow;
+    const task = compileToHermesPlan(wf).kanban_tasks.find((t) => t.node === "drive");
+    expect(task?.stack).toBe(true);
+    expect(task?.branch).toBe("feat/release");
+    expect(task?.workdir).toBe("/srv/projects/foo");
+  });
 });
 
 describe("compileToHermesPlan — wait nodes", () => {

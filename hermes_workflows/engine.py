@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 from . import cli_bridge, notifications, telemetry, wait
+from .bridge import worktree
 from .executor import CompositeExecutor, NodeExecutor
 from .resolve import UnresolvedInput, resolve_input_mapping, resolve_params, resolve_ref
 
@@ -472,6 +473,15 @@ class Engine:
             if all(terminal):
                 batch_failed = any(c.outcome == "failure" for c in completions)
                 batch_outputs = [c.output for c in completions if c.output is not None]
+                # Commit barrier: a stacked card just finished, so advance the
+                # shared release branch to include its commits BEFORE the next
+                # card is anchored (so the next worktree bases on the new tip).
+                # This also runs for the final card, so the branch ends carrying
+                # every card's work.
+                release = self._release_context(executor, run, task_params.get(node_id) or {})
+                if release is not None:
+                    for handle in handles:
+                        worktree.commit_barrier(release[0], release[1], handle)
                 seq_state = node.get("adopt_seq")
                 if seq_state and seq_state.get("pending"):
                     # Sequential adopt: this card is terminal but more remain.
@@ -487,6 +497,15 @@ class Engine:
                         if adopt is None:
                             raise RuntimeError(
                                 "sequential adopt requires a Kanban-backed (project) scope"
+                            )
+                        if release is not None:
+                            # Re-anchor the next card onto the shared branch's now
+                            # advanced tip (it includes the card that just finished).
+                            worktree.stamp_release_worktree(
+                                _board_conn(executor),
+                                next_id,
+                                repo_root=release[0],
+                                branch=release[1],
                             )
                         handle = adopt(next_id, assignee=seq_state.get("assignee") or "")
                     except Exception as exc:  # noqa: BLE001 - fail closed, never wedge the tick
@@ -1004,6 +1023,22 @@ class Engine:
             f"choice must emit the chosen ids in a ```task_ids block."
         )
 
+    def _release_context(
+        self, executor: NodeExecutor, run: dict, params: dict
+    ) -> Optional[tuple[Path, str]]:
+        """The (release working tree, shared branch) for a ``stack`` adopt node,
+        or None when the node does not stack. Resolved fresh each tick from the
+        node's static params (workdir/branch) — these are not persisted on the
+        node, but they derive the same context deterministically across ticks."""
+        if not params.get("stack"):
+            return None
+        conn = _board_conn(executor)
+        if conn is None:
+            raise ValueError("stacked adopt requires a Kanban-backed (project) scope")
+        workdir = resolve_params(params.get("workdir") or "", run.get("params")) or None
+        branch_param = resolve_params(params.get("branch") or "", run.get("params")) or None
+        return worktree.resolve_release_context(conn, workdir=workdir, branch=branch_param)
+
     def _adopt_cards(
         self, executor: NodeExecutor, run: dict, node_id: str, params: dict, subscribe_cards: bool = True
     ) -> None:
@@ -1049,14 +1084,29 @@ class Engine:
             scope_links = getattr(executor, "scope_links", None)
             links = scope_links(drivable) if scope_links else []
             ordered = _topological_order(drivable, links)
+            # Stacking re-anchors each driven card onto a shared release branch so
+            # card N builds on cards 1..N-1 (the release flow). The context is
+            # re-resolved each tick from the node's static params (not persisted).
+            conn = _board_conn(executor)
+            release = self._release_context(executor, run, params)
             # Sequential is meaningful only for more than one card: promote the
             # first now and queue the rest; the poll loop promotes N+1 once N is
             # terminal, so workers build on prior committed work on one branch.
-            sequential = (sequential or bool(links)) and len(ordered) > 1
+            # Stacking forces it (each card must commit before the next anchors on
+            # the advanced tip); internal dependency links force it too.
+            sequential = (sequential or bool(links) or release is not None) and len(ordered) > 1
+
+            def _drive(task_id: str) -> str:
+                if release is not None:
+                    worktree.stamp_release_worktree(
+                        conn, task_id, repo_root=release[0], branch=release[1]
+                    )
+                return adopt(task_id, assignee=assignee)
+
             if sequential:
-                driven = [adopt(ordered[0], assignee=assignee)]
+                driven = [_drive(ordered[0])]
             else:
-                driven = [adopt(task_id, assignee=assignee) for task_id in ordered]
+                driven = [_drive(task_id) for task_id in ordered]
         except (UnresolvedInput, ValueError) as exc:
             node["status"] = "completed"
             node["outcome"] = "failure"

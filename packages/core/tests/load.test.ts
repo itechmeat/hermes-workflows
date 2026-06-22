@@ -81,6 +81,49 @@ describe("parseWorkflow", () => {
     ).toThrow(WorkflowParseError);
   });
 
+  test("parses stack + branch on an adopt node", () => {
+    const { workflow } = fromObject({
+      id: "x",
+      name: "X",
+      version: 1,
+      scope: { type: "project" },
+      trigger: { type: "manual" },
+      nodes: [
+        {
+          id: "drive",
+          type: "agent_task",
+          prompt: "drive",
+          adopt: true,
+          task_ref: "t_abc123",
+          stack: true,
+          branch: "feat/release",
+        },
+        { id: "done", type: "finish" },
+      ],
+      edges: [{ from: "drive", to: "done" }],
+    });
+    const node = workflow.nodes[0] as { stack?: boolean; branch?: string };
+    expect(node.stack).toBe(true);
+    expect(node.branch).toBe("feat/release");
+  });
+
+  test("rejects a non-boolean stack", () => {
+    expect(() =>
+      fromObject({
+        id: "x",
+        name: "X",
+        version: 1,
+        scope: { type: "project" },
+        trigger: { type: "manual" },
+        nodes: [
+          { id: "drive", type: "agent_task", prompt: "drive", adopt: true, stack: "yes" },
+          { id: "done", type: "finish" },
+        ],
+        edges: [{ from: "drive", to: "done" }],
+      }),
+    ).toThrow(WorkflowParseError);
+  });
+
   test("rejects an unknown node type", () => {
     expect(() =>
       fromObject({

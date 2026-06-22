@@ -404,6 +404,13 @@ function parseAgentTask(value: Rec, base: { id: string }, id: string): AgentTask
     if (typeof value["sequential"] !== "boolean") fail(`node '${id}'.sequential must be a boolean`);
     node.sequential = value["sequential"];
   }
+  if (value["stack"] !== undefined) {
+    if (typeof value["stack"] !== "boolean") fail(`node '${id}'.stack must be a boolean`);
+    node.stack = value["stack"];
+  }
+  if (value["branch"] !== undefined) {
+    node.branch = str(value["branch"], `node '${id}'.branch`);
+  }
   if (value["notify_completion"] !== undefined) {
     if (typeof value["notify_completion"] !== "boolean") {
       fail(`node '${id}'.notify_completion must be a boolean`);

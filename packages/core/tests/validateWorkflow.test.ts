@@ -366,6 +366,24 @@ describe("validateWorkflow — adopt / task_ref", () => {
     expect(codes(adopt({ sequential: false }))).not.toContain("sequential_without_adopt");
   });
 
+  test("accepts stack + branch on an adopt node", () => {
+    expect(
+      validateWorkflow(
+        adopt({ adopt: true, task_ref: "t_abc123", stack: true, branch: "feat/x" }),
+      ).valid,
+    ).toBe(true);
+  });
+
+  test("rejects stack without adopt", () => {
+    expect(codes(adopt({ stack: true }))).toContain("stack_without_adopt");
+  });
+
+  test("rejects branch without stack", () => {
+    expect(codes(adopt({ adopt: true, task_ref: "t_abc123", branch: "feat/x" }))).toContain(
+      "branch_without_stack",
+    );
+  });
+
   test("rejects a malformed task_ref", () => {
     expect(codes(adopt({ adopt: true, task_ref: "not a ref!" }))).toContain("invalid_task_ref");
   });

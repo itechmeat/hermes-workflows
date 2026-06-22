@@ -71,6 +71,25 @@ export interface AgentTaskNode {
    */
   sequential?: boolean;
   /**
+   * Drive a multi-card `adopt` scope STACKED on a shared feature branch: each
+   * driven card runs in a linked worktree based on that branch at its current
+   * tip, and the engine advances the branch to include a card's commits before
+   * the next card starts — so card N physically builds on cards 1..N-1 (the
+   * release flow), instead of every card branching off the base branch in
+   * isolation. Implies `sequential`. The shared branch is `branch` (or the
+   * current branch of the release working tree); the working tree is `workdir`
+   * (or the board's `default_workdir`). Driven cards are also instructed not to
+   * self-bump version/CHANGELOG — the dedicated docs-version node owns that once
+   * for the whole scope. Only meaningful with `adopt`.
+   */
+  stack?: boolean;
+  /**
+   * The shared feature branch a `stack` adopt node drives onto. Absent uses the
+   * current branch of the release working tree (what the lock-scope step left
+   * checked out). Only meaningful with `adopt` + `stack`.
+   */
+  branch?: string;
+  /**
    * Per-node control over the native per-card completion notification: when this
    * node's Kanban card settles, whether the run origin is subscribed to its
    * terminal event (the "done" ping). Unset inherits the workflow-level default
