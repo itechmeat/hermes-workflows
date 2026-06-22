@@ -28,6 +28,7 @@ import {
   cmdSpecDelete,
   cmdRunCancel,
   cmdRunRetry,
+  cmdExportTemplate,
 } from "./cli/commands.ts";
 import type { WriteRoots } from "./runtime/specStore.ts";
 
@@ -42,13 +43,18 @@ interface Flags {
 const VALUE_FLAGS = new Set([
   "body",
   "db",
+  "generated-at",
+  "generator-version",
   "global-root",
+  "hints-file",
   "id",
   "input",
   "kind",
   "markdown-file",
+  "model",
   "node",
   "origin",
+  "out-dir",
   "params",
   "project",
   "project-root",
@@ -203,6 +209,17 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
         required(str(flags, "id"), "--id"),
         str(flags, "node"),
       );
+    case "export-template": {
+      const gv = str(flags, "generator-version");
+      return cmdExportTemplate(rootsOf(flags), required(str(flags, "id"), "--id"), {
+        outDir: required(str(flags, "out-dir"), "--out-dir"),
+        generatedAt: required(str(flags, "generated-at"), "--generated-at"),
+        probe: flags["probe"] === true,
+        ...(str(flags, "hints-file") !== undefined ? { hintsFile: str(flags, "hints-file") } : {}),
+        ...(str(flags, "model") !== undefined ? { model: str(flags, "model") } : {}),
+        ...(gv !== undefined ? { generatorVersion: Number(gv) } : {}),
+      });
+    }
     default:
       throw new Error(`unknown command: ${command ?? "(none)"}`);
   }

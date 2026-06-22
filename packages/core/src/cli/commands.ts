@@ -28,6 +28,18 @@ import type { SpecSummary, SpecDetail, WriteRoots } from "../runtime/specStore.t
 import { fromObject } from "../schema/load.ts";
 import { fillParams, ParamFillError } from "../templates/params.ts";
 import type { ParamValue, WorkflowParam } from "../templates/params.ts";
+import { specSha } from "../serialize/specSha.ts";
+import {
+  exportTemplate,
+  generationRequest,
+  templateCacheKey,
+  templateRevision,
+  TEMPLATE_FORMAT,
+  GENERATOR_VERSION,
+} from "../templates/exportTemplate.ts";
+import type { GuideHints, GenerationRequest } from "../templates/exportTemplate.ts";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 
 export interface Explanation {
   id: string;
@@ -265,6 +277,134 @@ export async function cmdSpecCreate(
 
 export async function cmdSpecDelete(roots: string[], id: string): Promise<{ deleted: boolean }> {
   return { deleted: await new SpecStore(roots).deleteSpec(id) };
+}
+
+/** Sidecar persisted next to the two template artifacts: the composite cache
+ * key (regenerate iff it changes) plus the version block for quick inspection. */
+interface TemplateCacheMeta {
+  cache_key: string;
+  revision: string;
+  human_version: string;
+  spec_sha: string;
+  template_format: number;
+  generator_version: number;
+}
+
+export interface TemplateExportResult {
+  id: string;
+  /** True when the on-disk bundle already matched the composite cache key, so
+   * nothing was regenerated (and the orchestrator must skip the AI call). */
+  cached: boolean;
+  revision: string;
+  human_version: string;
+  spec_sha: string;
+  cache_key: string;
+  files: { yaml: string; md: string; meta: string };
+  /** Only on a `probe` of a stale/absent bundle: the node-purpose description
+   * the AI hint generator consumes. Absent when cached. */
+  generation_request?: GenerationRequest;
+}
+
+export interface ExportTemplateCmdOptions {
+  outDir: string;
+  generatedAt: string;
+  /** Report cache status (+ a generation_request on a miss) without writing. */
+  probe?: boolean;
+  /** Path to a JSON {@link GuideHints} produced by the AI generator. */
+  hintsFile?: string;
+  model?: string | null;
+  generatorVersion?: number;
+}
+
+/**
+ * Export a workflow "as a template": write `<id>.template.yaml` +
+ * `<id>.template.md` to `outDir`, with a sidecar `<id>.template.meta.json`
+ * carrying the composite cache key. The composite is
+ * `(workflow_id, spec_sha, template_format, generator_version)`; a repeat export
+ * whose composite matches the sidecar is served from cache (no rewrite, and the
+ * orchestrator skips the AI call). A `probe` reports cache status only — and, on
+ * a miss, the {@link GenerationRequest} the AI hint generator needs — without
+ * touching disk. The deterministic de-binding runs with no model; AI hints
+ * arrive via `hintsFile` and are optional (fail-open).
+ */
+export async function cmdExportTemplate(
+  roots: string[],
+  id: string,
+  opts: ExportTemplateCmdOptions,
+): Promise<TemplateExportResult> {
+  const detail = await new SpecStore(roots).getById(id);
+  if (!detail) throw new NotFoundError(`workflow '${id}' not found`);
+  const workflow = detail.workflow;
+
+  const generatorVersion = opts.generatorVersion ?? GENERATOR_VERSION;
+  const sha = specSha(workflow);
+  const cacheKey = templateCacheKey(workflow.id, sha, TEMPLATE_FORMAT, generatorVersion);
+  const revision = templateRevision(cacheKey);
+  const humanVersion = `fmt${TEMPLATE_FORMAT}·wf${workflow.version}·r${revision.slice(0, 4)}`;
+
+  const yamlPath = join(opts.outDir, `${id}.template.yaml`);
+  const mdPath = join(opts.outDir, `${id}.template.md`);
+  const metaPath = join(opts.outDir, `${id}.template.meta.json`);
+
+  const cached = await cacheHit(metaPath, yamlPath, mdPath, cacheKey);
+
+  const base: TemplateExportResult = {
+    id,
+    cached,
+    revision,
+    human_version: humanVersion,
+    spec_sha: sha,
+    cache_key: cacheKey,
+    files: { yaml: yamlPath, md: mdPath, meta: metaPath },
+  };
+
+  if (opts.probe) {
+    return cached ? base : { ...base, generation_request: generationRequest(workflow) };
+  }
+  if (cached) return base;
+
+  let hints: GuideHints | undefined;
+  if (opts.hintsFile !== undefined) {
+    hints = JSON.parse(await Bun.file(opts.hintsFile).text()) as GuideHints;
+  }
+
+  const bundle = exportTemplate(workflow, {
+    generatedAt: opts.generatedAt,
+    model: opts.model ?? null,
+    ...(hints !== undefined ? { hints } : {}),
+    generatorVersion,
+  });
+
+  await mkdir(opts.outDir, { recursive: true });
+  const meta: TemplateCacheMeta = {
+    cache_key: cacheKey,
+    revision,
+    human_version: humanVersion,
+    spec_sha: sha,
+    template_format: TEMPLATE_FORMAT,
+    generator_version: generatorVersion,
+  };
+  await Promise.all([
+    Bun.write(yamlPath, bundle.templateYaml),
+    Bun.write(mdPath, bundle.guideMarkdown),
+    Bun.write(metaPath, `${JSON.stringify(meta, null, 2)}\n`),
+  ]);
+  return base;
+}
+
+async function cacheHit(
+  metaPath: string,
+  yamlPath: string,
+  mdPath: string,
+  cacheKey: string,
+): Promise<boolean> {
+  try {
+    const meta = JSON.parse(await Bun.file(metaPath).text()) as TemplateCacheMeta;
+    if (meta.cache_key !== cacheKey) return false;
+    return (await Bun.file(yamlPath).exists()) && (await Bun.file(mdPath).exists());
+  } catch {
+    return false; // no sidecar / unreadable → regenerate
+  }
 }
 
 /** Thrown when a run (or other addressable resource) does not exist. Its name
