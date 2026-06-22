@@ -15,13 +15,28 @@ defaults:
     provider: auto
     fail_open: true
 
+params:
+  - name: feature_request
+    type: text
+    label: Feature request
+    default: Use the operator instruction provided for this run as the feature request.
+    help: >-
+      What the operator wants built, in their own words. Captured before the
+      plan node and interpolated into the Plan feature card so the plan is
+      grounded in a concrete request rather than a generic prompt. Filled from
+      the dashboard form, the /workflow slash command, or a chat deep-link.
+
 nodes:
   - id: plan
     type: agent_task
     title: Plan feature
     profile: product-tech-lead
     prompt: |
-      Convert the feature request into a concrete implementation plan.
+      Convert the operator's feature request into a concrete implementation plan.
+
+      Feature request:
+      {{params.feature_request}}
+
       Return tasks, risks, files likely to change, and validation steps.
 
   - id: implement

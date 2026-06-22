@@ -114,6 +114,24 @@ describe("compileToHermesPlan", () => {
     expect(plan.scope).toEqual({ type: "project" });
   });
 
+  test("feature-development captures the operator feature request as a param interpolated into the plan card", async () => {
+    const { workflow } = await loadExample("feature-development.workflow.yaml");
+    // The template declares a free-text feature_request param (with a default so
+    // a no-param run still resolves; operators fill it from any surface).
+    const featureParam = workflow.params?.find((p) => p.name === "feature_request");
+    expect(featureParam).toMatchObject({ name: "feature_request", type: "text" });
+    expect(featureParam?.optional).not.toBe(true);
+
+    const plan = compileToHermesPlan(workflow);
+    // The compiled plan surfaces the param across surfaces (form + command).
+    expect(plan.params?.map((p) => p.name)).toContain("feature_request");
+    expect(plan.catalog?.fields.map((f) => f.name)).toContain("feature_request");
+    expect(plan.catalog?.command).toContain("feature_request=");
+    // The plan card body interpolates the operator's request (resolved at run time).
+    expect(plan.kanban_tasks[0]?.node).toBe("plan");
+    expect(plan.kanban_tasks[0]?.prompt).toContain("{{params.feature_request}}");
+  });
+
   test("a global workflow carries its scope through to the plan", async () => {
     const { workflow } = await loadExample("blog-daily-signals.workflow.yaml");
     const plan = compileToHermesPlan(workflow);
