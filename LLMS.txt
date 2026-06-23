@@ -111,6 +111,20 @@ prompt-cron:
 - Do not keep a separate prompt-based cron doing the same job — one trigger per
   workflow.
 
+## Release scopes, resume, and template export
+
+- For release workflows that drive existing board cards, use `adopt: true` with
+  `stack: true` and the shared release branch. Do not ask per-card workers to
+  bump versions or edit CHANGELOG; one final docs-version node owns that for the
+  full locked scope.
+- Resume a failed workflow with `resume <run_id>` when exactly one node failed,
+  `resume <run_id> --node <id>` when choosing a failed node explicitly, or
+  `resume <run_id> --all` to restart a failed or cancelled run from scratch.
+  Resume reads the current live spec but refuses structural graph drift.
+- Use `export --as-template <id>` when sharing a workflow outside this Hermes
+  installation. It writes a placeholder `.template.yaml` plus a `.template.md`
+  adaptation guide; v1 does not import templates or rewrite prompt bodies.
+
 ## Validate before relying on a spec
 
 `validate <spec>` and `compile-preview <spec>` (the core CLI) are the same checks

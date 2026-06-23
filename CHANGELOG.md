@@ -4,6 +4,37 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.0 - 2026-06-23
+
+Release automation is now ready for bundled, operator-driven workflow releases:
+adopted cards stack on one shared feature branch, failed runs can be resumed from
+the current live spec, and workflow specs can be exported as portable template
+bundles.
+
+### Added
+
+- **Run resume.** Added `resume <run_id> [--node <id>] [--all]` for operators and
+  dashboard resume/restart actions for terminal failed or cancelled runs. Resume
+  preserves single-flight guarantees, advances after retry, and refuses
+  structural spec drift while allowing same-graph live spec edits.
+- **Template export.** Added `export --as-template <id>` plus dashboard template
+  download, emitting a placeholder `.template.yaml` and AI-authored
+  `.template.md` adaptation guide. Template generation is cached by
+  `(spec_sha, template_format, generator_version)` and keeps v1 export-only.
+- **`spec_sha`.** Added a stable serialized-spec hash primitive so template
+  exports invalidate on any material spec change even when the workflow version
+  is unchanged.
+
+### Changed
+
+- **Stacked adopted-card dispatch.** Adopt-driven release scopes now run cards on
+  the shared `feat/<slug>` tip with a commit barrier before the next card starts,
+  preserving cross-card context and leaving docs/version updates to one final
+  release step.
+- **Dispatcher worktree conformance.** Driven cards now align with Hermes linked
+  worktrees and worker `TERMINAL_CWD`, with conformance checks that prevent
+  accidental anchoring in the gateway checkout instead of the project repo.
+
 ## 0.6.0 - 2026-06-22
 
 Workflow runs now advance the moment a node finishes instead of waiting out the
