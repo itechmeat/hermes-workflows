@@ -93,8 +93,8 @@ browser ──(/api/plugins/workflows/*)──▶ reverse proxy ──▶ sideca
      resolution the existing wrapper uses.
 
 3. **Config** (reuse `hermes_workflows/config.py`)
-   - Read `plugins.workflows.dashboard_api.host` (default `127.0.0.1`) and
-     `plugins.workflows.dashboard_api.port` (default `9123`) through the existing
+   - Read `plugins.workflows.dashboard_api_host` (default `127.0.0.1`) and
+     `plugins.workflows.dashboard_api_port` (default `9123`) through the existing
      config accessor that already reads the Hermes config tree. Provide an
      environment fallback (`HERMES_WORKFLOWS_DASHBOARD_API_HOST` /
      `_PORT`) for users who run the sidecar outside a Hermes config context.

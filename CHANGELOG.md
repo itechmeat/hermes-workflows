@@ -21,7 +21,7 @@ model-facing tools and the operator CLI were unaffected.
   `/api/plugins/workflows`, plus a `GET /healthz` liveness route. The frontend is
   unchanged: the operator's reverse proxy routes `/api/plugins/workflows/*` to the
   sidecar in front of the dashboard. Bind host/port are configurable via
-  `plugins.workflows.dashboard_api.{host,port}` (config ▸ env ▸ default
+  `plugins.workflows.dashboard_api_host` / `…_port` (config ▸ env ▸ default
   `127.0.0.1:9123`); the sidecar binds loopback only and inherits the dashboard's
   trust model (loopback + proxy-level auth), shipping no auth of its own.
 - Docs (`docs/dashboard.md`): why the sidecar exists and ready-to-paste systemd,

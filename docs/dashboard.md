@@ -135,7 +135,8 @@ bin/hermes-workflows-dashboard-api          # uses the Hermes venv interpreter
 python -m hermes_workflows.dashboard_api    # if fastapi/uvicorn are importable
 ```
 
-Host and port come from `plugins.workflows.dashboard_api.{host,port}`
+Host and port come from `plugins.workflows.dashboard_api_host` /
+`plugins.workflows.dashboard_api_port`
 (config ▸ env ▸ default `127.0.0.1:9123`; env
 `HERMES_WORKFLOWS_DASHBOARD_API_{HOST,PORT}`). The sidecar binds **loopback**
 only and ships no auth of its own: it inherits the dashboard's trust model —
