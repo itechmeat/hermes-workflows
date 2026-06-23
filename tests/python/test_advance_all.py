@@ -14,7 +14,7 @@ kb = pytest.importorskip("hermes_cli.kanban_db")
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import KanbanExecutor
 
-from conftest import sibling_spec
+from conftest import EXAMPLE_PARAMS, sibling_spec
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
@@ -46,8 +46,8 @@ def _complete(board: sqlite3.Connection, task_id: str) -> None:
 def test_advance_all_advances_every_active_run(engine: Engine, tmp_path: Path) -> None:
     # Two concurrently-active runs need two workflows (single-flight allows at
     # most one active run per workflow).
-    a = engine.run(str(SPEC), "run-a")
-    engine.run(str(sibling_spec(tmp_path, SPEC)), "run-b")
+    a = engine.run(str(SPEC), "run-a", params=EXAMPLE_PARAMS)
+    engine.run(str(sibling_spec(tmp_path, SPEC)), "run-b", params=EXAMPLE_PARAMS)
     _complete(engine.kanban.board_conn, a["nodes"]["plan"]["hermes_task_id"])
 
     advanced = engine.advance_all([*ROOTS, str(tmp_path)])
@@ -61,7 +61,7 @@ def test_advance_all_advances_every_active_run(engine: Engine, tmp_path: Path) -
 def test_advance_all_survives_one_run_raising(engine: Engine) -> None:
     # `engine` has a Kanban backend but no Direct backend, so advancing a global
     # run raises. That must not wedge the tick for every other active run.
-    engine.run(str(SPEC), "run-ok")
+    engine.run(str(SPEC), "run-ok", params=EXAMPLE_PARAMS)
     engine._core(
         ["run-create", str(GLOBAL_SPEC), "--db", engine.db_path, "--id", "run-bad"]
     )
@@ -75,11 +75,11 @@ def test_advance_all_survives_one_run_raising(engine: Engine) -> None:
 
 def test_advance_all_skips_terminal_runs(engine: Engine) -> None:
     # The first run settles before the next may start (single-flight).
-    engine.run(str(SPEC), "run-old")
+    engine.run(str(SPEC), "run-old", params=EXAMPLE_PARAMS)
     old = engine.status("run-old")
     old["status"] = "completed"
     engine._save(old)
-    engine.run(str(SPEC), "run-active")
+    engine.run(str(SPEC), "run-active", params=EXAMPLE_PARAMS)
 
     advanced = engine.advance_all(ROOTS)
 

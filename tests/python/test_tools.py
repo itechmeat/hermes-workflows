@@ -9,6 +9,7 @@ import pytest
 
 kb = pytest.importorskip("hermes_cli.kanban_db")
 
+from conftest import EXAMPLE_PARAMS
 from hermes_workflows import tools
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import KanbanExecutor
@@ -75,7 +76,12 @@ def test_workflow_explain_unknown_id_raises() -> None:
 
 def test_workflow_run_and_status(engine: Engine) -> None:
     started = tools.run_workflow(
-        "feature-development", engine=engine, roots=[EXAMPLES], core_cli=CLI, run_id="run-1"
+        "feature-development",
+        engine=engine,
+        roots=[EXAMPLES],
+        core_cli=CLI,
+        run_id="run-1",
+        params=EXAMPLE_PARAMS,
     )
     assert started["run_id"] == "run-1"
     assert started["status"] == "running"

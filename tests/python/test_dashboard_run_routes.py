@@ -18,6 +18,8 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_API = ROOT / "dashboard" / "plugin_api.py"
 SPEC = ROOT / "examples" / "feature-development.workflow.yaml"
+# feature-development requires a feature_request param (no default).
+_RUN_BODY = {"params": {"feature_request": "Add a dark mode toggle"}}
 
 
 def _load_router():
@@ -135,7 +137,7 @@ def _start_run(client: TestClient) -> str:
     post-start invariant the assertions below rely on (entry node scheduled)."""
     import time
 
-    resp = client.post("/workflows/feature-development/run")
+    resp = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert resp.status_code == 200, resp.text
     run_id = resp.json()["run_id"]
     deadline = time.monotonic() + 10
@@ -163,8 +165,8 @@ def test_run_with_non_object_params_is_400(client: TestClient) -> None:
 
 
 def test_run_with_unknown_param_is_400(client: TestClient) -> None:
-    # feature-development declares no params, so any supplied name is rejected by
-    # the core at run-create and surfaced as a 400 (a caller error, not a 500).
+    # feature-development declares feature_request, so an unknown name is rejected
+    # by the core at run-create and surfaced as a 400 (a caller error, not a 500).
     resp = client.post("/workflows/feature-development/run", json={"params": {"nope": "x"}})
     assert resp.status_code == 400
     assert "unknown param" in resp.json()["detail"]
@@ -327,7 +329,7 @@ def test_script_workflow_is_409_when_scripts_disabled(client: TestClient) -> Non
 
 def test_non_script_workflow_runs_when_scripts_disabled(client: TestClient) -> None:
     # The gate only affects workflows that contain script nodes.
-    resp = client.post("/workflows/feature-development/run")
+    resp = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert resp.status_code == 200, resp.text
 
 
@@ -344,7 +346,7 @@ def test_second_start_is_409_naming_the_active_run(client: TestClient) -> None:
     """Single-flight: one workflow may have at most one active run. The refusal
     is explicit — 409 with the blocking run's id in the detail."""
     run_id = _start_run(client)
-    resp = client.post("/workflows/feature-development/run")
+    resp = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert resp.status_code == 409, resp.text
     assert run_id in resp.json()["detail"]
 
@@ -352,7 +354,7 @@ def test_second_start_is_409_naming_the_active_run(client: TestClient) -> None:
 def test_start_is_allowed_again_after_the_active_run_settles(client: TestClient) -> None:
     run_id = _start_run(client)
     client.post(f"/runs/{run_id}/cancel")
-    resp = client.post("/workflows/feature-development/run")
+    resp = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert resp.status_code == 200, resp.text
 
 
@@ -447,7 +449,7 @@ def test_run_start_is_non_blocking_and_arms_the_tick(
     monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
     monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
 
-    resp = client.post("/workflows/feature-development/run")
+    resp = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["status"] == "created"

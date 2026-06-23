@@ -149,6 +149,17 @@ function parseParam(value: unknown, index: number): WorkflowParam {
     if (typeof value["optional"] !== "boolean") fail(`params[${index}].optional must be a boolean`);
     param.optional = value["optional"];
   }
+  // `required` is the explicit inverse alias of `optional` (so a template can
+  // read `required: true` rather than rely on the absence of `optional`). It
+  // maps onto the single `optional` source the engine checks; declaring both is
+  // a contradiction and fails at load.
+  if (value["required"] !== undefined) {
+    if (typeof value["required"] !== "boolean") fail(`params[${index}].required must be a boolean`);
+    if (value["optional"] !== undefined) {
+      fail(`params[${index}] declares both optional and required — keep one`);
+    }
+    param.optional = !value["required"];
+  }
   if (value["strict"] !== undefined) {
     if (typeof value["strict"] !== "boolean") fail(`params[${index}].strict must be a boolean`);
     param.strict = value["strict"];

@@ -16,6 +16,7 @@ import pytest
 
 kb = pytest.importorskip("hermes_cli.kanban_db")
 
+from conftest import EXAMPLE_PARAMS  # noqa: E402
 from hermes_workflows import config, hooks, plugin  # noqa: E402
 from hermes_workflows.engine import Engine  # noqa: E402
 from hermes_workflows.executor import KanbanExecutor  # noqa: E402
@@ -52,7 +53,7 @@ def test_non_workflow_card_spawns_nothing(engine: Engine, spawns: list[str]) -> 
 
 
 def test_workflow_card_spawns_one_advance(engine: Engine, spawns: list[str]) -> None:
-    run = engine.run(str(SPEC), "run-x")
+    run = engine.run(str(SPEC), "run-x", params=EXAMPLE_PARAMS)
     card = run["nodes"]["plan"]["hermes_task_id"]
 
     hooks._on_task_completed(task_id=card, board="b", run_id=1, summary="done")
@@ -61,7 +62,7 @@ def test_workflow_card_spawns_one_advance(engine: Engine, spawns: list[str]) -> 
 
 
 def test_blocked_card_spawns_one_advance(engine: Engine, spawns: list[str]) -> None:
-    run = engine.run(str(SPEC), "run-x")
+    run = engine.run(str(SPEC), "run-x", params=EXAMPLE_PARAMS)
     card = run["nodes"]["plan"]["hermes_task_id"]
 
     hooks._on_task_blocked(task_id=card, board="b", run_id=1, reason="stuck")
@@ -72,7 +73,7 @@ def test_blocked_card_spawns_one_advance(engine: Engine, spawns: list[str]) -> N
 def test_resolution_matches_id_literally_not_as_wildcard(engine: Engine) -> None:
     # Task ids contain '_', a LIKE wildcard. Resolving for "t_abc" must not match
     # a *different* driven id that only the wildcard would catch ("txabc").
-    engine.run(str(SPEC), "run-x")  # creates runs.db + schema
+    engine.run(str(SPEC), "run-x", params=EXAMPLE_PARAMS)  # creates runs.db + schema
     import sqlite3
 
     conn = sqlite3.connect(engine.db_path)

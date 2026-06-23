@@ -17,6 +17,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# The feature-development example's ``feature_request`` param is required and has
+# no default, so any run created from it must supply a value. Lifecycle tests use
+# the example as a representative multi-node workflow and do not care about the
+# request text; this shared value keeps those runs valid.
+EXAMPLE_PARAMS = {"feature_request": "Add a dark mode toggle"}
+
 
 @pytest.fixture(autouse=True)
 def _reap_background_drive_threads():

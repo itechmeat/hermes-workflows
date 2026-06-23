@@ -15,6 +15,7 @@ import pytest
 kb = pytest.importorskip("hermes_cli.kanban_db")
 cj = pytest.importorskip("cron.jobs")
 
+from conftest import EXAMPLE_PARAMS
 from hermes_workflows import cli, tools
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import KanbanExecutor
@@ -46,7 +47,7 @@ def engine(tmp_path: Path):
 
 
 def _drive_to_review(engine: Engine) -> dict:
-    run = engine.run(SPEC, "r")
+    run = engine.run(SPEC, "r", params=EXAMPLE_PARAMS)
     for step in ("plan", "implement", "validate"):
         _complete(engine.kanban.board_conn, run["nodes"][step]["hermes_task_id"])
         run = engine.advance(SPEC, "r")
@@ -61,7 +62,7 @@ def test_decide_review_rejects_invalid_decision(engine: Engine) -> None:
 
 
 def test_decide_review_rejects_non_waiting_node(engine: Engine) -> None:
-    engine.run(SPEC, "r")
+    engine.run(SPEC, "r", params=EXAMPLE_PARAMS)
     with pytest.raises(ValueError):
         engine.decide_review(SPEC, "r", "plan", "approved")
 
@@ -69,7 +70,7 @@ def test_decide_review_rejects_non_waiting_node(engine: Engine) -> None:
 def test_status_live_surfaces_a_pending_completion(engine: Engine) -> None:
     """status_live read-only-polls active cards so a card that finished between
     ticks shows as settled (a pending completion), without mutating run state."""
-    run = engine.run(SPEC, "r")
+    run = engine.run(SPEC, "r", params=EXAMPLE_PARAMS)
     card = run["nodes"]["plan"]["hermes_task_id"]
     # The card finished on the board, but the run has not advanced yet.
     _complete(engine.kanban.board_conn, card)
@@ -131,7 +132,7 @@ def test_cli_review_resolves(home: Path, capsys) -> None:
         cli.main(list(argv))
         return json.loads(capsys.readouterr().out)
 
-    run = _invoke("run", "feature-development")
+    run = _invoke("run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS))
     rid = run["run_id"]
     board = sqlite3.connect(str(home))
     try:

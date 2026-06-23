@@ -5,6 +5,9 @@ import { join } from "node:path";
 
 const cli = join(import.meta.dir, "../src/cli.ts");
 const example = join(import.meta.dir, "../../../examples/feature-development.workflow.yaml");
+// The example's feature_request param is required (no default), so run-create
+// against it must carry a real value or fail closed.
+const featureParams = JSON.stringify({ feature_request: "Add a dark mode toggle" });
 
 async function run(args: string[]): Promise<{ code: number; json: unknown; stderr: string }> {
   const proc = Bun.spawn(["bun", "run", cli, ...args], { stdout: "pipe", stderr: "pipe" });
@@ -48,6 +51,8 @@ describe("cli.ts dispatcher", () => {
       "ro-1",
       "--origin",
       "telegram:42:7",
+      "--params",
+      featureParams,
     ]);
     expect(created.code).toBe(0);
     expect((created.json as { origin?: string }).origin).toBe("telegram:42:7");
@@ -87,12 +92,35 @@ describe("cli.ts dispatcher", () => {
     await rm(base, { recursive: true, force: true });
   });
 
+  test("run-create on the example fails closed when the required feature_request is missing", async () => {
+    const base = await mkdtemp(join(tmpdir(), "hw-req-cli-"));
+    const db = join(base, "runs.db");
+    const refused = await run(["run-create", "--db", db, example, "--id", "req-1"]);
+    expect(refused.code).not.toBe(0);
+    const parsed = JSON.parse(refused.stderr) as { error: { name: string; message: string } };
+    expect(parsed.error.name).toBe("ParamFillError");
+    expect(parsed.error.message).toBe("missing required value: feature_request (Feature request)");
+    await rm(base, { recursive: true, force: true });
+  });
+
   test("run-create maps a duplicate active run to a structured 409-able error", async () => {
     const base = await mkdtemp(join(tmpdir(), "hw-sf-cli-"));
     const db = join(base, "runs.db");
-    expect((await run(["run-create", "--db", db, example, "--id", "sf-1"])).code).toBe(0);
+    expect(
+      (await run(["run-create", "--db", db, example, "--id", "sf-1", "--params", featureParams]))
+        .code,
+    ).toBe(0);
 
-    const refused = await run(["run-create", "--db", db, example, "--id", "sf-2"]);
+    const refused = await run([
+      "run-create",
+      "--db",
+      db,
+      example,
+      "--id",
+      "sf-2",
+      "--params",
+      featureParams,
+    ]);
     expect(refused.code).not.toBe(0);
     // The Python bridge reads {error:{name,message}} from stderr and maps the
     // name to an HTTP status — ActiveRunExistsError must arrive structured.
@@ -106,7 +134,10 @@ describe("cli.ts dispatcher", () => {
     const base = await mkdtemp(join(tmpdir(), "hw-sf-filter-"));
     const db = join(base, "runs.db");
     const other = join(import.meta.dir, "../../../examples/blog-daily-signals.workflow.yaml");
-    expect((await run(["run-create", "--db", db, example, "--id", "f-1"])).code).toBe(0);
+    expect(
+      (await run(["run-create", "--db", db, example, "--id", "f-1", "--params", featureParams]))
+        .code,
+    ).toBe(0);
     expect((await run(["run-create", "--db", db, other, "--id", "b-1"])).code).toBe(0);
 
     const filtered = await run([
@@ -126,7 +157,16 @@ describe("cli.ts dispatcher", () => {
   test("run-latest maps a workflow to its created run", async () => {
     const base = await mkdtemp(join(tmpdir(), "hw-latest-cli-"));
     const db = join(base, "runs.db");
-    const created = await run(["run-create", "--db", db, example, "--id", "rl-1"]);
+    const created = await run([
+      "run-create",
+      "--db",
+      db,
+      example,
+      "--id",
+      "rl-1",
+      "--params",
+      featureParams,
+    ]);
     expect(created.code).toBe(0);
     const { code, json } = await run(["run-latest", "--db", db]);
     expect(code).toBe(0);

@@ -18,6 +18,8 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_API = ROOT / "dashboard" / "plugin_api.py"
 SPEC = ROOT / "examples" / "feature-development.workflow.yaml"
+# feature-development requires a feature_request param (no default).
+_RUN_BODY = {"params": {"feature_request": "Add a dark mode toggle"}}
 
 
 def _load_router():
@@ -56,7 +58,7 @@ def test_list_carries_enabled_and_run_columns(client: TestClient) -> None:
 
 
 def test_last_run_columns_reflect_the_latest_run(client: TestClient) -> None:
-    started = client.post("/workflows/feature-development/run")
+    started = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert started.status_code == 200, started.text
     row = _row(client)
     assert row["last_run_at"] is not None
@@ -75,12 +77,12 @@ def test_toggle_disables_then_re_enables(client: TestClient) -> None:
 
 def test_disabled_workflow_run_is_409(client: TestClient) -> None:
     client.put("/workflows/feature-development/enabled", json={"enabled": False})
-    blocked = client.post("/workflows/feature-development/run")
+    blocked = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert blocked.status_code == 409
 
     # re-enabling re-allows the run
     client.put("/workflows/feature-development/enabled", json={"enabled": True})
-    allowed = client.post("/workflows/feature-development/run")
+    allowed = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert allowed.status_code == 200, allowed.text
 
 

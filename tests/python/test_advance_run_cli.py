@@ -18,7 +18,7 @@ from hermes_workflows import cli  # noqa: E402
 from hermes_workflows.engine import Engine  # noqa: E402
 from hermes_workflows.executor import KanbanExecutor  # noqa: E402
 
-from conftest import sibling_spec  # noqa: E402
+from conftest import EXAMPLE_PARAMS, sibling_spec  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
@@ -47,8 +47,8 @@ def _complete(board: sqlite3.Connection, task_id: str) -> None:
 
 
 def test_advance_run_advances_exactly_one_run(engine: Engine, tmp_path: Path) -> None:
-    a = engine.run(str(SPEC), "run-a")
-    engine.run(str(sibling_spec(tmp_path, SPEC)), "run-b")
+    a = engine.run(str(SPEC), "run-a", params=EXAMPLE_PARAMS)
+    engine.run(str(sibling_spec(tmp_path, SPEC)), "run-b", params=EXAMPLE_PARAMS)
     _complete(engine.kanban.board_conn, a["nodes"]["plan"]["hermes_task_id"])
 
     advanced = engine.advance_run([*ROOTS, str(tmp_path)], "run-a")
@@ -61,7 +61,7 @@ def test_advance_run_advances_exactly_one_run(engine: Engine, tmp_path: Path) ->
 
 
 def test_advance_run_is_idempotent(engine: Engine) -> None:
-    a = engine.run(str(SPEC), "run-a")
+    a = engine.run(str(SPEC), "run-a", params=EXAMPLE_PARAMS)
     _complete(engine.kanban.board_conn, a["nodes"]["plan"]["hermes_task_id"])
 
     first = engine.advance_run(ROOTS, "run-a")

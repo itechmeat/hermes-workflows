@@ -108,6 +108,22 @@ describe("fillParams", () => {
     expect(() => fillParams(required, {})).toThrow(ParamFillError);
   });
 
+  test("the missing-required error names the param and its label", () => {
+    const required: WorkflowParam[] = [
+      { name: "feature_request", type: "text", label: "Feature request" },
+    ];
+    expect(() => fillParams(required, {})).toThrow(
+      "missing required value: feature_request (Feature request)",
+    );
+  });
+
+  test("a required param with no default is not satisfied by a blank value", () => {
+    const required: WorkflowParam[] = [
+      { name: "feature_request", type: "text", label: "Feature request" },
+    ];
+    expect(() => fillParams(required, { feature_request: "" })).toThrow(ParamFillError);
+  });
+
   test("rejects an out-of-options strict enum", () => {
     expect(() => fillParams(PARAMS, { tone: "angry" })).toThrow(ParamFillError);
   });
@@ -174,6 +190,26 @@ describe("workflow.params schema", () => {
 
   test("rejects an unknown param type at parse", () => {
     expect(() => build([{ name: "x", type: "date", label: "X" }])).toThrow();
+  });
+
+  test("maps required: true to a required param (optional false)", () => {
+    const params = build([{ name: "x", type: "text", label: "X", required: true }]).params;
+    expect(params?.[0]).toMatchObject({ name: "x", optional: false });
+  });
+
+  test("maps required: false to an optional param", () => {
+    const params = build([{ name: "x", type: "text", label: "X", required: false }]).params;
+    expect(params?.[0]).toMatchObject({ name: "x", optional: true });
+  });
+
+  test("rejects a param declaring both optional and required", () => {
+    expect(() =>
+      build([{ name: "x", type: "text", label: "X", optional: true, required: true }]),
+    ).toThrow();
+  });
+
+  test("rejects a non-boolean required", () => {
+    expect(() => build([{ name: "x", type: "text", label: "X", required: "yes" }])).toThrow();
   });
 
   test("rejects options on a non-enum param", () => {

@@ -162,13 +162,23 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
         project_id = _default_project(engine, spec, args.project)
         run_id = f"{args.workflow_id}-{uuid.uuid4().hex[:8]}"
         try:
+            params = json.loads(args.params) if args.params else None
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"--params is not valid JSON: {exc}") from exc
+        try:
             run = engine.run(
-                spec, run_id, project_id=project_id, origin=args.origin, input=args.input
+                spec,
+                run_id,
+                project_id=project_id,
+                origin=args.origin,
+                input=args.input,
+                params=params,
             )
         except cli_bridge.CoreBridgeError as exc:
-            # Single-flight refusal is an expected operator-facing outcome:
-            # exit with the core's message, not a traceback.
-            if exc.kind == "ActiveRunExistsError":
+            # Single-flight refusal and a param-validation failure are both
+            # expected operator-facing outcomes: exit with the core's message,
+            # not a traceback.
+            if exc.kind in ("ActiveRunExistsError", "ParamFillError"):
                 raise SystemExit(exc.detail) from exc
             raise
         # A run that survived its first advance still needs future advances;
@@ -251,6 +261,11 @@ def _parser() -> argparse.ArgumentParser:
     # Free-form operator input, layered above every agent_task prompt at highest
     # priority (overrides conflicting node instructions, augments the rest).
     p_run.add_argument("--input", default=None)
+    # Template parameter values as a JSON object ({"name": value, ...}). The core
+    # validates them against the workflow's declared params (rejecting unknown or
+    # missing-required values) and substitutes each as {{params.<name>}}. Omit
+    # for a workflow with no params, or one whose params are all optional.
+    p_run.add_argument("--params", default=None)
 
     sub.add_parser("advance-all", help="advance every active run")
 

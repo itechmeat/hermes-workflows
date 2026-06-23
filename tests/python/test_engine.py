@@ -16,7 +16,7 @@ kb = pytest.importorskip("hermes_cli.kanban_db")
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import DirectExecutor, KanbanExecutor, ScriptExecutor
 
-from conftest import fake_hermes_bin
+from conftest import EXAMPLE_PARAMS, fake_hermes_bin
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ROOT / "packages" / "core" / "src" / "cli.ts"
@@ -51,7 +51,7 @@ def _node(run: dict, node_id: str) -> dict:
 
 
 def test_run_schedules_the_entry_node(engine: Engine) -> None:
-    run = engine.run(str(SPEC), "run-1")
+    run = engine.run(str(SPEC), "run-1", params=EXAMPLE_PARAMS)
     assert run["status"] == "running"
     assert _node(run, "plan")["status"] == "scheduled"
     assert _node(run, "plan")["hermes_task_id"]
@@ -230,14 +230,14 @@ def test_off_board_routes_to_direct_even_without_a_script_backend(tmp_path: Path
 
 
 def test_idempotent_tick_creates_no_duplicate(engine: Engine) -> None:
-    engine.run(str(SPEC), "run-1")
+    engine.run(str(SPEC), "run-1", params=EXAMPLE_PARAMS)
     task_id = engine.status("run-1")["nodes"]["plan"]["hermes_task_id"]
     again = engine.advance(str(SPEC), "run-1")
     assert _node(again, "plan")["hermes_task_id"] == task_id  # same card, no duplicate
 
 
 def test_full_happy_path_to_finish(engine: Engine) -> None:
-    run = engine.run(str(SPEC), "run-1")
+    run = engine.run(str(SPEC), "run-1", params=EXAMPLE_PARAMS)
 
     # plan -> implement -> validate
     for step in ("plan", "implement", "validate"):
@@ -257,7 +257,7 @@ def test_full_happy_path_to_finish(engine: Engine) -> None:
 
 
 def test_fix_loop_reruns_validate(engine: Engine) -> None:
-    run = engine.run(str(SPEC), "run-1")
+    run = engine.run(str(SPEC), "run-1", params=EXAMPLE_PARAMS)
     for step in ("plan", "implement"):
         _complete(engine.kanban.board_conn, _node(run, step)["hermes_task_id"])
         run = engine.advance(str(SPEC), "run-1")
@@ -383,7 +383,7 @@ def test_mixed_run_routes_agent_to_kanban_and_script_to_script_executor(tmp_path
 
 
 def test_create_records_the_run_without_advancing(engine: Engine) -> None:
-    created = engine.create(str(SPEC), "run-c1")
+    created = engine.create(str(SPEC), "run-c1", params=EXAMPLE_PARAMS)
     assert created["status"] == "created"
     # Nothing scheduled: create is the non-blocking half of run().
     persisted = engine.status("run-c1")
@@ -392,7 +392,7 @@ def test_create_records_the_run_without_advancing(engine: Engine) -> None:
 
 
 def test_run_after_create_advances_the_same_run(engine: Engine) -> None:
-    engine.create(str(SPEC), "run-c2")
+    engine.create(str(SPEC), "run-c2", params=EXAMPLE_PARAMS)
     advanced = engine.advance(str(SPEC), "run-c2")
     assert advanced["status"] == "running"
     assert _node(advanced, "plan")["status"] == "scheduled"

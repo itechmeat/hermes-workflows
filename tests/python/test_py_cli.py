@@ -14,6 +14,7 @@ import pytest
 kb = pytest.importorskip("hermes_cli.kanban_db")
 cj = pytest.importorskip("cron.jobs")
 
+from conftest import EXAMPLE_PARAMS
 from hermes_workflows import cli
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,7 +44,7 @@ def _invoke(capsys, *argv: str):
 
 
 def test_run_status_and_advance_all(home: Path, capsys) -> None:
-    run = _invoke(capsys, "run", "feature-development")
+    run = _invoke(capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS))
     run_id = run["run_id"]
     assert run_id.startswith("feature-development-")
     assert run["nodes"]["plan"]["status"] == "scheduled"
@@ -61,7 +62,7 @@ def test_run_threads_operator_input_into_run_state(home: Path, capsys) -> None:
     """`run --input` persists the operator's free-form input on the run, so the
     engine layers it above every agent_task prompt at highest priority. It
     survives a fresh status load (durable, not in-memory)."""
-    run = _invoke(capsys, "run", "feature-development", "--input", "scope = only X; be terse")
+    run = _invoke(capsys, "run", "feature-development", "--input", "scope = only X; be terse", "--params", json.dumps(EXAMPLE_PARAMS))
     assert run["input"] == "scope = only X; be terse"
 
     status = _invoke(capsys, "status", run["run_id"])
@@ -69,8 +70,22 @@ def test_run_threads_operator_input_into_run_state(home: Path, capsys) -> None:
 
 
 def test_run_without_input_has_no_run_input(home: Path, capsys) -> None:
-    run = _invoke(capsys, "run", "feature-development")
+    run = _invoke(capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS))
     assert run.get("input") is None
+
+
+def test_run_missing_required_param_exits_cleanly(home: Path) -> None:
+    """A run started without the required feature_request param fails closed with
+    the core's message (a clean SystemExit, not a traceback)."""
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["run", "feature-development"])
+    assert "missing required value: feature_request (Feature request)" in str(exc_info.value)
+
+
+def test_run_with_malformed_params_json_exits_cleanly(home: Path) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["run", "feature-development", "--params", "{not json"])
+    assert "--params is not valid JSON" in str(exc_info.value)
 
 
 def test_unknown_workflow_exits(home: Path) -> None:
@@ -81,7 +96,7 @@ def test_unknown_workflow_exits(home: Path) -> None:
 def test_cancel_marks_the_run_and_active_nodes(home: Path, capsys) -> None:
     """`cancel <run_id>` stops a run from the shell: the run and its active
     nodes go cancelled, and a second cancel is an idempotent no-op."""
-    run = _invoke(capsys, "run", "feature-development")
+    run = _invoke(capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS))
     run_id = run["run_id"]
     assert run["nodes"]["plan"]["status"] == "scheduled"
 
@@ -107,10 +122,10 @@ def test_wrapper_script_is_executable() -> None:
 def test_run_refuses_a_second_active_run_cleanly(home: Path, capsys) -> None:
     """Single-flight: a second `run` of the same workflow exits with the core's
     message (a clean SystemExit naming the active run, not a traceback)."""
-    first = _invoke(capsys, "run", "feature-development")
+    first = _invoke(capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS))
 
     with pytest.raises(SystemExit) as exc_info:
-        cli.main(["run", "feature-development"])
+        cli.main(["run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS)])
     message = str(exc_info.value)
     assert first["run_id"] in message
     assert "active run" in message
@@ -121,6 +136,6 @@ def test_run_arms_the_tick_for_an_active_run(home: Path, capsys) -> None:
     multi-node run stalls after the first step (nothing else calls advance)."""
     from hermes_workflows.bridge import cron as cron_bridge
 
-    run = _invoke(capsys, "run", "feature-development")
+    run = _invoke(capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS))
     assert run["status"] == "running"
     assert cron_bridge.find_by_name(cron_bridge.TICK_NAME) is not None

@@ -78,6 +78,8 @@ describe("cli run mutations on runs.db", () => {
   let dir: string;
   let db: string;
   const example = join(import.meta.dir, "../../../examples/feature-development.workflow.yaml");
+  // feature_request is a required param on the example (no default).
+  const featureParams = JSON.stringify({ feature_request: "Add a dark mode toggle" });
 
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), "hw-runmut-"));
@@ -88,7 +90,7 @@ describe("cli run mutations on runs.db", () => {
   });
 
   test("run-cancel persists a cancelled run", async () => {
-    await cmdRunCreate(db, example, "run-x");
+    await cmdRunCreate(db, example, "run-x", undefined, undefined, undefined, featureParams);
     const cancelled = cmdRunCancel(db, "run-x");
     expect(cancelled.status).toBe("cancelled");
     expect(cmdRunLoad(db, "run-x")?.status).toBe("cancelled");
@@ -99,7 +101,7 @@ describe("cli run mutations on runs.db", () => {
   });
 
   test("run-retry resets a run", async () => {
-    await cmdRunCreate(db, example, "run-y");
+    await cmdRunCreate(db, example, "run-y", undefined, undefined, undefined, featureParams);
     const retried = cmdRunRetry(db, "run-y", undefined);
     expect(retried.status).toBe("created");
   });

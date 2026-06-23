@@ -19,12 +19,14 @@ params:
   - name: feature_request
     type: text
     label: Feature request
-    default: Use the operator instruction provided for this run as the feature request.
+    required: true
     help: >-
       What the operator wants built, in their own words. Captured before the
       plan node and interpolated into the Plan feature card so the plan is
       grounded in a concrete request rather than a generic prompt. Filled from
-      the dashboard form, the /workflow slash command, or a chat deep-link.
+      the dashboard form, the /workflow slash command, or a chat deep-link. No
+      default: a run started without it fails closed rather than feeding the
+      plan node a circular placeholder.
 
 nodes:
   - id: plan

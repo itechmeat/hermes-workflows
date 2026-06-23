@@ -16,7 +16,7 @@ from hermes_workflows.bridge import kanban
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import KanbanExecutor
 
-from conftest import sibling_spec
+from conftest import EXAMPLE_PARAMS, sibling_spec
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
@@ -60,8 +60,8 @@ def test_dispatch_board_invokes_native_cli() -> None:
 def test_tick_dispatches_active_boards_and_keeps_tick(engine: Engine, tmp_path: Path) -> None:
     # Two concurrently-active runs need two workflows (single-flight allows at
     # most one active run per workflow); both resolve to the same board here.
-    engine.run(str(SPEC), "run-a")
-    engine.run(str(sibling_spec(tmp_path, SPEC)), "run-b")
+    engine.run(str(SPEC), "run-a", params=EXAMPLE_PARAMS)
+    engine.run(str(sibling_spec(tmp_path, SPEC)), "run-b", params=EXAMPLE_PARAMS)
     rec = _Recorder()
 
     result = engine.tick(
@@ -79,7 +79,7 @@ def test_tick_dispatches_active_boards_and_keeps_tick(engine: Engine, tmp_path: 
 
 
 def test_tick_tears_down_when_drained(engine: Engine) -> None:
-    engine.run(str(SPEC), "run-old")
+    engine.run(str(SPEC), "run-old", params=EXAMPLE_PARAMS)
     old = engine.status("run-old")
     old["status"] = "completed"
     engine._save(old)
@@ -98,7 +98,7 @@ def test_tick_tears_down_when_drained(engine: Engine) -> None:
 
 
 def test_tick_skips_boardless_runs(engine: Engine) -> None:
-    engine.run(str(SPEC), "run-a")
+    engine.run(str(SPEC), "run-a", params=EXAMPLE_PARAMS)
     rec = _Recorder()
 
     engine.tick(

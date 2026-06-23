@@ -24,6 +24,12 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     h = tmp_path / "home"
     (h / "workflows" / "global").mkdir(parents=True)
     shutil.copy(SPEC, h / "workflows" / "global" / "feature-development.workflow.yaml")
+    # A second, parameter-free workflow for the NL-entry test: the free-text
+    # path carries only operator input, so it cannot fill a required param.
+    shutil.copy(
+        ROOT / "examples" / "blog-daily-signals.workflow.yaml",
+        h / "workflows" / "global" / "blog-daily-signals.workflow.yaml",
+    )
     monkeypatch.setenv("HERMES_HOME", str(h))
     monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "kanban.db"))
     cron_dir = tmp_path / "cron"
@@ -47,8 +53,9 @@ def test_unmatched_free_text_asks_which_workflow(home: Path) -> None:
 
 def test_nl_entry_resolves_target_and_operator_input(home: Path) -> None:
     # Free text whose leading run is a workflow id starts that workflow, carrying
-    # the remainder as the operator input (t_77d752f7).
-    out = plugin._handle_command("feature-development take 2-3 minor related tasks")
+    # the remainder as the operator input (t_77d752f7). Uses a parameter-free
+    # workflow: the NL path carries only input, never template params.
+    out = plugin._handle_command("blog-daily-signals take 2-3 minor related tasks")
     assert out.startswith("Started run ")
     assert 'input: "take 2-3 minor related tasks"' in out
 
@@ -56,7 +63,10 @@ def test_nl_entry_resolves_target_and_operator_input(home: Path) -> None:
 def test_run_subcommand_parses_input_flag(home: Path) -> None:
     # The explicit `run` subcommand consumes everything after --input as the
     # operator prompt and starts the run (no project arg for a global workflow).
-    out = plugin._handle_command("run feature-development --input scope only bugfixes")
+    out = plugin._handle_command(
+        'run feature-development feature_request="add a dark mode toggle" '
+        "--input scope only bugfixes"
+    )
     assert out.startswith("Started run ")
 
 
@@ -102,7 +112,8 @@ def test_tokenize_keeps_quoted_param_value_as_one_token() -> None:
 def test_run_subcommand_rejects_unknown_param(home: Path) -> None:
     # `run <id> name=value` flows the param to the core, which validates it
     # against the workflow's declared params and fails loud on an unknown name
-    # (feature-development declares none). The slash command reports it as text.
+    # (feature-development declares feature_request, not scope). The slash
+    # command reports it as text.
     out = plugin._handle_command("run feature-development scope=bugfixes")
     assert "unknown param" in out and "scope" in out
 
@@ -113,7 +124,9 @@ def test_list_names_the_workflow(home: Path) -> None:
 
 
 def test_run_then_status_then_cancel(home: Path) -> None:
-    started = plugin._handle_command("run feature-development")
+    started = plugin._handle_command(
+        'run feature-development feature_request="add a dark mode toggle"'
+    )
     assert started.startswith("Started run ")
     run_id = started.removeprefix("Started run ").split(" ")[0]
 

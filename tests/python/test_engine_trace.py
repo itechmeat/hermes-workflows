@@ -12,6 +12,7 @@ import pytest
 
 kb = pytest.importorskip("hermes_cli.kanban_db")
 
+from conftest import EXAMPLE_PARAMS
 from hermes_workflows import trace
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import KanbanExecutor
@@ -45,7 +46,7 @@ def _complete(board: sqlite3.Connection, task_id: str) -> None:
 
 
 def _drive_to_completion(engine: Engine, board: sqlite3.Connection, run_id: str) -> dict:
-    run = engine.run(str(SPEC), run_id)
+    run = engine.run(str(SPEC), run_id, params=EXAMPLE_PARAMS)
     for step in ("plan", "implement", "validate"):
         _complete(board, run["nodes"][step]["hermes_task_id"])
         run = engine.advance(str(SPEC), run_id)

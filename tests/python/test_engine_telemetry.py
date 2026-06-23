@@ -13,6 +13,7 @@ import pytest
 
 kb = pytest.importorskip("hermes_cli.kanban_db")
 
+from conftest import EXAMPLE_PARAMS
 from hermes_workflows import telemetry
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import KanbanExecutor
@@ -51,7 +52,7 @@ def _seed_sidecar(root: Path, task_id: str, data: dict) -> None:
 
 
 def test_settled_node_gets_telemetry_and_sidecar_is_cleared(engine: Engine, tmp_path: Path) -> None:
-    run = engine.run(str(SPEC), "run-t1")
+    run = engine.run(str(SPEC), "run-t1", params=EXAMPLE_PARAMS)
     task_id = run["nodes"]["plan"]["hermes_task_id"]
     _seed_sidecar(
         tmp_path / "telemetry",
@@ -76,7 +77,7 @@ def test_settled_node_gets_telemetry_and_sidecar_is_cleared(engine: Engine, tmp_
 
 
 def test_missing_or_corrupt_sidecar_is_fail_open(engine: Engine, tmp_path: Path) -> None:
-    run = engine.run(str(SPEC), "run-t2")
+    run = engine.run(str(SPEC), "run-t2", params=EXAMPLE_PARAMS)
     task_id = run["nodes"]["plan"]["hermes_task_id"]
     telemetry_root = tmp_path / "telemetry"
     telemetry_root.mkdir(parents=True, exist_ok=True)
@@ -99,7 +100,7 @@ def test_engine_without_telemetry_dir_keeps_todays_behaviour(tmp_path: Path) -> 
             db_path=str(tmp_path / "runs.db"),
             kanban=KanbanExecutor(board),
         )
-        run = eng.run(str(SPEC), "run-t3")
+        run = eng.run(str(SPEC), "run-t3", params=EXAMPLE_PARAMS)
         task_id = run["nodes"]["plan"]["hermes_task_id"]
         _complete(board, task_id)
         run = eng.advance(str(SPEC), "run-t3")

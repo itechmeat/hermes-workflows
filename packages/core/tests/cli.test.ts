@@ -23,6 +23,9 @@ import type { RunState } from "../src/index.ts";
 const examplesDir = join(import.meta.dir, "../../../examples");
 const example = join(examplesDir, "feature-development.workflow.yaml");
 const exampleOther = join(examplesDir, "blog-daily-signals.workflow.yaml");
+// The example's feature_request param is required (no default), so creating a
+// run against it must carry a real value.
+const featureParams = JSON.stringify({ feature_request: "Add a dark mode toggle" });
 
 describe("cli command — list-specs", () => {
   test("lists workflows found under the given roots", async () => {
@@ -66,7 +69,15 @@ describe("cli commands — run lifecycle on runs.db", () => {
   });
 
   test("run-create persists a fresh run", async () => {
-    const run = await cmdRunCreate(db, example, "run-1", "proj");
+    const run = await cmdRunCreate(
+      db,
+      example,
+      "run-1",
+      "proj",
+      undefined,
+      undefined,
+      featureParams,
+    );
     expect(run.status).toBe("created");
     expect(run.project_id).toBe("proj");
     expect(cmdRunLoad(db, "run-1")?.run_id).toBe("run-1");
@@ -83,7 +94,7 @@ describe("cli commands — run lifecycle on runs.db", () => {
     // Single-flight: run-1 must settle before another feature-development run
     // may exist, so the active list swaps rather than accumulates.
     cmdRunCancel(db, "run-1");
-    await cmdRunCreate(db, example, "run-2");
+    await cmdRunCreate(db, example, "run-2", undefined, undefined, undefined, featureParams);
     const active = cmdRunList(db, true).map((r) => r.run_id);
     expect(active).not.toContain("run-1");
     expect(active).toContain("run-2");
@@ -181,8 +192,10 @@ describe("cli commands — single-flight guard", () => {
   });
 
   test("run-create refuses a second run of the same workflow", async () => {
-    await cmdRunCreate(db, example, "sf-a");
-    await expect(cmdRunCreate(db, example, "sf-b")).rejects.toThrow(ActiveRunExistsError);
+    await cmdRunCreate(db, example, "sf-a", undefined, undefined, undefined, featureParams);
+    await expect(
+      cmdRunCreate(db, example, "sf-b", undefined, undefined, undefined, featureParams),
+    ).rejects.toThrow(ActiveRunExistsError);
     // Another workflow is free to start.
     const other = await cmdRunCreate(db, exampleOther, "sf-other");
     expect(other.status).toBe("created");
@@ -190,7 +203,7 @@ describe("cli commands — single-flight guard", () => {
 
   test("whole-run retry refuses to revive next to an active sibling", async () => {
     cmdRunCancel(db, "sf-a"); // settle the first run …
-    await cmdRunCreate(db, example, "sf-c"); // … and start a sibling
+    await cmdRunCreate(db, example, "sf-c", undefined, undefined, undefined, featureParams); // … and start a sibling
     expect(() => cmdRunRetry(db, "sf-a")).toThrow(ActiveRunExistsError);
 
     // With the sibling settled the same retry succeeds.
@@ -204,7 +217,7 @@ describe("cli commands — single-flight guard", () => {
     failed.status = "failed";
     failed.nodes["plan"] = { node_id: "plan", status: "failed", seq: 1 };
     cmdRunSave(db, failed);
-    await cmdRunCreate(db, example, "sf-d");
+    await cmdRunCreate(db, example, "sf-d", undefined, undefined, undefined, featureParams);
 
     expect(() => cmdRunRetry(db, "sf-a", "plan")).toThrow(ActiveRunExistsError);
 

@@ -16,7 +16,7 @@ kb = pytest.importorskip("hermes_cli.kanban_db")
 from hermes_workflows.engine import Engine
 from hermes_workflows.executor import DirectExecutor, KanbanExecutor
 
-from conftest import fake_hermes_bin
+from conftest import EXAMPLE_PARAMS, fake_hermes_bin
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ["bun", "run", str(ROOT / "packages" / "core" / "src" / "cli.ts")]
@@ -54,7 +54,7 @@ def test_project_backend_runs_to_completion_on_project_board(tmp_path: Path) -> 
         direct=DirectExecutor(store_dir=tmp_path / "s"),
     )
 
-    run = eng.run(PROJECT_SPEC, "p-1", project_id="acme")
+    run = eng.run(PROJECT_SPEC, "p-1", project_id="acme", params=EXAMPLE_PARAMS)
     board = boards["acme"]  # the project's own board was used, not a shared one
 
     for step in ("plan", "implement", "validate"):
@@ -100,7 +100,7 @@ def test_tick_advances_and_self_terminates(tmp_path: Path) -> None:
     sync = lambda *, active, script: sync_calls.append(active)  # noqa: E731
 
     try:
-        eng.run(PROJECT_SPEC, "t-1")
+        eng.run(PROJECT_SPEC, "t-1", params=EXAMPLE_PARAMS)
         result = eng.tick(ROOTS, sync_tick=sync, tick_script="advance-all")
         assert result["active"] is True
         assert sync_calls[-1] is True  # active run -> tick kept alive
