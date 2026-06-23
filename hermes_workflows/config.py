@@ -112,6 +112,18 @@ def tick_schedule() -> str:
     return str(_setting_value("tick_schedule"))
 
 
+def dashboard_api_host() -> str:
+    """Bind host for the standalone dashboard-API sidecar. Defaults to loopback:
+    the sidecar is never exposed directly — the operator's reverse proxy fronts
+    it on the dashboard origin, exactly as it fronts the gateway dashboard."""
+    return str(_setting_value("dashboard_api_host"))
+
+
+def dashboard_api_port() -> int:
+    """Bind port for the standalone dashboard-API sidecar."""
+    return int(_setting_value("dashboard_api_port"))
+
+
 def memory_settings() -> dict:
     """Open Second Brain write policy from the enforced settings, for the engine:
     mode + the write_* flags. Driven by the ``open_second_brain.*`` settings."""
@@ -231,6 +243,33 @@ SETTINGS_SCHEMA: dict = {
                     "type": "string",
                     "default": "hermes-workflows",
                     "env": "HERMES_WORKFLOWS_BOARD",
+                    "enforced": True,
+                },
+            ],
+        },
+        {
+            "key": "dashboard",
+            "label": "Dashboard",
+            "fields": [
+                # The dashboard backend runs as a standalone sidecar process
+                # (`hermes-workflows-dashboard-api`) reusing the plugin_api
+                # router, because upstream Hermes no longer auto-imports a
+                # non-bundled plugin's Python backend (GHSA-5qr3-c538-wm9j).
+                # The operator's reverse proxy routes `/api/plugins/workflows/*`
+                # to host:port; loopback default keeps it off the network.
+                # Enforced: the sidecar binds exactly these.
+                {
+                    "key": "dashboard_api_host",
+                    "type": "string",
+                    "default": "127.0.0.1",
+                    "env": "HERMES_WORKFLOWS_DASHBOARD_API_HOST",
+                    "enforced": True,
+                },
+                {
+                    "key": "dashboard_api_port",
+                    "type": "int",
+                    "default": 9123,
+                    "env": "HERMES_WORKFLOWS_DASHBOARD_API_PORT",
                     "enforced": True,
                 },
             ],

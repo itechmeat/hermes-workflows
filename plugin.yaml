@@ -1,5 +1,5 @@
 name: hermes-workflows
-version: "0.7.0"
+version: "0.7.1"
 description: "Visual workflow orchestration over Hermes Kanban, Cron, and Profiles, with optional OpenSecondBrain memory."
 author: "Hermes Workflows contributors"
 kind: standalone

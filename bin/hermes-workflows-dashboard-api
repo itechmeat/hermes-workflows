@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Entrypoint for the Hermes Workflows dashboard-API sidecar. Upstream Hermes no
+# longer auto-imports a non-bundled plugin's Python backend (GHSA-5qr3-c538-wm9j),
+# so the dashboard backend runs as this standalone process and the operator's
+# reverse proxy routes /api/plugins/workflows/* to it. Resolves the repo (this
+# script's parent) and the Hermes install so both packages import, and prefers
+# the Hermes venv interpreter, which carries fastapi/uvicorn (a bare system
+# python3 typically does not). HERMES_WORKFLOWS_PYTHON overrides the interpreter.
+set -euo pipefail
+
+self="$(readlink -f "${BASH_SOURCE[0]:-$0}")"
+repo="$(cd "$(dirname "$self")/.." && pwd)"
+
+if [[ -n "${HERMES_AGENT_HOME:-}" ]]; then
+	hermes_install="$HERMES_AGENT_HOME"
+elif [[ -d "${HOME}/.hermes/hermes-agent" ]]; then
+	hermes_install="${HOME}/.hermes/hermes-agent"
+else
+	hermes_install="/usr/local/lib/hermes-agent"
+fi
+
+if [[ -n "${HERMES_WORKFLOWS_PYTHON:-}" ]]; then
+	py="$HERMES_WORKFLOWS_PYTHON"
+elif [[ -x "${hermes_install}/venv/bin/python3" ]]; then
+	py="${hermes_install}/venv/bin/python3"
+else
+	py="python3"
+fi
+
+export PYTHONPATH="${repo}:${hermes_install}${PYTHONPATH:+:${PYTHONPATH}}"
+exec "$py" -m hermes_workflows.dashboard_api "$@"

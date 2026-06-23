@@ -30,9 +30,17 @@ applied.
 
 ## Backend
 
-`dashboard/plugin_api.py` exports a FastAPI `APIRouter`, mounted by the dashboard
-runtime at `/api/plugins/workflows/`. The routes are thin: each delegates to the
+`dashboard/plugin_api.py` exports a FastAPI `APIRouter`, served at
+`/api/plugins/workflows/`. The routes are thin: each delegates to the
 TypeScript core CLI (the core owns all spec logic) or the orchestrator.
+
+How the router reaches that path depends on the host. A **bundled** Hermes
+dashboard auto-imports the router and mounts it directly. For a **non-bundled**
+plugin (installed from a repo / symlink — `source: user`/`project`), Hermes no
+longer auto-imports a plugin's Python backend (GHSA-5qr3-c538-wm9j): the same
+router is served by a standalone sidecar instead — see
+[Running the backend](#running-the-backend-standalone-sidecar) below. Either
+way the router is the single source of truth; nothing re-declares the routes.
 
 Listing and status:
 
@@ -109,14 +117,89 @@ Settings (over the host config `plugins.workflows` namespace):
 - `PUT /settings` — persist a patch (merged, not clobbering other config) and
   return the new effective values; an unknown key or invalid value is `400`.
 
+### Running the backend (standalone sidecar)
+
+Recent Hermes refuses to auto-import the Python backend of a **non-bundled**
+plugin — only bundled plugins may contribute dashboard backend routes
+(GHSA-5qr3-c538-wm9j / #43719). Installed from a repo or symlink, this plugin is
+non-bundled, so its `plugin_api.py` is not mounted by the gateway and the
+Workflows tab loads but cannot fetch data.
+
+The fix is to run the backend out-of-process. `hermes_workflows.dashboard_api`
+builds an ASGI app that mounts the **same** `plugin_api.py` router (no routes are
+re-declared) under `/api/plugins/workflows`, plus a `GET /healthz` liveness
+route. Start it with the wrapper (preferred) or the module:
+
+```bash
+bin/hermes-workflows-dashboard-api          # uses the Hermes venv interpreter
+python -m hermes_workflows.dashboard_api    # if fastapi/uvicorn are importable
+```
+
+Host and port come from `plugins.workflows.dashboard_api.{host,port}`
+(config ▸ env ▸ default `127.0.0.1:9123`; env
+`HERMES_WORKFLOWS_DASHBOARD_API_{HOST,PORT}`). The sidecar binds **loopback**
+only and ships no auth of its own: it inherits the dashboard's trust model —
+loopback bind plus the operator's reverse proxy, which already gates the Hermes
+dashboard. Point that proxy's `/api/plugins/workflows/*` prefix at the sidecar,
+**before** the catch-all that proxies the dashboard, so the frontend's existing
+same-origin calls reach it unchanged.
+
+systemd (user service):
+
+```ini
+# ~/.config/systemd/user/hermes-workflows-dashboard-api.service
+[Unit]
+Description=Hermes Workflows dashboard-API sidecar
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/path/to/hermes-workflows/bin/hermes-workflows-dashboard-api
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user enable --now hermes-workflows-dashboard-api.service
+```
+
+Caddy (inside the dashboard site block; site-level auth still gates both):
+
+```
+handle /api/plugins/workflows/* {
+    reverse_proxy 127.0.0.1:9123 {
+        header_up Host 127.0.0.1:9123
+    }
+}
+handle {
+    reverse_proxy 127.0.0.1:9119   # the Hermes dashboard
+}
+```
+
+nginx (inside the `server {}` that proxies the dashboard; the more specific
+`location` wins):
+
+```nginx
+location /api/plugins/workflows/ {
+    proxy_pass http://127.0.0.1:9123;
+}
+location / {
+    proxy_pass http://127.0.0.1:9119;   # the Hermes dashboard
+}
+```
+
+A bundled install needs none of this — the gateway mounts the router directly.
+
 ### Testing note
 
-`fastapi` is a **test-only** dependency for this plugin and is intentionally not
-declared in `pyproject.toml`: at runtime the Hermes dashboard provides the
-FastAPI app and imports this router; the plugin never spawns its own instance.
-The route tests are therefore guarded with `pytest.importorskip("fastapi")` and
-skip cleanly in environments (like CI without the dashboard runtime) where
-FastAPI is not installed.
+`fastapi`/`uvicorn` ship with the Hermes dashboard runtime (the sidecar runs
+under that interpreter) and are intentionally **not** declared in
+`pyproject.toml`. The route and sidecar tests are guarded with
+`pytest.importorskip("fastapi")` and skip cleanly in environments (like CI
+without the dashboard runtime) where FastAPI is not installed.
 
 ## Frontend
 

@@ -4,6 +4,29 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.1 - 2026-06-23
+
+Restores the Workflows dashboard tab on a hardened Hermes. Recent Hermes refuses
+to auto-import the Python backend of a non-bundled plugin
+(GHSA-5qr3-c538-wm9j / #43719), so this plugin's `plugin_api.py` was no longer
+mounted (`has_api: false`) and the tab loaded but could not fetch data. The
+model-facing tools and the operator CLI were unaffected.
+
+### Added
+
+- **Standalone dashboard-API sidecar.** `hermes_workflows.dashboard_api` (run via
+  `bin/hermes-workflows-dashboard-api` or `python -m hermes_workflows.dashboard_api`)
+  serves the dashboard backend out-of-process. It mounts the **existing**
+  `dashboard/plugin_api.py` router verbatim — no routes are re-declared — under
+  `/api/plugins/workflows`, plus a `GET /healthz` liveness route. The frontend is
+  unchanged: the operator's reverse proxy routes `/api/plugins/workflows/*` to the
+  sidecar in front of the dashboard. Bind host/port are configurable via
+  `plugins.workflows.dashboard_api.{host,port}` (config ▸ env ▸ default
+  `127.0.0.1:9123`); the sidecar binds loopback only and inherits the dashboard's
+  trust model (loopback + proxy-level auth), shipping no auth of its own.
+- Docs (`docs/dashboard.md`): why the sidecar exists and ready-to-paste systemd,
+  Caddy, and nginx wiring. A bundled install needs none of it.
+
 ## 0.7.0 - 2026-06-23
 
 Release automation is now ready for bundled, operator-driven workflow releases:
