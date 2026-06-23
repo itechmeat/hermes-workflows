@@ -218,8 +218,12 @@ class Engine:
 
     @staticmethod
     def _stored_spec_path(run: dict) -> Optional[str]:
+        """The spec path persisted with the run, when it still resolves to a file
+        on disk. Returns ``None`` for an unset/blank path or one whose file has
+        since moved or been deleted, so callers fall back to resolving the spec
+        by workflow id from the configured roots."""
         path = run.get("workflow_path")
-        if isinstance(path, str) and path.strip() != "":
+        if isinstance(path, str) and path.strip() != "" and Path(path).is_file():
             return path
         return None
 

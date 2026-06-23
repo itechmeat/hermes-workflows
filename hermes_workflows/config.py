@@ -176,7 +176,7 @@ def project_workflows_dir(cwd: str | os.PathLike[str] | None = None) -> Path | N
     exists. Used by the shell CLI so `hermes-workflows run <id>` can see a
     project's own workflows without global registration."""
     base = Path(cwd) if cwd is not None else Path.cwd()
-    candidate = base / '.hermes' / 'workflows'
+    candidate = base / ".hermes" / "workflows"
     return candidate if candidate.is_dir() else None
 
 

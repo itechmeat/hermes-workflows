@@ -44,11 +44,11 @@ export function canTransitionNode(from: NodeStatus, to: NodeStatus): boolean {
 export function createRunState(
   workflow: Workflow,
   runId: string,
-  workflowPath?: string,
   projectId?: string,
   origin?: string,
   input?: string,
   params?: Record<string, ParamValue>,
+  workflowPath?: string,
 ): RunState {
   const nodes: Record<string, NodeRunState> = {};
   for (const node of workflow.nodes) {

@@ -141,31 +141,69 @@ def test_run_arms_the_tick_for_an_active_run(home: Path, capsys) -> None:
     assert cron_bridge.find_by_name(cron_bridge.TICK_NAME) is not None
 
 
+def _repo_local_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, seed_global: bool = False
+) -> tuple[Path, Path]:
+    """A temp Hermes home plus a separate project dir holding a repo-local spec.
+    With ``seed_global`` the same workflow is also registered globally, so a run
+    can fall back to it once the repo-local copy is gone."""
+    h = tmp_path / "home"
+    global_dir = h / "workflows" / "global"
+    global_dir.mkdir(parents=True)
+    if seed_global:
+        shutil.copy(SPEC, global_dir / "feature-development.workflow.yaml")
+    monkeypatch.setenv("HERMES_HOME", str(h))
+    monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "kanban.db"))
+    cron_dir = tmp_path / "cron"
+    cron_dir.mkdir()
+    monkeypatch.setattr(cj, "CRON_DIR", cron_dir)
+    monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
+    monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
+
+    project = tmp_path / "repo"
+    local_dir = project / ".hermes" / "workflows"
+    local_dir.mkdir(parents=True)
+    shutil.copy(SPEC, local_dir / "feature-development.workflow.yaml")
+    return project, local_dir
+
+
 def test_run_discovers_repo_local_workflow_and_persists_its_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    h = tmp_path / 'home'
-    (h / 'workflows' / 'global').mkdir(parents=True)
-    monkeypatch.setenv('HERMES_HOME', str(h))
-    monkeypatch.setenv('HERMES_KANBAN_DB', str(tmp_path / 'kanban.db'))
-    cron_dir = tmp_path / 'cron'
-    cron_dir.mkdir()
-    monkeypatch.setattr(cj, 'CRON_DIR', cron_dir)
-    monkeypatch.setattr(cj, 'JOBS_FILE', cron_dir / 'jobs.json')
-    monkeypatch.setattr(cj, 'OUTPUT_DIR', cron_dir / 'output')
-
-    project = tmp_path / 'repo'
-    local_dir = project / '.hermes' / 'workflows'
-    local_dir.mkdir(parents=True)
-    shutil.copy(SPEC, local_dir / 'feature-development.workflow.yaml')
+    project, local_dir = _repo_local_home(tmp_path, monkeypatch)
+    local_spec = str(local_dir / "feature-development.workflow.yaml")
 
     monkeypatch.chdir(project)
-    run = _invoke(capsys, 'run', 'feature-development')
-    assert run['workflow_path'] == str(local_dir / 'feature-development.workflow.yaml')
+    run = _invoke(
+        capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS)
+    )
+    assert run["workflow_path"] == local_spec
 
+    # The persisted path keeps status/advance working from any other cwd.
     monkeypatch.chdir(tmp_path)
-    status = _invoke(capsys, 'status', run['run_id'])
-    assert status['workflow_path'] == str(local_dir / 'feature-development.workflow.yaml')
+    status = _invoke(capsys, "status", run["run_id"])
+    assert status["workflow_path"] == local_spec
 
-    tick = _invoke(capsys, 'advance-all')
-    assert any(r['run_id'] == run['run_id'] for r in tick['advanced'])
+    tick = _invoke(capsys, "advance-all")
+    assert any(r["run_id"] == run["run_id"] for r in tick["advanced"])
+
+
+def test_advance_falls_back_to_global_when_stored_spec_is_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """If the repo-local spec the run was created from disappears (project moved
+    or deleted), the run is still advanceable as long as the workflow resolves by
+    id from a configured root — the stale stored path must not strand it."""
+    project, local_dir = _repo_local_home(tmp_path, monkeypatch, seed_global=True)
+
+    monkeypatch.chdir(project)
+    run = _invoke(
+        capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS)
+    )
+
+    # The repo-local spec goes away; the global copy remains.
+    shutil.rmtree(project)
+    monkeypatch.chdir(tmp_path)
+
+    tick = _invoke(capsys, "advance-all")
+    assert any(r["run_id"] == run["run_id"] for r in tick["advanced"])

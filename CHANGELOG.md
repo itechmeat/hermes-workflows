@@ -4,6 +4,13 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.2 - 2026-06-23
+
+`hermes-workflows run <id>` now also discovers specs in `<cwd>/.hermes/workflows`,
+and the spec path a run was created from is persisted (`workflow_path`) so `status`
+and `advance-all` keep working from any directory. A stored path that no longer
+exists falls back to resolving the workflow by id.
+
 ## 0.7.1 - 2026-06-23
 
 Restores the Workflows dashboard tab on a hardened Hermes. Recent Hermes refuses
