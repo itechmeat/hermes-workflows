@@ -91,6 +91,28 @@ export function RunsPage({
     [api, reload],
   );
 
+  const handleResume = useCallback(
+    (run: RunSummary) => {
+      // A failed run resumes FROM its failed node (the latest-seq node the
+      // summary surfaces as current_node); a cancelled run has no failed node,
+      // so resume restarts the whole graph. Both advance under the live spec.
+      const node = run.status === "failed" ? run.current_node ?? undefined : undefined;
+      setMessage(
+        node ? `Resuming ${run.run_id} from ${node}…` : `Restarting ${run.run_id}…`,
+      );
+      api
+        .retryRun(run.run_id, node)
+        .then(() => {
+          setMessage(node ? `Resumed ${run.run_id} from ${node}` : `Restarted ${run.run_id}`);
+          reload();
+        })
+        .catch((err: unknown) =>
+          setMessage(err instanceof Error ? err.message : `Failed to resume ${run.run_id}`),
+        );
+    },
+    [api, reload],
+  );
+
   const handleRetryNode = useCallback(
     (run: RunSummary) => {
       const node = window.prompt(`Node id to retry in ${run.run_id}`, run.current_node ?? "");
@@ -219,6 +241,21 @@ export function RunsPage({
                     label="Actions"
                     items={[
                       { key: "open", label: "Open", onSelect: () => onOpenRun(r.run_id) },
+                      // Resume is offered on a stalled run (failed / cancelled).
+                      // For a failed run the label names the node it resumes from;
+                      // a cancelled run has no failed node, so it restarts.
+                      ...(r.status === "failed" || r.status === "cancelled"
+                        ? [
+                            {
+                              key: "resume",
+                              label:
+                                r.status === "failed" && r.current_node
+                                  ? `Resume from ${r.current_node}`
+                                  : "Resume (restart)",
+                              onSelect: () => handleResume(r),
+                            },
+                          ]
+                        : []),
                       { key: "cancel", label: "Cancel", onSelect: () => handleCancel(r.run_id) },
                       { key: "retry-node", label: "Retry node", onSelect: () => handleRetryNode(r) },
                       { key: "retry-run", label: "Retry run", onSelect: () => handleRetryRun(r.run_id) },

@@ -155,6 +155,40 @@ describe("RunsPage", () => {
     await waitFor(() => expect(retryRun).toHaveBeenCalledWith("deploy-aaaa1111", "build"));
   });
 
+  it("offers Resume only on failed/cancelled runs, naming the failed node", async () => {
+    const failedRuns: RunSummary[] = [
+      { ...runs[0]!, run_id: "deploy-failed", status: "failed", current_node: "build" },
+      { ...runs[1]!, run_id: "nightly-cancelled", status: "cancelled", current_node: null },
+    ];
+    const retryRun = vi.fn(async () => ({ run_id: "deploy-failed", status: "running", nodes: {} }) as RunState);
+    render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => failedRuns), retryRun })} onOpenRun={() => {}} />);
+
+    await screen.findByText("deploy-failed");
+    // A failed run resumes FROM its failed node.
+    await clickRowAction(0, /resume from build/i);
+    await waitFor(() => expect(retryRun).toHaveBeenCalledWith("deploy-failed", "build"));
+  });
+
+  it("resumes a cancelled run by restarting (no failed node)", async () => {
+    const cancelled: RunSummary[] = [
+      { ...runs[0]!, run_id: "deploy-cancelled", status: "cancelled", current_node: null },
+    ];
+    const retryRun = vi.fn(async () => ({ run_id: "deploy-cancelled", status: "created", nodes: {} }) as RunState);
+    render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => cancelled), retryRun })} onOpenRun={() => {}} />);
+
+    await screen.findByText("deploy-cancelled");
+    await clickRowAction(0, /resume \(restart\)/i);
+    await waitFor(() => expect(retryRun).toHaveBeenCalledWith("deploy-cancelled", undefined));
+  });
+
+  it("does not offer Resume on an active run", async () => {
+    render(<RunsPage client={stubClient({ listRuns: vi.fn(async () => runs) })} onOpenRun={() => {}} />);
+    await screen.findByText("deploy-aaaa1111");
+    // deploy-aaaa1111 is running -> open its menu, no Resume item.
+    await userEvent.click(screen.getAllByRole("button", { name: /^actions$/i })[0]!);
+    expect(screen.queryByRole("menuitem", { name: /resume/i })).not.toBeInTheDocument();
+  });
+
   it("exports a run's logs as a download", async () => {
     URL.createObjectURL = vi.fn(() => "blob:x");
     URL.revokeObjectURL = vi.fn();

@@ -152,6 +152,35 @@ def start_workflow(
     return {"run_id": run_id, "status": created["status"]}
 
 
+def resume_workflow(
+    run_id: str,
+    *,
+    engine: Any,
+    roots: Sequence[str],
+    node: Optional[str] = None,
+    reset_all: bool = False,
+    ensure_tick: Optional[Callable[[], Any]] = None,
+) -> dict:
+    """Resume a stalled/failed run for the dashboard route: drift-guard and
+    reset the failed node (or the whole graph), advance ONE step under the live
+    spec, then arm the tick to carry it to completion. Returns the advanced run
+    state.
+
+    Synchronous in the handler — the same shape as the ``review`` route
+    (``decide_review`` advances in-line) and the CLI ``resume``. ``resume``'s
+    ``ResumeError`` / ``CoreBridgeError`` refusals (active run, spec drift,
+    single-flight, non-failed node) propagate for the route to map to a status
+    code."""
+    run = engine.resume(roots, run_id, node=node, reset_all=reset_all)
+    # Like the CLI: a resumed run that is still active needs future advances, so
+    # arm the singleton tick (it tears itself down once idle).
+    from .engine import ACTIVE_RUN_STATUSES
+
+    if ensure_tick is not None and run.get("status") in ACTIVE_RUN_STATUSES:
+        ensure_tick()
+    return run
+
+
 def run_workflow(
     workflow_id: str,
     *,

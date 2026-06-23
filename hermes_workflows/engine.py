@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
-from . import cli_bridge, notifications, telemetry, wait
+from . import cli_bridge, notifications, resume as resume_mod, telemetry, wait
 from .bridge import worktree
 from .executor import CompositeExecutor, NodeExecutor
 from .resolve import UnresolvedInput, resolve_input_mapping, resolve_params, resolve_ref
@@ -31,6 +31,13 @@ from .resolve import UnresolvedInput, resolve_input_mapping, resolve_params, res
 ACTIVE_RUN_STATUSES = frozenset({"created", "running", "waiting"})
 _ACTIVE_STATUSES = ACTIVE_RUN_STATUSES
 REVIEW_OPTIONS = frozenset({"approved", "rejected", "needs_changes"})
+
+
+class ResumeError(ValueError):
+    """A resume was refused for an operator-facing reason (the run is still
+    active, the live spec drifted structurally, or there is no single failed
+    node to resume). A ``ValueError`` so the CLI surfaces it as a clean
+    ``SystemExit`` like the other operator verbs."""
 
 # Terminal run statuses that warrant a single run-lifecycle notice.
 _TERMINAL_STATUSES = frozenset({"completed", "failed"})
@@ -370,6 +377,106 @@ class Engine:
             raise ValueError(
                 f"no workflow spec for '{run['workflow_id']}' (run '{run_id}') in roots"
             )
+        return self.advance(spec_path, run_id)
+
+    def _spec_path_for_run(self, spec_roots: Sequence[str], run: dict) -> str:
+        """Resolve a run's spec file by workflow id across ``spec_roots``.
+        Raises ``ValueError`` when no spec matches (clean operator error)."""
+        specs = self._core(["list-specs", "--roots", ",".join(spec_roots)])
+        spec_path = next(
+            (spec["path"] for spec in specs if spec["id"] == run["workflow_id"]), None
+        )
+        if spec_path is None:
+            raise ValueError(
+                f"no workflow spec for '{run['workflow_id']}' (run '{run['run_id']}') in roots"
+            )
+        return spec_path
+
+    def resume_reset(
+        self,
+        spec_roots: Sequence[str],
+        run_id: str,
+        *,
+        node: Optional[str] = None,
+        reset_all: bool = False,
+    ) -> tuple[dict, str]:
+        """The validate-and-reset half of :meth:`resume`, WITHOUT advancing —
+        for callers (the dashboard) that must return before the first node
+        executes and drive the run forward in the background.
+
+        Refuses (``ResumeError``) when the run is still active, when the live
+        spec drifted structurally from the run's persisted nodes, and — for the
+        default (bare) resume — when there is not exactly one failed node.
+        Otherwise resets the target via the core ``run-retry``: the single
+        failed node (bare), an explicit ``node``, or the whole graph
+        (``reset_all``). Returns ``(reset_run, spec_path)``. The core's
+        single-flight (``ActiveRunExistsError``) and non-failed-node
+        (``RetryError``) refusals propagate as ``CoreBridgeError`` for the
+        caller to surface."""
+        run = self._load(run_id)
+        if run is None:
+            raise ValueError(f"unknown run '{run_id}'")
+        status = run.get("status")
+        # Only a terminal-or-failed run is resumable; an active run already has a
+        # tick driving it, so resume is a refusal (not a no-op that looks like a
+        # restart).
+        if status in ACTIVE_RUN_STATUSES:
+            raise ResumeError(
+                f"run '{run_id}' is {status}, not resumable — it is still active and "
+                f"advancing. Only a failed or otherwise terminal run can be resumed."
+            )
+        spec_path = self._spec_path_for_run(spec_roots, run)
+        # Spec-drift guard: resume advances under the LIVE spec, so a structural
+        # change to the node set since the run started would walk into a graph the
+        # run was never planned against. Refuse loudly; a same-node-set edit is fine.
+        detail = self._core(
+            ["spec-get", "--roots", ",".join(spec_roots), "--id", run["workflow_id"]]
+        )
+        drift = resume_mod.structural_drift(run, detail)
+        if drift is not None:
+            raise ResumeError(drift)
+        # Resolve the reset target. Bare resume (no node, not --all) resumes THE
+        # failed node; refuse when zero or many so the operator chooses explicitly.
+        target = node
+        if not reset_all and target is None:
+            failed = sorted(
+                nid for nid, n in run["nodes"].items() if n.get("status") == "failed"
+            )
+            if not failed:
+                raise ResumeError(
+                    f"run '{run_id}' has no failed node to resume. If you mean to "
+                    f"restart it from scratch, use --all."
+                )
+            if len(failed) > 1:
+                raise ResumeError(
+                    f"run '{run_id}' has multiple failed nodes {failed}; choose one "
+                    f"with --node <id>, or restart the whole run with --all."
+                )
+            target = failed[0]
+        retry_args = ["run-retry", "--db", self.db_path, "--id", run_id]
+        if not reset_all and target is not None:
+            retry_args += ["--node", target]
+        reset = self._core(retry_args)
+        return reset, spec_path
+
+    def resume(
+        self,
+        spec_roots: Sequence[str],
+        run_id: str,
+        *,
+        node: Optional[str] = None,
+        reset_all: bool = False,
+    ) -> dict:
+        """Resume a stalled/failed run from where it died: reset the failed node
+        (or an explicit ``node``, or the whole graph with ``reset_all``) via the
+        core ``run-retry``, then advance ONE step under the LIVE spec — the same
+        cycle :meth:`run` uses after create. The completed prefix and its node
+        outputs are kept; the reset node re-runs against the current spec, so a
+        just-applied fix to its prompt / timeout / config takes effect. The CLI
+        arms the tick afterwards so it advances to completion."""
+        _reset, spec_path = self.resume_reset(
+            spec_roots, run_id, node=node, reset_all=reset_all
+        )
         return self.advance(spec_path, run_id)
 
     def advance(self, spec_path: str, run_id: str) -> dict:

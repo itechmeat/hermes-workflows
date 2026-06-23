@@ -6,6 +6,7 @@ Subcommands:
   advance-run <run_id>               advance one run (the event-driven path)
   status <run_id>                    print a run's current state
   cancel <run_id>                    cancel a run and its still-active nodes
+  resume <run_id> [--node|--all]     resume a stalled/failed run under the live spec
   review <run_id> <node_id> <dec>    resolve a human_review node
   export <workflow_id> --as-template share a workflow as an installation-
                                      agnostic template (+ adaptation guide)
@@ -194,6 +195,31 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
         return engine.status_live(spec, args.run_id)
     if args.command == "cancel":
         return engine.cancel(args.run_id)
+    if args.command == "resume":
+        try:
+            run = engine.resume(
+                config.spec_roots(),
+                args.run_id,
+                node=args.node,
+                reset_all=args.all,
+            )
+        except ValueError as exc:
+            # ResumeError (active run / spec drift / no-or-many failed nodes) and
+            # unknown-run/unresolvable-spec: a clean, traceback-free message.
+            raise SystemExit(str(exc)) from exc
+        except cli_bridge.CoreBridgeError as exc:
+            # The core's own refusals: single-flight (reviving next to an active
+            # sibling) and a non-failed --node target.
+            if exc.kind in ("ActiveRunExistsError", "RetryError", "NotFoundError"):
+                raise SystemExit(exc.detail) from exc
+            raise
+        # Like `run`: a resumed run that is still active needs future advances,
+        # so arm the singleton tick (it tears itself down once idle).
+        if run.get("status") in ACTIVE_RUN_STATUSES:
+            from .bridge import cron
+
+            cron.ensure_workflow_tick()
+        return run
     if args.command == "review":
         spec = _spec_path_for_run(engine, args.run_id)
         return engine.decide_review(spec, args.run_id, args.node_id, args.decision, note=args.note)
@@ -236,6 +262,22 @@ def _parser() -> argparse.ArgumentParser:
 
     p_cancel = sub.add_parser("cancel", help="cancel a run (and its active nodes)")
     p_cancel.add_argument("run_id")
+
+    p_resume = sub.add_parser(
+        "resume", help="resume a stalled/failed run from its failed node (or --all)"
+    )
+    p_resume.add_argument("run_id")
+    # --node (an explicit failed node) and --all (full restart) are mutually
+    # exclusive; the bare default resumes THE single failed node.
+    resume_target = p_resume.add_mutually_exclusive_group()
+    resume_target.add_argument(
+        "--node", default=None, help="resume a specific failed node (must be failed)"
+    )
+    resume_target.add_argument(
+        "--all",
+        action="store_true",
+        help="full restart: reset the whole graph and re-run from the entry node",
+    )
 
     p_review = sub.add_parser("review", help="resolve a human_review node")
     p_review.add_argument("run_id")
