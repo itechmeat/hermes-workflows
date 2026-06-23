@@ -44,7 +44,7 @@ concept: `lock-scope` records `feat/<slug>` and its working tree as the run's
 canonical workspace in a new DB column, and `adopt` drives each card into a
 worktree stacked on it with an explicit stack order. Task 4 becomes a conformance
 suite pinning the engine's workspace contract against the dispatcher's
-#49855/#50348 model.
+`#49855/#50348` model.
 
 **Trade-offs:**
 - + One tested identity module eliminates duplicated hashing across resume + template

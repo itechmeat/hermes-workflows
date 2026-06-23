@@ -38,12 +38,19 @@ def _reap_background_drive_threads():
     yield
     try:
         from hermes_workflows import tools
-    except Exception:
+    except ModuleNotFoundError:
         return
     tools._drive_stop.set()
     for thread in threading.enumerate():
         if thread.name.startswith(("hw-drive-", "hw-resume-")):
             thread.join(timeout=10)
+    lingering = [
+        thread.name
+        for thread in threading.enumerate()
+        if thread.name.startswith(("hw-drive-", "hw-resume-")) and thread.is_alive()
+    ]
+    if lingering:
+        raise RuntimeError(f"background workflow threads did not stop: {lingering}")
     tools._drive_stop.clear()
 
 

@@ -26,7 +26,11 @@ export function cancelRun(run: RunState): RunState {
 
 /** A node reset back to a clean pending state, dropping its prior run result. */
 function resetNode(node: NodeRunState): NodeRunState {
-  return { node_id: node.node_id, status: "pending" };
+  return {
+    node_id: node.node_id,
+    ...(node.node_type !== undefined ? { node_type: node.node_type } : {}),
+    status: "pending",
+  };
 }
 
 /**

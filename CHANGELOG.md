@@ -20,7 +20,7 @@ bundles.
 - **Template export.** Added `export --as-template <id>` plus dashboard template
   download, emitting a placeholder `.template.yaml` and AI-authored
   `.template.md` adaptation guide. Template generation is cached by
-  `(spec_sha, template_format, generator_version)` and keeps v1 export-only.
+  `(workflow_id, spec_sha, template_format, generator_version, resolved_model)` and keeps v1 export-only.
 - **`spec_sha`.** Added a stable serialized-spec hash primitive so template
   exports invalidate on any material spec change even when the workflow version
   is unchanged.

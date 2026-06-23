@@ -211,13 +211,20 @@ async function dispatch(command: string | undefined, flags: Flags): Promise<unkn
       );
     case "export-template": {
       const gv = str(flags, "generator-version");
+      const generatorVersion = gv === undefined ? undefined : Number(gv);
+      if (
+        generatorVersion !== undefined &&
+        (!Number.isInteger(generatorVersion) || generatorVersion <= 0)
+      ) {
+        throw new Error("--generator-version must be a positive integer");
+      }
       return cmdExportTemplate(rootsOf(flags), required(str(flags, "id"), "--id"), {
         outDir: required(str(flags, "out-dir"), "--out-dir"),
         generatedAt: required(str(flags, "generated-at"), "--generated-at"),
         probe: flags["probe"] === true,
         ...(str(flags, "hints-file") !== undefined ? { hintsFile: str(flags, "hints-file") } : {}),
         ...(str(flags, "model") !== undefined ? { model: str(flags, "model") } : {}),
-        ...(gv !== undefined ? { generatorVersion: Number(gv) } : {}),
+        ...(generatorVersion !== undefined ? { generatorVersion } : {}),
       });
     }
     default:

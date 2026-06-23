@@ -5,6 +5,7 @@ Graph editing remains human-only via CLI (the visual editor is a later phase).""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -253,7 +254,7 @@ async def export_workflow_template(workflow_id: str) -> dict:
     from hermes_workflows import cli_bridge, template_export
 
     try:
-        return template_export.export(workflow_id)
+        return await asyncio.to_thread(template_export.export, workflow_id)
     except cli_bridge.CoreBridgeError as exc:
         if exc.kind == "NotFoundError":
             raise HTTPException(status_code=404, detail="workflow not found") from exc
@@ -515,6 +516,10 @@ async def retry_run(run_id: str, payload: dict = Body(default={})) -> dict:
     from hermes_workflows.engine import ResumeError
 
     node = payload.get("node_id")
+    if node is not None:
+        if not isinstance(node, str) or not node.strip():
+            raise HTTPException(status_code=400, detail="node_id must be a non-empty string")
+        node = node.strip()
     try:
         return tools.resume_workflow(
             run_id,

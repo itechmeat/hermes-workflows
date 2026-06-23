@@ -165,6 +165,8 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
             params = json.loads(args.params) if args.params else None
         except json.JSONDecodeError as exc:
             raise SystemExit(f"--params is not valid JSON: {exc}") from exc
+        if params is not None and not isinstance(params, dict):
+            raise SystemExit("--params must be a JSON object")
         try:
             run = engine.run(
                 spec,

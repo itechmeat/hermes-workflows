@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS workflow_node_runs (
   id              TEXT PRIMARY KEY,
   run_id          TEXT NOT NULL,
   node_id         TEXT NOT NULL,
+  -- Workflow node kind captured at run creation for resume drift checks. Added
+  -- after the initial schema, so connection.ts ALTERs pre-existing databases.
+  node_type       TEXT,
   status          TEXT NOT NULL,
   hermes_task_id  TEXT,
   -- JSON arrays for adopt nodes: the existing card ids the node drives, and the

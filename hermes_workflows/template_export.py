@@ -147,6 +147,7 @@ def export(
     roots = ",".join(config.spec_roots())
     when = generated_at or datetime.now(timezone.utc).isoformat()
 
+    chosen_model = model or default_model()
     base_argv = [
         *config.core_cli(),
         "export-template",
@@ -161,18 +162,18 @@ def export(
     ]
     if generator_version is not None:
         base_argv += ["--generator-version", str(generator_version)]
+    if chosen_model:
+        base_argv += ["--model", chosen_model]
 
     probe = cli_bridge.invoke([*base_argv, "--probe"])
     if not probe.get("cached"):
-        chosen_model = model or default_model()
         hints = (
             generate_hints(chosen_model, probe["generation_request"], hermes_bin=hermes_bin)
             if (chosen_model and probe.get("generation_request"))
             else None
         )
         write_argv = list(base_argv)
-        if chosen_model:
-            write_argv += ["--model", chosen_model]
+        hints_path: str | None = None
         if hints is not None:
             with tempfile.NamedTemporaryFile(
                 "w", suffix=".json", delete=False, encoding="utf-8"
@@ -180,7 +181,11 @@ def export(
                 json.dump(hints, fh)
                 hints_path = fh.name
             write_argv += ["--hints-file", hints_path]
-        result = cli_bridge.invoke(write_argv)
+        try:
+            result = cli_bridge.invoke(write_argv)
+        finally:
+            if hints_path is not None:
+                Path(hints_path).unlink(missing_ok=True)
     else:
         result = probe
 

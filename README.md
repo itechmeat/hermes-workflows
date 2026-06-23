@@ -9,7 +9,7 @@ workflow is something you can read, schedule, and reason about with the tools He
 you. Where a single scheduled prompt (an [Automation Blueprint](#workflows-vs-automation-blueprints))
 isn't enough, a workflow is the layer above it.
 
-Hermes Workflows now supports release-oriented runs that resume failed nodes, export portable template bundles, and drive adopted board cards one at a time on a shared feature branch so cross-card context stays intact while docs and version updates happen once for the whole scope.
+Hermes Workflows now supports release-oriented runs that resume failed runs, export portable template bundles, and drive adopted board cards one at a time on a shared feature branch so cross-card context stays intact while docs and version updates happen once for the whole scope.
 
 ## Why
 

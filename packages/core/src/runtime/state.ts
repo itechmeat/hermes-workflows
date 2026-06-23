@@ -51,7 +51,7 @@ export function createRunState(
 ): RunState {
   const nodes: Record<string, NodeRunState> = {};
   for (const node of workflow.nodes) {
-    nodes[node.id] = { node_id: node.id, status: "pending" };
+    nodes[node.id] = { node_id: node.id, node_type: node.type, status: "pending" };
   }
   const run: RunState = {
     run_id: runId,

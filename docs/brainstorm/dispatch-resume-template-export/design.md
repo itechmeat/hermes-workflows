@@ -68,15 +68,18 @@ is the key decision):
   the card so the dispatcher's worktree allocation bases it on `feat/<slug>@tip`
   rather than the board default. How the per-card base ref is conveyed to the
   dispatcher is exactly the integration point Task 4 validates; if the native
-  board API exposes a per-task `workspace` base, use it; otherwise the board's
-  `default_workdir` is set to the release branch for the run's scope.
+  board API exposes a per-task `workspace` base, use it; otherwise fail closed
+  rather than mutating shared board state. The release anchor must stay
+  run-scoped and must not fall back to a board-wide default branch mutation.
 - A commit gate: `adopt` driving is already sequential and dependency-ordered
   (commit `36ddadd`). The engine promotes the next card only after the current
   card's worktree HEAD is an ancestor of the shared branch tip (i.e. the card
   committed). This makes "card N builds on 1..N-1" physically true. No card is
-  allowed to finish without committing; the docs-version node (run once) owns
-  version/CHANGELOG, and driven cards are instructed NOT to self-bump (this is
-  also written into each card body by the brainstorm node).
+  allowed to finish without an explicit commit or equivalent marker; empty-diff
+  cards must still produce a marker before the next card is promoted. The
+  docs-version node (run once) owns version/CHANGELOG, and driven cards are
+  instructed NOT to self-bump (this is also written into each card body by the
+  brainstorm node).
 
 Task 4 is the validation/conformance layer for the above: a test suite (and, if
 needed, a thin runtime assertion) that confirms a workflow-driven scope card's
@@ -126,12 +129,12 @@ tracebacks.
   Both are wired to the existing `POST /runs/{run_id}/retry` route, which is
   extended to **advance after retry** (today it only resets). Shows which node it
   will resume from (the failed node, or the entry node for `--all`).
-- Spec-drift guard: before advancing, resume compares the live spec's node set
-  against the run's persisted node set. A structural mismatch (added/removed/
-  renamed node) is refused with a clear message; prompt/timeout/config edits
-  (same node set) are the supported case and must NOT trip the guard. This uses
-  a **structure-only fingerprint** (node ids + edges topology), deliberately NOT
-  the full-content `spec_sha` (see Design decisions).
+- Spec-drift guard: before advancing, resume compares the live spec's node
+  id+kind signature against the run's persisted node signature. A structural
+  mismatch (added/removed/renamed/retyped node) is refused with a clear message;
+  prompt/timeout/config edits (same node id+kind set) are the supported case and
+  must NOT trip the guard. This uses a **structure-only fingerprint**,
+  deliberately NOT the full-content `spec_sha` (see Design decisions).
 
 ### Task 3 — export as template
 
@@ -146,10 +149,12 @@ tracebacks.
   No prompt bodies are rewritten; instead an inventory scan lists remaining
   in-prompt references (paths, project/repo names, channel ids, the kanban
   wrapper path) for the guide.
-- AI guide + hints: one call to the default model (`model.default`) generates the
-  free-form role/capability hints (derived from each node's purpose) and the
-  adaptation guide. Caching keyed on `(workflow_id, spec_sha, template_format,
-  generator_version)`; regenerate iff any component changed.
+- AI guide + hints: one call to the resolved default model (`model.default`)
+  generates the free-form role/capability hints (derived from each node's
+  purpose) and the adaptation guide. Caching keyed on `(workflow_id, spec_sha,
+  template_format, generator_version, resolved_model)`; regenerate iff any
+  component changed. If model rotation is intentionally treated as compatible,
+  bump `generator_version` with that change.
 - Versioning `template:` block in `.template.yaml`:
   - `template_format` (int) — artifact schema version.
   - `source: { workflow_id, workflow_version, spec_sha }`.

@@ -102,6 +102,7 @@ interface RunRow {
 
 interface NodeRow {
   node_id: string;
+  node_type: string | null;
   status: string;
   hermes_task_id: string | null;
   driven_task_ids: string | null;
@@ -244,9 +245,10 @@ export class RunRepository {
     this.db
       .query(
         `INSERT INTO workflow_node_runs
-           (id, run_id, node_id, status, hermes_task_id, driven_task_ids, reviewed_task_ids, wait_started_at, adopt_seq_json, adopt_blocked_since, task_ids_json, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
-         VALUES ($id, $run, $node, $status, $task, $driven, $reviewed, $waitStarted, $adoptSeq, $adoptBlocked, $taskIds, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
+           (id, run_id, node_id, node_type, status, hermes_task_id, driven_task_ids, reviewed_task_ids, wait_started_at, adopt_seq_json, adopt_blocked_since, task_ids_json, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
+         VALUES ($id, $run, $node, $type, $status, $task, $driven, $reviewed, $waitStarted, $adoptSeq, $adoptBlocked, $taskIds, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
          ON CONFLICT(id) DO UPDATE SET
+           node_type = excluded.node_type,
            status = excluded.status,
            hermes_task_id = excluded.hermes_task_id,
            driven_task_ids = excluded.driven_task_ids,
@@ -267,6 +269,7 @@ export class RunRepository {
         $id: `${runId}:${node.node_id}`,
         $run: runId,
         $node: node.node_id,
+        $type: node.node_type ?? null,
         $status: node.status,
         $task: node.hermes_task_id ?? null,
         $driven:
@@ -308,6 +311,7 @@ export class RunRepository {
         node_id: n.node_id,
         status: n.status as NodeRunState["status"],
       };
+      if (n.node_type !== null) node.node_type = n.node_type;
       if (n.hermes_task_id !== null) node.hermes_task_id = n.hermes_task_id;
       if (n.driven_task_ids !== null) {
         node.driven_task_ids = JSON.parse(n.driven_task_ids) as string[];

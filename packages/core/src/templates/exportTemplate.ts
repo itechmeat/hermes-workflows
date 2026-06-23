@@ -23,9 +23,9 @@
  *
  * Versioning lives along three independent axes (see {@link TemplateVersion})
  * and the cache/regeneration key is the composite
- * `(workflow_id, spec_sha, template_format, generator_version)`; the short
- * `revision` is a deterministic hash of that composite — it changes exactly
- * when a regeneration is warranted.
+ * `(workflow_id, spec_sha, template_format, generator_version, resolved_model)`;
+ * the short `revision` is a deterministic hash of that composite — it changes
+ * exactly when a regeneration is warranted.
  */
 
 import { createHash } from "node:crypto";
@@ -171,8 +171,15 @@ export function templateCacheKey(
   specShaValue: string,
   templateFormat: number,
   generatorVersion: number,
+  model: string | null = null,
 ): string {
-  return [workflowId, specShaValue, `fmt${templateFormat}`, `gen${generatorVersion}`].join("|");
+  return [
+    workflowId,
+    specShaValue,
+    `fmt${templateFormat}`,
+    `gen${generatorVersion}`,
+    `model:${model ?? "none"}`,
+  ].join("|");
 }
 
 /** Short deterministic hash of a cache key — changes exactly when a

@@ -41,6 +41,8 @@ import type { GuideHints, GenerationRequest } from "../templates/exportTemplate.
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
+const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
 export interface Explanation {
   id: string;
   name: string;
@@ -332,13 +334,17 @@ export async function cmdExportTemplate(
   id: string,
   opts: ExportTemplateCmdOptions,
 ): Promise<TemplateExportResult> {
+  if (!SAFE_ID_PATTERN.test(id)) {
+    throw new Error(`workflow id '${id}' must match ${String(SAFE_ID_PATTERN)}`);
+  }
   const detail = await new SpecStore(roots).getById(id);
   if (!detail) throw new NotFoundError(`workflow '${id}' not found`);
   const workflow = detail.workflow;
 
   const generatorVersion = opts.generatorVersion ?? GENERATOR_VERSION;
+  const model = opts.model ?? null;
   const sha = specSha(workflow);
-  const cacheKey = templateCacheKey(workflow.id, sha, TEMPLATE_FORMAT, generatorVersion);
+  const cacheKey = templateCacheKey(workflow.id, sha, TEMPLATE_FORMAT, generatorVersion, model);
   const revision = templateRevision(cacheKey);
   const humanVersion = `fmt${TEMPLATE_FORMAT}·wf${workflow.version}·r${revision.slice(0, 4)}`;
 
@@ -370,7 +376,7 @@ export async function cmdExportTemplate(
 
   const bundle = exportTemplate(workflow, {
     generatedAt: opts.generatedAt,
-    model: opts.model ?? null,
+    model,
     ...(hints !== undefined ? { hints } : {}),
     generatorVersion,
   });
@@ -387,8 +393,8 @@ export async function cmdExportTemplate(
   await Promise.all([
     Bun.write(yamlPath, bundle.templateYaml),
     Bun.write(mdPath, bundle.guideMarkdown),
-    Bun.write(metaPath, `${JSON.stringify(meta, null, 2)}\n`),
   ]);
+  await Bun.write(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
   return base;
 }
 

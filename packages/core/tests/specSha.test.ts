@@ -54,9 +54,33 @@ describe("specSha", () => {
     expect(specSha(promptEdited)).not.toBe(before);
   });
 
-  test("ignores ui layout (presentation is not spec substance)", async () => {
-    const { workflow } = await loadExample("feature-development.workflow.yaml");
-    // specSha takes only the workflow; a ui layout never enters the hash.
-    expect(specSha(workflow)).toMatch(/^sha256:/);
+  test("ignores ui layout (presentation is not spec substance)", () => {
+    const a = parseWorkflow(
+      [
+        "id: x",
+        "name: X",
+        "version: 1",
+        "scope: { type: global }",
+        "trigger: { type: manual }",
+        "nodes:",
+        "  - { id: done, type: finish, outcome: success }",
+        "edges: []",
+        "ui: { nodes: [{ id: done, x: 10, y: 20 }] }",
+      ].join("\n"),
+    ).workflow;
+    const b = parseWorkflow(
+      [
+        "id: x",
+        "name: X",
+        "version: 1",
+        "scope: { type: global }",
+        "trigger: { type: manual }",
+        "nodes:",
+        "  - { id: done, type: finish, outcome: success }",
+        "edges: []",
+        "ui: { nodes: [{ id: done, x: 999, y: 777 }] }",
+      ].join("\n"),
+    ).workflow;
+    expect(specSha(a)).toBe(specSha(b));
   });
 });

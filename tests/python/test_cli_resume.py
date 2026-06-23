@@ -148,6 +148,28 @@ def test_resume_refuses_structural_spec_drift(home: Path, capsys) -> None:
     assert "extra" in msg
 
 
+def test_resume_refuses_node_type_drift(home: Path, capsys) -> None:
+    run = _invoke(capsys, "run", "resumable")
+    run_id = run["run_id"]
+    _fail_after_a(run_id)
+
+    # Same id set, but node b changed kind: resuming into it would replay a
+    # failed agent_task as a script under a run created for another graph shape.
+    drifted = _SPEC_ORIGINAL.replace(
+        "  - id: b\n    type: agent_task\n    title: B\n    prompt: \"Do B ORIGINAL.\"\n",
+        "  - id: b\n    type: script\n    title: B\n    command: \"echo B\"\n",
+    )
+    _spec_path(home).write_text(drifted)
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["resume", run_id])
+    msg = str(exc.value)
+    assert "drift" in msg.lower()
+    assert "retyped" in msg
+    assert "b" in msg
+
+
+
 def test_resume_all_restarts_the_whole_graph(home: Path, capsys) -> None:
     run = _invoke(capsys, "run", "resumable")
     run_id = run["run_id"]

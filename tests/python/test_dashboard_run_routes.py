@@ -296,6 +296,15 @@ def test_resume_failed_node_reschedules_it(client: TestClient) -> None:
     assert body["nodes"]["a"]["output"] == "A DONE"
 
 
+def test_resume_rejects_invalid_node_id_payload(client: TestClient) -> None:
+    run_id = _fail_resumable_run(client)
+    for payload in ({"node_id": ""}, {"node_id": "   "}, {"node_id": ["b"]}):
+        resp = client.post(f"/runs/{run_id}/retry", json=payload)
+        assert resp.status_code == 400, resp.text
+        assert "node_id" in resp.json()["detail"]
+
+
+
 def test_resume_refuses_structural_spec_drift_409(client: TestClient) -> None:
     run_id = _fail_resumable_run(client)
     # Add a node to the live spec since the run started -> node-set drift.

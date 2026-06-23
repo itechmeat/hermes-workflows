@@ -586,11 +586,13 @@ class Engine:
                 # This also runs for the final card, so the branch ends carrying
                 # every card's work.
                 release = self._release_context(executor, run, task_params.get(node_id) or {})
-                if release is not None:
+                if release is not None and not batch_failed:
                     for handle in handles:
                         worktree.commit_barrier(release[0], release[1], handle)
                 seq_state = node.get("adopt_seq")
-                if seq_state and seq_state.get("pending"):
+                if seq_state and seq_state.get("pending") and not (
+                    release is not None and batch_failed
+                ):
                     # Sequential adopt: this card is terminal but more remain.
                     # Stash its result, promote the next card on the shared branch,
                     # and keep the node active rather than settling. `pending` is

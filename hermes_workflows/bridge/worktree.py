@@ -130,11 +130,13 @@ def assert_anchor_conformance(repo_root: Path, task_id: str) -> Path:
 def _release_directive(branch: str) -> str:
     return (
         f"\n\n---\n{_DIRECTIVE_MARKER}\n"
-        f"You are one card in a stacked release on the shared branch `{branch}`. "
-        "Your worktree is already checked out on that branch's current tip, which "
-        "includes the commits of the cards driven before you — build on them, do "
-        "not duplicate or revert their work. COMMIT your changes onto this branch "
-        "before you finish. Do NOT bump the version or edit CHANGELOG/manifests: "
+        f"You are one card in a stacked release targeting the shared branch `{branch}`. "
+        "Your worktree is checked out on a per-card branch created from the shared "
+        "branch's current tip, which includes the commits of the cards driven before "
+        "you — build on them, do not duplicate or revert their work. COMMIT your "
+        "changes on this per-card branch before you finish; the engine will "
+        "fast-forward the shared branch after the card succeeds. Do NOT switch "
+        "branches. Do NOT bump the version or edit CHANGELOG/manifests: "
         "the dedicated docs-version step runs the version bump ONCE for the whole "
         "release scope.\n"
     )
@@ -208,12 +210,15 @@ def resolve_release_context(
         )
     if not (repo / ".git").exists() and current_branch(repo) is None:
         raise ValueError(f"release working tree {repo} is not a git repository")
-    resolved = branch.strip() if (branch and "{{" not in branch) else current_branch(repo)
+    explicit_branch = branch.strip() if (branch and "{{" not in branch) else None
+    resolved = explicit_branch or current_branch(repo)
     if not resolved:
         raise ValueError(
             f"could not resolve the shared release branch for {repo} "
             "(detached HEAD?); set the node's `branch` explicitly."
         )
+    if explicit_branch and current_branch(repo) != explicit_branch:
+        _git(repo, "checkout", explicit_branch)
     return repo, resolved
 
 

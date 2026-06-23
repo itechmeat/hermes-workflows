@@ -35,6 +35,7 @@ export function openRunsDatabase(path: string): Database {
 function migrate(db: Database): void {
   addMissingTextColumns(db, "workflow_runs", ["origin", "notified", "params_json"]);
   addMissingTextColumns(db, "workflow_node_runs", [
+    "node_type",
     "telemetry_json",
     "review_note",
     "driven_task_ids",

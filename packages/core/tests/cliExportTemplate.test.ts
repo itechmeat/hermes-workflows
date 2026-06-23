@@ -70,12 +70,13 @@ describe("cli export-template", () => {
   });
 
   test("a second export of the same version is served from cache", async () => {
+    await run(exportArgs());
     const { json } = await run(exportArgs());
     expect(json.cached).toBe(true);
   });
 
   test("--probe reports cache status and a generation request without writing", async () => {
-    // Cached after the prior write.
+    await run(exportArgs());
     const probe = await run(exportArgs(["--probe"]));
     expect(probe.json.cached).toBe(true);
     // A probe never includes a generation request when cached.

@@ -69,6 +69,8 @@ export interface NodeTelemetry {
 
 export interface NodeRunState {
   node_id: string;
+  /** Workflow node kind at run creation, used by resume drift guards. */
+  node_type?: string;
   status: NodeStatus;
   /** Kanban task backing this node, when one was created. */
   hermes_task_id?: string;
