@@ -8,11 +8,37 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+
+@pytest.fixture(autouse=True)
+def _reap_background_drive_threads():
+    """Stop any ``tools.start_workflow`` background drive thread at test
+    teardown. Those threads loop on the process-global ``HERMES_HOME`` (which
+    each test re-points via monkeypatch), so a thread that outlived its test
+    would spin into the NEXT test's databases — the source of intermittent
+    "database is locked" / "disk image is malformed" failures in unrelated
+    later tests. Setting the cooperative stop wakes the interruptible pause so
+    the threads exit, then we join them before the next test rebinds the env.
+    Import lazily and fail open: tests that never import ``tools`` are unaffected.
+    """
+    yield
+    try:
+        from hermes_workflows import tools
+    except Exception:
+        return
+    tools._drive_stop.set()
+    for thread in threading.enumerate():
+        if thread.name.startswith(("hw-drive-", "hw-resume-")):
+            thread.join(timeout=10)
+    tools._drive_stop.clear()
 
 
 def sibling_spec(tmp_path: Path, spec: Path, suffix: str = "b") -> Path:
