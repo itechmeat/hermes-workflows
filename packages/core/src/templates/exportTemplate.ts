@@ -87,7 +87,15 @@ export interface TemplatePlaceholder {
 export interface InventoryItem {
   nodeId: string;
   field: string;
-  kind: "path" | "repo" | "channel" | "project_name" | "kanban_wrapper" | "url" | "branch" | "skill";
+  kind:
+    | "path"
+    | "repo"
+    | "channel"
+    | "project_name"
+    | "kanban_wrapper"
+    | "url"
+    | "branch"
+    | "skill";
   match: string;
   note?: string;
 }
@@ -384,7 +392,11 @@ const DETECTORS: Detector[] = [
   // The kanban wrapper invocation / hermes home — most specific first so a
   // `hermes kanban …` or `~/.hermes/…` reference is labelled as such rather
   // than a generic path.
-  { kind: "kanban_wrapper", re: /hermes\s+kanban\b[^\n`'"]*/g, note: "the kanban wrapper invocation" },
+  {
+    kind: "kanban_wrapper",
+    re: /hermes\s+kanban\b[^\n`'"]*/g,
+    note: "the kanban wrapper invocation",
+  },
   { kind: "kanban_wrapper", re: /~\/\.hermes\/[^\s"'`)]*/g, note: "a Hermes home path" },
   // GitHub repo references (URL or git remote).
   { kind: "repo", re: /github\.com[/:][\w.-]+\/[\w.-]+/g },
@@ -408,7 +420,13 @@ function scanText(nodeId: string, field: string, text: string, into: InventoryIt
       // Skip a span already claimed by a more specific earlier detector.
       if (claimed.some(([s, e]) => start < e && end > s)) continue;
       claimed.push([start, end]);
-      into.push({ nodeId, field, kind: det.kind, match: m[0], ...(det.note ? { note: det.note } : {}) });
+      into.push({
+        nodeId,
+        field,
+        kind: det.kind,
+        match: m[0],
+        ...(det.note ? { note: det.note } : {}),
+      });
     }
   }
 }
@@ -523,9 +541,7 @@ function placeholderWhatIs(p: TemplatePlaceholder): string {
         ? `the agent profile for node \`${p.nodeId}\``
         : "the workflow's default agent profile";
     case "model":
-      return p.nodeId
-        ? `the model for node \`${p.nodeId}\``
-        : "the workflow's default model";
+      return p.nodeId ? `the model for node \`${p.nodeId}\`` : "the workflow's default model";
     case "deliver":
       return "where the run's result is delivered (a Hermes DeliveryTarget)";
     case "workdir":
@@ -628,8 +644,9 @@ function buildGuide(
   // --- Per-node recommendations + placeholders + in-prompt inventory. ---
   L.push("## Per-node placeholders & recommendations");
   L.push("");
-  const byNodePlaceholders = groupBy(placeholders.filter((p) => p.nodeId !== undefined), (p) =>
-    String(p.nodeId),
+  const byNodePlaceholders = groupBy(
+    placeholders.filter((p) => p.nodeId !== undefined),
+    (p) => String(p.nodeId),
   );
   const byNodeInventory = groupBy(inventory, (i) => i.nodeId);
   for (const node of workflow.nodes) {
@@ -645,7 +662,9 @@ function buildGuide(
       L.push(`- **Recommended model capability:** ${capabilityHint(node, hints)}.`);
     }
     for (const p of nodePh) {
-      L.push(`- **\`${p.token}\`** — ${placeholderWhatIs(p)}. Prerequisite: ${placeholderPrereq(p)}.`);
+      L.push(
+        `- **\`${p.token}\`** — ${placeholderWhatIs(p)}. Prerequisite: ${placeholderPrereq(p)}.`,
+      );
     }
     if (nodeInv.length > 0) {
       L.push("- **In-prompt references to adapt** (left verbatim — not rewritten):");

@@ -132,7 +132,9 @@ describe("exportTemplate — versioning block", () => {
   test("revision changes only when a cache-key component changes", async () => {
     const workflow = await feature();
     const sha = specSha(workflow);
-    const base = templateRevision(templateCacheKey(workflow.id, sha, TEMPLATE_FORMAT, GENERATOR_VERSION));
+    const base = templateRevision(
+      templateCacheKey(workflow.id, sha, TEMPLATE_FORMAT, GENERATOR_VERSION),
+    );
 
     // Same composite → same revision.
     expect(
@@ -144,7 +146,9 @@ describe("exportTemplate — versioning block", () => {
     ).not.toBe(base);
     // Changed spec_sha → different revision.
     expect(
-      templateRevision(templateCacheKey(workflow.id, "sha256:deadbeef", TEMPLATE_FORMAT, GENERATOR_VERSION)),
+      templateRevision(
+        templateCacheKey(workflow.id, "sha256:deadbeef", TEMPLATE_FORMAT, GENERATOR_VERSION),
+      ),
     ).not.toBe(base);
   });
 });

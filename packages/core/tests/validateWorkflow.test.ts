@@ -368,9 +368,8 @@ describe("validateWorkflow — adopt / task_ref", () => {
 
   test("accepts stack + branch on an adopt node", () => {
     expect(
-      validateWorkflow(
-        adopt({ adopt: true, task_ref: "t_abc123", stack: true, branch: "feat/x" }),
-      ).valid,
+      validateWorkflow(adopt({ adopt: true, task_ref: "t_abc123", stack: true, branch: "feat/x" }))
+        .valid,
     ).toBe(true);
   });
 

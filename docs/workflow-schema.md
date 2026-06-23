@@ -176,6 +176,23 @@ already produce what those surfaces consume.
   starts. Stacked cards are also told not to self-bump version/CHANGELOG — a
   single docs-version step owns that once for the whole release. See
   `execution.md` ("Driving existing cards").
+
+  **Dispatcher worktree/cwd contract (Hermes #49855 + #50348).** Stacking builds
+  on, and is validated against, the host dispatcher's per-task model:
+  - Each driven `worktree` card is materialized as a real linked git worktree at
+    `<repo>/.worktrees/<task-id>`, anchored on the board's `default_workdir` (or
+    the node's `workdir`) — a persistent project checkout — and NEVER under the
+    dispatcher's incidental CWD (e.g. the Hermes code checkout the gateway
+    launched from). The engine stamps each card with `workspace_kind=worktree` +
+    `workspace_path=<repo>` so the host resolves that target on the shared
+    branch's tip; `assert_anchor_conformance` refuses an anchor inside the Hermes
+    checkout at drive time.
+  - The worker's `TERMINAL_CWD` is pinned to that resolved worktree, so its file
+    tools and AGENTS.md/context-file loader resolve inside the project repo, not
+    the dispatching gateway's directory.
+  `tests/python/test_dispatch_worktree_conformance.py` pins this contract so an
+  upstream pull that changes worktree anchoring or `TERMINAL_CWD` pinning fails
+  loudly.
 - **script** — a deterministic shell command run with no LLM (lint, tests, a
   build step). It settles `success`/`failure` by exit code, so it branches on
   `node_status` like any work node. It runs locally in the plugin in any scope.

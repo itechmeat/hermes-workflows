@@ -71,6 +71,62 @@ def _branch_exists(repo: Path, branch: str) -> bool:
     )
 
 
+def _hermes_checkout_root() -> Optional[Path]:
+    """The Hermes *code* checkout (the parent of the installed ``hermes_cli``
+    package). Worktrees must never be anchored inside it: it is the directory
+    the gateway is typically launched from — the incidental dispatcher CWD that
+    Hermes #49855 deliberately stopped anchoring worktrees on. None if Hermes is
+    not importable (never let detection wedge the run)."""
+    try:
+        import hermes_cli
+
+        return Path(hermes_cli.__file__).resolve().parent.parent
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def assert_anchor_conformance(repo_root: Path, task_id: str) -> Path:
+    """Validate the release anchor against the dispatcher worktree contract and
+    return the per-task linked-worktree target the host will materialize.
+
+    Dispatcher contract (Hermes #49855 + #50348), the invariant this release
+    relies on and that this guard pins:
+
+    - A ``worktree`` task is materialized as a real linked git worktree at
+      ``<repo>/.worktrees/<task-id>``, anchored on the board's
+      ``default_workdir`` (a persistent project checkout) — NEVER under the
+      dispatcher's incidental CWD (the Hermes code checkout the gateway launched
+      from). #49855.
+    - The worker's ``TERMINAL_CWD`` is pinned to that resolved workspace, so its
+      file tools and AGENTS.md/context-file loader resolve inside the workspace,
+      not the dispatching gateway's directory. #50348.
+
+    The release engine stamps each driven scope card with ``workspace_kind=
+    'worktree'`` and ``workspace_path=<repo_root>`` so the host resolves exactly
+    that ``<repo>/.worktrees/<task-id>`` target on the shared branch's tip. This
+    guard fails loudly when the resolved anchor is the Hermes checkout — the
+    exact regression #49855 fixed — so a misconfigured board ``default_workdir``
+    or node ``workdir`` cannot silently route a driven card's worktree (and its
+    commits) off the project repo.
+    """
+    repo_resolved = repo_root.expanduser().resolve(strict=False)
+    hermes_root = _hermes_checkout_root()
+    if hermes_root is not None:
+        try:
+            inside = repo_resolved == hermes_root or repo_resolved.is_relative_to(hermes_root)
+        except ValueError:
+            inside = False
+        if inside:
+            raise ValueError(
+                f"release anchor {repo_resolved} is inside the Hermes checkout "
+                f"{hermes_root}: a driven card's worktree must be anchored on the "
+                "project repo (the board default_workdir), not the dispatcher's "
+                "CWD (Hermes #49855). Point the board default_workdir / node "
+                "`workdir` at the project repo."
+            )
+    return repo_resolved / ".worktrees" / task_id
+
+
 def _release_directive(branch: str) -> str:
     return (
         f"\n\n---\n{_DIRECTIVE_MARKER}\n"
@@ -96,6 +152,9 @@ def stamp_release_worktree(
     to the card body (idempotently). Returns the per-card branch name.
     """
     branch_name = card_branch(task_id)
+    # Fail loud at drive time if the anchor would scatter the worktree under the
+    # Hermes checkout instead of the project repo (Hermes #49855 contract).
+    assert_anchor_conformance(repo_root, task_id)
     row = conn.execute("SELECT body FROM tasks WHERE id = ?", (task_id,)).fetchone()
     body = (row["body"] if row is not None else "") or ""
     if _DIRECTIVE_MARKER not in body:
@@ -129,7 +188,7 @@ def commit_barrier(repo_root: Path, branch: str, finished_task_id: str) -> None:
     # where lock-scope left the shared branch checked out.
     if current_branch(repo_root) != branch:
         _git(repo_root, "checkout", branch)
-    _git(repo_root, "merge", "--ff-only", card, check=False)
+    _git(repo_root, "merge", "--ff-only", card)
 
 
 def resolve_release_context(
