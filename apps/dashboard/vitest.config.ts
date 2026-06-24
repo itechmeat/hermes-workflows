@@ -2,14 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
+import { PLUGIN_VERSION } from "./plugin-version.ts";
+
 const here = import.meta.dirname;
 
-// Mirror the build's __PLUGIN_VERSION__ inject (vite.config.ts) so components
-// that render the version (the plugin header) resolve the global under test too.
-const { version: PLUGIN_VERSION } = JSON.parse(
-  readFileSync(resolve(here, "package.json"), "utf8"),
-) as { version: string };
-
+// Mirror the build's __PLUGIN_VERSION__ inject (vite.config.ts): the displayed
+// version comes from the ROOT plugin manifest (./plugin-version.ts), so
+// components that render the header resolve the same value under test as in the
+// shipped bundle.
 const { build: PLUGIN_BUILD } = JSON.parse(
   readFileSync(resolve(here, "build-number.json"), "utf8"),
 ) as { build: number };

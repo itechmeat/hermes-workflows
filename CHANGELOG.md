@@ -4,6 +4,13 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.3 - 2026-06-24
+
+The dashboard header now shows the installed plugin version. The version segment
+before the `-bN` build counter is resolved from the root plugin manifest in both
+the build and the test config, instead of the dashboard sub-app's own
+`package.json`, so it always matches the plugin release.
+
 ## 0.7.2 - 2026-06-23
 
 `hermes-workflows run <id>` now also discovers specs in `<cwd>/.hermes/workflows`,

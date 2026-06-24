@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # a plugin. No runtime dependencies.
 [project]
 name = "hermes-workflows"
-version = "0.7.2"
+version = "0.7.3"
 description = "Thin Hermes Python bridge for Hermes Workflows. The engine and CLI are TypeScript on Bun (see package.json)."
 readme = "README.md"
 requires-python = ">=3.11"

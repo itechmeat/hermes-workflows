@@ -3,14 +3,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { PLUGIN_VERSION } from "./plugin-version.ts";
+
 const here = fileURLToPath(new URL(".", import.meta.url));
 
-// Single source of truth for the displayed plugin version: this package's
-// manifest (kept in sync with the other manifests on release). Inlined at build
-// time via `define` so the bundle ships the literal, not a runtime lookup.
-const { version: PLUGIN_VERSION } = JSON.parse(
-  readFileSync(resolve(here, "package.json"), "utf8"),
-) as { version: string };
+// The displayed plugin version (`__PLUGIN_VERSION__`) is resolved from the ROOT
+// plugin manifest in ./plugin-version.ts, NOT this sub-app's package.json, so
+// the dashboard header always tracks the installed plugin version. Inlined at
+// build time via `define` so the bundle ships the literal, not a runtime lookup.
 
 // Monotonic build counter, bumped deliberately by `dashboard:bump` (never inside
 // this build, which must stay deterministic for the dist drift guard). Baked in
