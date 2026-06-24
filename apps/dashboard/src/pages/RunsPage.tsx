@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
 import { downloadTextFile } from "../templates/download";
 import { formatEpochSeconds } from "../ui/format";
-import { Badge, Menu, PageHeader } from "../ui/components";
+import { BackendUnavailable, Badge, Menu, PageHeader } from "../ui/components";
 import type { RunScope, WorkflowsApi } from "../api/client";
 import type { RunSummary } from "../api/types";
 
@@ -18,7 +18,7 @@ export interface RunsPageProps {
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "error" }
+  | { kind: "error"; detail?: string }
   | { kind: "ready"; items: RunSummary[] };
 
 function formatDuration(seconds: number | null): string {
@@ -50,8 +50,10 @@ export function RunsPage({
       .then((items) => {
         if (active) setState({ kind: "ready", items });
       })
-      .catch(() => {
-        if (active) setState({ kind: "error" });
+      .catch((err: unknown) => {
+        if (active) {
+          setState({ kind: "error", detail: err instanceof Error ? err.message : String(err) });
+        }
       });
     return () => {
       active = false;
@@ -153,7 +155,7 @@ export function RunsPage({
     return <p className="hw-page">Loading runs…</p>;
   }
   if (state.kind === "error") {
-    return <p className="hw-page">Failed to load runs.</p>;
+    return <BackendUnavailable resource="runs" detail={state.detail} />;
   }
 
   return (

@@ -217,7 +217,9 @@ describe("TemplatesPage", () => {
       }),
     });
     render(<TemplatesPage client={client} onOpen={() => {}} />);
-    expect(await screen.findByText(/failed to load/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Cannot reach the Workflows backend/i)).toBeInTheDocument();
+    expect(screen.getByText(/workflows could not be loaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/boom/)).toBeInTheDocument();
   });
 });
 

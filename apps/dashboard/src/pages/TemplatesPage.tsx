@@ -11,7 +11,7 @@ import {
   type ImportCatalog,
 } from "../templates/normalizeImport";
 import { formatEpochSeconds, formatIso, orDash } from "../ui/format";
-import { Badge, Button, Menu, PageHeader } from "../ui/components";
+import { BackendUnavailable, Badge, Button, Menu, PageHeader } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
 import type { Trigger, WorkflowListItem } from "../api/types";
 
@@ -50,7 +50,7 @@ async function loadImportCatalog(api: WorkflowsApi): Promise<ImportCatalog> {
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "error" }
+  | { kind: "error"; detail?: string }
   | { kind: "ready"; items: WorkflowListItem[] };
 
 export function TemplatesPage({
@@ -86,8 +86,10 @@ export function TemplatesPage({
       .then((items) => {
         if (active) setState({ kind: "ready", items });
       })
-      .catch(() => {
-        if (active) setState({ kind: "error" });
+      .catch((err: unknown) => {
+        if (active) {
+          setState({ kind: "error", detail: err instanceof Error ? err.message : String(err) });
+        }
       });
     return () => {
       active = false;
@@ -257,7 +259,7 @@ export function TemplatesPage({
     return <p className="hw-page">Loading workflows…</p>;
   }
   if (state.kind === "error") {
-    return <p className="hw-page">Failed to load workflows.</p>;
+    return <BackendUnavailable resource="workflows" detail={state.detail} />;
   }
 
   return (

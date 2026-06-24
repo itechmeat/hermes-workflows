@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
-import { Button, Field, Input, Select, Switch } from "../ui/components";
+import { BackendUnavailable, Button, Field, Input, Select, Switch } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
 import type { SettingsField, SettingsSchema, SettingsValue, WorkflowSettings } from "../api/types";
 
@@ -11,7 +11,7 @@ export interface SettingsPageProps {
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "error" }
+  | { kind: "error"; detail?: string }
   | { kind: "ready"; schema: SettingsSchema };
 
 function humanize(key: string): string {
@@ -34,8 +34,10 @@ export function SettingsPage({ client }: SettingsPageProps): React.ReactElement 
         setForm({ ...values });
         setState({ kind: "ready", schema });
       })
-      .catch(() => {
-        if (active) setState({ kind: "error" });
+      .catch((err: unknown) => {
+        if (active) {
+          setState({ kind: "error", detail: err instanceof Error ? err.message : String(err) });
+        }
       });
     return () => {
       active = false;
@@ -64,7 +66,7 @@ export function SettingsPage({ client }: SettingsPageProps): React.ReactElement 
     return <p className="hw-page">Loading settings…</p>;
   }
   if (state.kind === "error") {
-    return <p className="hw-page">Failed to load settings.</p>;
+    return <BackendUnavailable resource="settings" detail={state.detail} />;
   }
 
   return (

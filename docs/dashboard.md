@@ -145,7 +145,13 @@ dashboard. Point that proxy's `/api/plugins/workflows/*` prefix at the sidecar,
 **before** the catch-all that proxies the dashboard, so the frontend's existing
 same-origin calls reach it unchanged.
 
-systemd (user service):
+Set this up once: point the service at the **stable install path**
+(`~/.hermes/plugins/hermes-workflows`, not a version-specific copy) so a
+`hermes plugins update` replaces the contents in place and never breaks the
+service. The Workflows tab shows a copy-paste agent prompt for this exact setup
+when its backend is unreachable.
+
+systemd (Linux, user service):
 
 ```ini
 # ~/.config/systemd/user/hermes-workflows-dashboard-api.service
@@ -155,7 +161,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=%h/path/to/hermes-workflows/bin/hermes-workflows-dashboard-api
+ExecStart=%h/.hermes/plugins/hermes-workflows/bin/hermes-workflows-dashboard-api
 Restart=on-failure
 RestartSec=3
 
@@ -166,6 +172,36 @@ WantedBy=default.target
 ```bash
 systemctl --user enable --now hermes-workflows-dashboard-api.service
 ```
+
+launchd (macOS, LaunchAgent — runs at login, restarts on crash):
+
+```xml
+<!-- ~/Library/LaunchAgents/dev.hermes.workflows.dashboard-api.plist -->
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key><string>dev.hermes.workflows.dashboard-api</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/sh</string>
+      <string>-lc</string>
+      <string>exec "$HOME/.hermes/plugins/hermes-workflows/bin/hermes-workflows-dashboard-api"</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+  </dict>
+</plist>
+```
+
+```bash
+launchctl load -w ~/Library/LaunchAgents/dev.hermes.workflows.dashboard-api.plist
+```
+
+The sidecar's host/port default to `127.0.0.1:9123`; override with the
+`plugins.workflows.dashboard_api_{host,port}` config keys or the
+`HERMES_WORKFLOWS_DASHBOARD_API_{HOST,PORT}` env vars, and point the proxy below
+at the same address.
 
 Caddy (inside the dashboard site block; site-level auth still gates both):
 

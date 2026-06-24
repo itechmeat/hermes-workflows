@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getApiClient } from "../host";
 import { formatIso } from "../ui/format";
-import { Badge, Menu, PageHeader } from "../ui/components";
+import { BackendUnavailable, Badge, Menu, PageHeader } from "../ui/components";
 import type { WorkflowsApi } from "../api/client";
 import type { ScheduleListItem } from "../api/types";
 
@@ -12,7 +12,7 @@ export interface SchedulesPageProps {
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "error" }
+  | { kind: "error"; detail?: string }
   | { kind: "ready"; items: ScheduleListItem[] };
 
 export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElement {
@@ -30,8 +30,10 @@ export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElemen
       .then((items) => {
         if (active) setState({ kind: "ready", items });
       })
-      .catch(() => {
-        if (active) setState({ kind: "error" });
+      .catch((err: unknown) => {
+        if (active) {
+          setState({ kind: "error", detail: err instanceof Error ? err.message : String(err) });
+        }
       });
     return () => {
       active = false;
@@ -75,7 +77,7 @@ export function SchedulesPage({ client }: SchedulesPageProps): React.ReactElemen
     return <p className="hw-page">Loading schedules…</p>;
   }
   if (state.kind === "error") {
-    return <p className="hw-page">Failed to load schedules.</p>;
+    return <BackendUnavailable resource="schedules" detail={state.detail} />;
   }
 
   return (
