@@ -233,7 +233,7 @@ describe("RunsPage", () => {
       }),
     });
     render(<RunsPage client={client} onOpenRun={() => {}} />);
-    expect(await screen.findByText(/Cannot reach the Workflows backend/i)).toBeInTheDocument();
-    expect(screen.getByText(/runs could not be loaded/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Could not load runs/i)).toBeInTheDocument();
+    expect(screen.getByText(/the request for runs failed/i)).toBeInTheDocument();
   });
 });

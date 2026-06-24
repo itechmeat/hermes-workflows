@@ -96,7 +96,7 @@ describe("SettingsPage", () => {
       }),
     });
     render(<SettingsPage client={client} />);
-    expect(await screen.findByText(/Cannot reach the Workflows backend/i)).toBeInTheDocument();
-    expect(screen.getByText(/settings could not be loaded/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Could not load settings/i)).toBeInTheDocument();
+    expect(screen.getByText(/the request for settings failed/i)).toBeInTheDocument();
   });
 });

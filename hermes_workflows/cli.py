@@ -212,8 +212,11 @@ def _dispatch(args: argparse.Namespace, engine: Engine) -> Any:
         return engine.cancel(args.run_id)
     if args.command == "resume":
         try:
+            # Use the CLI spec roots (global + templates + the repo-local
+            # `<cwd>/.hermes/workflows`), same as run/status/advance, so a run
+            # started from a repo-local spec is still resolvable on resume.
             run = engine.resume(
-                config.spec_roots(),
+                config.cli_spec_roots(),
                 args.run_id,
                 node=args.node,
                 reset_all=args.all,

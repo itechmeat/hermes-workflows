@@ -42,22 +42,30 @@ export function BackendUnavailable({
       window.setTimeout(() => setCopied(false), 2000);
     };
     const clip = navigator.clipboard;
-    if (clip !== undefined) {
-      void clip.writeText(AGENT_PROMPT).then(done, done);
-    } else {
+    // writeText returns a promise per spec, but some embedded webviews throw
+    // synchronously when the clipboard is blocked by a permissions policy.
+    // Guard both so the button still gives feedback either way.
+    try {
+      if (clip !== undefined) {
+        void clip.writeText(AGENT_PROMPT).then(done, done);
+      } else {
+        done();
+      }
+    } catch {
       done();
     }
   };
 
   return (
     <div className="hw-page hw-backend-unavailable">
-      <h2>Cannot reach the Workflows backend</h2>
+      <h2>Could not load {resource}</h2>
       <p>
-        The Workflows tab loaded, but its API did not respond, so {resource} could not be loaded.
-        This is almost never an empty list - it means the backend is not reachable yet. The plugin
-        backend runs as a separate sidecar that recent Hermes does not auto-mount
-        (GHSA-5qr3-c538-wm9j), so it has to run as a service and be routed by the dashboard host.
-        Set this up once with either option below - it persists across reboots and plugin updates.
+        The Workflows tab loaded, but the request for {resource} failed. On a fresh install the
+        usual cause is that the plugin backend is not reachable yet: it runs as a separate sidecar
+        that recent Hermes does not auto-mount (GHSA-5qr3-c538-wm9j), so it has to run as a service
+        and be routed by the dashboard host. Set that up once with either option below - it
+        persists across reboots and plugin updates. If it is already in place, the backend may be
+        up but returning an error - check the detail at the bottom of this page.
       </p>
 
       <h3>Option 1 - let your agent do it</h3>

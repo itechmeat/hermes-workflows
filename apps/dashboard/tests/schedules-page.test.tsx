@@ -137,7 +137,7 @@ describe("SchedulesPage", () => {
       }),
     });
     render(<SchedulesPage client={client} />);
-    expect(await screen.findByText(/Cannot reach the Workflows backend/i)).toBeInTheDocument();
-    expect(screen.getByText(/schedules could not be loaded/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Could not load schedules/i)).toBeInTheDocument();
+    expect(screen.getByText(/the request for schedules failed/i)).toBeInTheDocument();
   });
 });

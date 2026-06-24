@@ -4,6 +4,22 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.5 - 2026-06-24
+
+A self-review pass over the recent patches:
+
+- `resume` now resolves specs through the CLI spec roots (including the
+  repo-local `<cwd>/.hermes/workflows`), so a run started from a project-local
+  spec can be resumed like every other command, instead of only the global
+  roots.
+- The unreachable-backend dashboard panel no longer asserts a single cause: it
+  frames the sidecar setup as the likely cause and points to the error detail
+  for the case where the backend is up but returning an error, and its clipboard
+  copy is guarded against webviews that throw synchronously.
+- README gains an FAQ (platform, vault, dashboard access, agent/profile
+  naming); the dashboard docs note the launchd `KeepAlive` restart loop when the
+  sidecar port is already taken.
+
 ## 0.7.4 - 2026-06-24
 
 When the Workflows dashboard backend is unreachable, the tab now shows an

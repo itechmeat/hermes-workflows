@@ -12,8 +12,8 @@ describe("BackendUnavailable", () => {
   it("offers an agent prompt and a human step-by-step, and links to the docs", () => {
     render(<BackendUnavailable resource="workflows" />);
 
-    expect(screen.getByText(/Cannot reach the Workflows backend/i)).toBeInTheDocument();
-    expect(screen.getByText(/workflows could not be loaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/Could not load workflows/i)).toBeInTheDocument();
+    expect(screen.getByText(/the request for workflows failed/i)).toBeInTheDocument();
 
     // Option 1: a ready-to-paste agent prompt that is persistent + update-proof.
     expect(screen.getByText(/let your agent do it/i)).toBeInTheDocument();
@@ -47,7 +47,7 @@ describe("BackendUnavailable", () => {
 
   it("surfaces the underlying error message when provided, and omits it otherwise", () => {
     const { rerender } = render(<BackendUnavailable resource="runs" detail="404 Not Found" />);
-    expect(screen.getByText(/runs could not be loaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/the request for runs failed/i)).toBeInTheDocument();
     expect(screen.getByText(/404 Not Found/)).toBeInTheDocument();
 
     rerender(<BackendUnavailable resource="schedules" />);

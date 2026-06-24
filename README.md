@@ -95,6 +95,34 @@ and [#48633](https://github.com/NousResearch/hermes-agent/pull/48633)); on an
 older host a long worker that auto-compresses mid-run can drop its final turn,
 and an `adopt` that depends on a final `task_ids` block would then fail closed.
 
+## FAQ
+
+**Is Linux required, or does Windows work too?** Hermes Workflows targets Linux
+and macOS (the same as Hermes Agent). The TypeScript core (Bun) and Python bridge
+are cross-platform, but the install flow and the dashboard-API sidecar service
+assume a Unix shell, so on Windows run it under WSL.
+
+**Do I need a dedicated vault?** Hermes Workflows itself stores nothing in a
+vault - it is a Hermes dashboard plugin; its specs live in the workflow spec
+roots and its runs in `runs.db`. A vault only matters if you also run
+[Open Second Brain](https://github.com/itechmeat/open-second-brain) for memory:
+there you point it at your own existing Obsidian vault and it manages a `Brain/`
+subdirectory inside it - no separate "brain vault" needed.
+
+**Do I connect to the dashboard on a different port, or through the Workflows
+tab?** Through the **Workflows tab** in the Hermes dashboard (same origin). The
+plugin's API runs as a separate sidecar (default `127.0.0.1:9123`) that recent
+Hermes does not auto-mount for a non-bundled plugin (GHSA-5qr3-c538-wm9j), so the
+dashboard host must reverse-proxy `/api/plugins/workflows/*` to it. If the tab
+shows a "Could not load" panel, it explains this setup; see
+[Running the backend](docs/dashboard.md#running-the-backend-standalone-sidecar).
+
+**Does the agent name in the config matter?** For Hermes Workflows, what matters
+is the **profile** each `agent_task` node is assigned to (and, for Kanban-backed
+nodes, the assignee) - those route the work to the right worker. There is no
+single "agent name" the plugin keys off. (If you also run Open Second Brain, its
+`--primary-agent` name is separate and governs memory attribution there.)
+
 ## Documentation
 
 | Topic | Doc |

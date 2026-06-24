@@ -198,6 +198,12 @@ launchd (macOS, LaunchAgent — runs at login, restarts on crash):
 launchctl load -w ~/Library/LaunchAgents/dev.hermes.workflows.dashboard-api.plist
 ```
 
+`KeepAlive=true` respawns the sidecar unconditionally. If its port is already
+taken the process exits on bind and launchd restarts it in a throttled loop with
+no backoff cap, so free the port (or change it, below) rather than leaving it to
+spin. The systemd unit's `Restart=on-failure` is bounded by systemd's
+start-limit; launchd has no equivalent.
+
 The sidecar's host/port default to `127.0.0.1:9123`; override with the
 `plugins.workflows.dashboard_api_{host,port}` config keys or the
 `HERMES_WORKFLOWS_DASHBOARD_API_{HOST,PORT}` env vars, and point the proxy below
