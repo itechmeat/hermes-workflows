@@ -178,6 +178,65 @@ def test_nonzero_exit_settles_failure(tmp_path, store_dir) -> None:
     assert "boom" in (completion.output or "")
 
 
+def test_exit_zero_with_429_sentinel_settles_failure(tmp_path, store_dir) -> None:
+    """The Hermes agent CLI exits 0 even when its LLM call exhausts retries on a
+    transient provider error - it prints the error as its final message and
+    returns cleanly. The node must NOT settle success on that garbage."""
+    sentinel = "API call failed after 3 retries: HTTP 429: The service may be temporarily overloaded"
+    hermes = _fake_hermes(tmp_path / "hermes", f'echo "{sentinel}"; exit 0')
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
+    handle = ex.schedule(
+        run_id="run-1", node_id="lock-scope", workflow_id="wf", params={"assignee": "researcher"}
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "failure"
+    assert "429" in (completion.output or "")
+
+
+def test_exit_zero_with_node_outcome_failure_token_settles_failure(tmp_path, store_dir) -> None:
+    """A node that knows it failed (e.g. qa concluded real CI drift) can self-report
+    via the structured `node_outcome` token, regardless of its exit code."""
+    hermes = _fake_hermes(
+        tmp_path / "hermes",
+        'echo "ran every check; python CI drifted"; echo \'{"node_outcome": "failure"}\'; exit 0',
+    )
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
+    handle = ex.schedule(
+        run_id="run-1", node_id="qa", workflow_id="wf", params={"assignee": "researcher"}
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "failure"
+
+
+def test_clean_exit_zero_still_settles_success(tmp_path, store_dir) -> None:
+    """No sentinel, no failure token: a plain exit-0 node is still success."""
+    ex = _executor(tmp_path, store_dir)
+    handle = ex.schedule(
+        run_id="run-1", node_id="n", workflow_id="wf", params={"assignee": "researcher", "prompt": "go"}
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "success"
+    assert completion.output == "done: go"
+
+
+def test_lock_scope_429_cascade_regression(tmp_path, store_dir) -> None:
+    """Regression for the 2026-06-24 osb-feature-release cascade: a `lock-scope`
+    node hit a 429, exited 0, and settled success with an empty scope, so the
+    whole release advanced on nothing. The node that hit the 429 must fail."""
+    hermes = _fake_hermes(
+        tmp_path / "hermes",
+        # No <task_ids> block (empty scope) followed by the exhausted-retry line.
+        'echo "API call failed after 3 retries: HTTP 429: The service may be temporarily overloaded"; exit 0',
+    )
+    ex = DirectExecutor(hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10)
+    handle = ex.schedule(
+        run_id="osb-release", node_id="lock-scope", workflow_id="wf",
+        params={"assignee": "scope-locker"},
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "failure", "a 429-on-exit-0 lock-scope must fail closed, not cascade"
+
+
 def test_missing_profile_raises_clear_error(tmp_path, store_dir) -> None:
     ex = _executor(tmp_path, store_dir)
     with pytest.raises(ProfileNotSpecified):

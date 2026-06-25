@@ -31,6 +31,15 @@ import sys
 import tempfile
 from typing import Optional
 
+# Launched by absolute path (`python <this file> <spec>`), so sys.path[0] is this
+# directory and `outcome` resolves as a sibling top-level module - it stays
+# stdlib-only for exactly this reason, so the fresh child needs no package import.
+# The fallback covers the rare case the runner is imported as part of the package.
+try:
+    from outcome import classify, parse_node_outcome
+except ImportError:  # pragma: no cover - package-context import
+    from hermes_workflows.executor.outcome import classify, parse_node_outcome
+
 # Mirror store.MAX_OUTPUT_CHARS: cap captured output so a runaway worker cannot
 # bloat the run store.
 MAX_OUTPUT_CHARS = 100_000
@@ -105,7 +114,18 @@ def _invoke(argv, timeout, env_extra):
         stdout = _read_text(out)
         stderr = _read_text(err)
     if proc.returncode == 0:
-        return dict(settled=True, outcome="success", output=_clip(stdout))
+        # Exit 0 is necessary but not sufficient: the agent CLI exits cleanly even
+        # when its LLM call exhausted retries on a transient provider error (it
+        # prints the error as its final message), and a node may self-report
+        # failure via a `node_outcome` token. Classify rather than trust the code.
+        token = parse_node_outcome(stdout)
+        verdict = classify(proc.returncode, stdout, node_outcome_token=token)
+        if verdict["outcome"] == "success":
+            return dict(settled=True, outcome="success", output=_clip(stdout))
+        # Keep the matched sentinel line (when one tripped) so the node output is
+        # the cause, not the swallowed success message.
+        detail = verdict["detail"] or stdout.strip()
+        return dict(settled=True, outcome="failure", output=_clip(detail))
     detail = stderr.strip() or stdout.strip()
     return dict(settled=True, outcome="failure", output=_clip(detail))
 
