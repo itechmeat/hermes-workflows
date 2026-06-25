@@ -145,16 +145,33 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _stable_entrypoint(path: Path) -> Path:
+    """Rewrite an entrypoint that lives inside a git worktree back to its stable
+    parent-repo path. An adopt card runs in ``<repo>/.worktrees/<id>/`` and the
+    bridge code may execute from that copy, so ``repo_root()`` (or an inherited
+    ``HERMES_WORKFLOWS_BIN``) can resolve to the worktree. That path is deleted
+    when the worktree is torn down; persisting it into a cron shim leaves the
+    tick pointing at a vanished binary (exit 127), which silently stalls all run
+    advancement (t_a13a2d5a). Truncating at the ``.worktrees`` segment yields the
+    stable entrypoint that survives worktree cleanup."""
+    parts = path.parts
+    if ".worktrees" in parts:
+        root = Path(*parts[: parts.index(".worktrees")])
+        return root / "bin" / "hermes-workflows"
+    return path
+
+
 def command_path() -> Path:
     """Absolute path to the ``hermes-workflows`` entrypoint that cron shims exec.
-    Prefers the installed symlink, falls back to the in-repo wrapper."""
+    Prefers the installed symlink, falls back to the in-repo wrapper. Never
+    returns a transient git-worktree path (see ``_stable_entrypoint``)."""
     override = os.environ.get("HERMES_WORKFLOWS_BIN")
     if override:
-        return Path(override)
+        return _stable_entrypoint(Path(override))
     installed = hermes_home() / "bin" / "hermes-workflows"
     if installed.exists():
         return installed
-    return repo_root() / "bin" / "hermes-workflows"
+    return _stable_entrypoint(repo_root() / "bin" / "hermes-workflows")
 
 
 def scripts_dir() -> Path:

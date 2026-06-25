@@ -45,3 +45,36 @@ def test_env_override_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("HERMES_WORKFLOWS_BIN", str(override))
     assert config.command_path() == override
+
+
+def test_strips_worktree_path_from_repo_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the bridge code runs from inside an adopt git worktree, repo_root()
+    resolves to ``<repo>/.worktrees/<id>`` - a path deleted when the worktree is
+    torn down. command_path() must rewrite it back to the stable parent repo
+    entrypoint, so a persisted cron shim never points at a path that will vanish
+    (the t_a13a2d5a stall: a tick shim left pointing at a removed worktree died
+    with exit 127 and silently froze all run advancement)."""
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("HERMES_WORKFLOWS_BIN", raising=False)
+    worktree = Path("/srv/projects/hermes-workflows/.worktrees/t_abc123")
+    monkeypatch.setattr(config, "repo_root", lambda: worktree)
+    assert config.command_path() == Path(
+        "/srv/projects/hermes-workflows/bin/hermes-workflows"
+    )
+
+
+def test_strips_worktree_path_from_env_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An inherited HERMES_WORKFLOWS_BIN pointing inside a worktree is equally
+    transient and is rewritten back to the stable parent repo entrypoint."""
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv(
+        "HERMES_WORKFLOWS_BIN",
+        "/srv/projects/hermes-workflows/.worktrees/t_abc123/bin/hermes-workflows",
+    )
+    assert config.command_path() == Path(
+        "/srv/projects/hermes-workflows/bin/hermes-workflows"
+    )
