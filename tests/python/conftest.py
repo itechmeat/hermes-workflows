@@ -25,6 +25,37 @@ EXAMPLE_PARAMS = {"feature_request": "Add a dark mode toggle"}
 
 
 @pytest.fixture(autouse=True)
+def _sandbox_cron_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Redirect the Hermes cron store into a per-test tmp dir so no test can
+    write to the operator's real ``~/.hermes/cron``.
+
+    ``cron.jobs`` resolves ``HERMES_DIR = get_hermes_home().resolve()`` at import
+    time and derives ``CRON_DIR / JOBS_FILE / OUTPUT_DIR`` from it as module
+    constants. Setting only ``HERMES_HOME`` does NOT redirect them, so a
+    cron-touching test that forgot the trio wrote into whatever
+    ``get_hermes_home()`` resolved at import — the operator's real store when
+    ``bun run validate`` / pytest runs on a live host. A leaked job named exactly
+    the tick name then shadowed the real tick and stalled auto-advancement of
+    every run (t_8179b52f).
+
+    This autouse sandbox makes the redirection unconditional and the single
+    source of truth, so per-test fixtures no longer own the trio. Fail open:
+    tests in environments without ``cron.jobs`` importable are unaffected.
+    """
+    try:
+        from cron import jobs as cj
+    except ModuleNotFoundError:
+        yield
+        return
+    cron_dir = tmp_path / "cron"
+    cron_dir.mkdir(exist_ok=True)
+    monkeypatch.setattr(cj, "CRON_DIR", cron_dir)
+    monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
+    monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _reap_background_drive_threads():
     """Stop any ``tools.start_workflow`` background drive thread at test
     teardown. Those threads loop on the process-global ``HERMES_HOME`` (which

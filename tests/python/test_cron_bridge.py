@@ -15,11 +15,8 @@ from hermes_workflows.bridge import cron as cron_bridge
 
 @pytest.fixture()
 def cron_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    cron_dir = tmp_path / "cron"
-    cron_dir.mkdir()
-    monkeypatch.setattr(cj, "CRON_DIR", cron_dir)
-    monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
-    monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
+    # The cron store is sandboxed to a tmp dir by the autouse _sandbox_cron_store
+    # fixture in conftest; this fixture only adds the env + runner script.
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("HERMES_WORKFLOWS_BIN", str(tmp_path / "bin" / "hermes-workflows"))
     script = tmp_path / "runner.sh"

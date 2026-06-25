@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 kb = pytest.importorskip("hermes_cli.kanban_db")
-cj = pytest.importorskip("cron.jobs")
+pytest.importorskip("cron.jobs")
 
 from conftest import EXAMPLE_PARAMS
 from hermes_workflows import cli
@@ -28,13 +28,9 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     shutil.copy(SPEC, h / "workflows" / "global" / "feature-development.workflow.yaml")
     monkeypatch.setenv("HERMES_HOME", str(h))
     monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "kanban.db"))
-    # Redirect cron writes so the tick (advance-all -> sync_workflow_tick) never
-    # touches the real ~/.hermes/cron.
-    cron_dir = tmp_path / "cron"
-    cron_dir.mkdir()
-    monkeypatch.setattr(cj, "CRON_DIR", cron_dir)
-    monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
-    monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
+    # The cron store is redirected to a tmp dir by the autouse
+    # _sandbox_cron_store fixture in conftest, so the tick never touches the
+    # real ~/.hermes/cron.
     return h
 
 
@@ -154,11 +150,6 @@ def _repo_local_home(
         shutil.copy(SPEC, global_dir / "feature-development.workflow.yaml")
     monkeypatch.setenv("HERMES_HOME", str(h))
     monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "kanban.db"))
-    cron_dir = tmp_path / "cron"
-    cron_dir.mkdir()
-    monkeypatch.setattr(cj, "CRON_DIR", cron_dir)
-    monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
-    monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
 
     project = tmp_path / "repo"
     local_dir = project / ".hermes" / "workflows"

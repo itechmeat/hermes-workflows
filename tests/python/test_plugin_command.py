@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 kb = pytest.importorskip("hermes_cli.kanban_db")
-cj = pytest.importorskip("cron.jobs")
+pytest.importorskip("cron.jobs")
 
 from hermes_workflows import plugin
 
@@ -32,11 +32,6 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     )
     monkeypatch.setenv("HERMES_HOME", str(h))
     monkeypatch.setenv("HERMES_KANBAN_DB", str(tmp_path / "kanban.db"))
-    cron_dir = tmp_path / "cron"
-    cron_dir.mkdir()
-    monkeypatch.setattr(cj, "CRON_DIR", cron_dir)
-    monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
-    monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
     return h
 
 

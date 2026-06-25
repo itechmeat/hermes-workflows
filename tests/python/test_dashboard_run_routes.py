@@ -443,20 +443,15 @@ def test_export_without_trace_keeps_todays_envelope(client: TestClient) -> None:
     assert set(body) == {"run_id", "filename", "json"}
 
 
-def test_run_start_is_non_blocking_and_arms_the_tick(
-    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_start_is_non_blocking_and_arms_the_tick(client: TestClient) -> None:
     """The start response carries the freshly-created state immediately (the
     first advance happens in the background) and the advance tick cron is armed
     so the run keeps progressing even if this process dies."""
     import time
 
-    cj = pytest.importorskip("cron.jobs")
-    cron_dir = tmp_path / "cron"
-    cron_dir.mkdir()
-    monkeypatch.setattr(cj, "CRON_DIR", cron_dir)
-    monkeypatch.setattr(cj, "JOBS_FILE", cron_dir / "jobs.json")
-    monkeypatch.setattr(cj, "OUTPUT_DIR", cron_dir / "output")
+    # The cron store is sandboxed to a tmp dir by the autouse _sandbox_cron_store
+    # fixture in conftest; this only guards on cron.jobs being importable.
+    pytest.importorskip("cron.jobs")
 
     resp = client.post("/workflows/feature-development/run", json=_RUN_BODY)
     assert resp.status_code == 200, resp.text
