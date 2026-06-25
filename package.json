@@ -1,6 +1,6 @@
 {
   "name": "hermes-workflows",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "private": true,
   "description": "Visual workflow orchestration for Hermes — compiles a graph spec onto native Kanban, Cron, and Profiles.",
   "license": "MIT",

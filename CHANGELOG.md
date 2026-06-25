@@ -4,6 +4,32 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.6 - 2026-06-25
+
+A sweep of known reliability bugs in the run engine and its cron tick, fixed
+together so a transient provider blip or a torn-down worktree can no longer
+silently corrupt or stall a release run.
+
+- The Python test suite no longer writes into the operator's real cron store.
+  The cron-bridge paths (`CRON_DIR` / `JOBS_FILE` / `OUTPUT_DIR`) are sandboxed
+  through a shared autouse fixture, so running the suite on a live host can no
+  longer leak a job that shadows and breaks the production advance-all tick.
+- Direct-node outcomes are classified from the agent's actual result rather than
+  the process exit code alone. A graceful agent failure - a transient provider
+  error (HTTP 429 / overloaded / 5xx / exhausted retries) surfaced on a clean
+  exit, or an explicit `node_outcome: failure` the agent reports - now settles
+  the node as failed instead of being recorded as success.
+- Transient provider errors get a bounded node-level retry with backoff, so a
+  momentary 429 or overload no longer fails an entire long-running release run;
+  deterministic failures still fail fast.
+- A repo-local workflow spec now overrides a global spec sharing the same id,
+  instead of the global copy silently shadowing it; the repo-local discovery
+  directory takes precedence in spec resolution.
+- The advance-all cron tick is never armed with a transient git-worktree path.
+  `command_path()` rewrites a `.worktrees/<id>` entrypoint back to the stable
+  parent-repo path, so the tick survives worktree cleanup instead of dying with
+  exit 127 and silently stalling every run's advancement.
+
 ## 0.7.5 - 2026-06-24
 
 A self-review pass over the recent patches:
