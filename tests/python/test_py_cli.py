@@ -179,6 +179,22 @@ def test_run_discovers_repo_local_workflow_and_persists_its_path(
     assert any(r["run_id"] == run["run_id"] for r in tick["advanced"])
 
 
+def test_repo_local_spec_wins_over_a_global_id_collision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """When the same workflow id exists in BOTH a global root and the repo-local
+    dir, resolution must favour the repo-local copy — not silently shadow it
+    behind the global one. This is the v0.7.2 (#27) repo-local-discovery intent."""
+    project, local_dir = _repo_local_home(tmp_path, monkeypatch, seed_global=True)
+    local_spec = str(local_dir / "feature-development.workflow.yaml")
+
+    monkeypatch.chdir(project)
+    run = _invoke(
+        capsys, "run", "feature-development", "--params", json.dumps(EXAMPLE_PARAMS)
+    )
+    assert run["workflow_path"] == local_spec
+
+
 def test_advance_falls_back_to_global_when_stored_spec_is_gone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:

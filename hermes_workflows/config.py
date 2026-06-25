@@ -181,12 +181,14 @@ def project_workflows_dir(cwd: str | os.PathLike[str] | None = None) -> Path | N
 
 
 def cli_spec_roots(cwd: str | os.PathLike[str] | None = None) -> list[str]:
-    """Spec roots visible to the shell CLI: global + templates, plus the current
-    repo-local workflows dir when running inside a project."""
-    roots = list(spec_roots())
+    """Spec roots visible to the shell CLI: the current repo-local workflows dir
+    (when running inside a project) first, then global + templates. Spec
+    resolution by id takes the first match across roots, so a repo-local copy
+    overrides a same-id global spec rather than being silently shadowed by it -
+    the v0.7.2 (#27) repo-local-discovery intent."""
     project = project_workflows_dir(cwd)
-    if project is not None:
-        roots.append(str(project))
+    roots = [str(project)] if project is not None else []
+    roots.extend(spec_roots())
     return roots
 
 
