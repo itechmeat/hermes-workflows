@@ -107,6 +107,57 @@ def test_read_completion_failure_and_override(conn: sqlite3.Connection) -> None:
     assert bridge.read_completion(conn, overridden).outcome == "failure"
 
 
+def test_read_completion_classifies_transient_summary_as_failure(
+    conn: sqlite3.Connection,
+) -> None:
+    """The kanban worker exits 0 and the card lands `done`/`completed` even when
+    its LLM call exhausted retries on a 429 - the summary carries the sentinel.
+    Trusting `completed` advances the release on garbage (the 2026-06-24 cascade).
+    read_completion must classify it a transient failure so the retry policy can
+    ride it out."""
+    task_id = bridge.create_node_task(
+        conn, run_id="r", node_id="lock", workflow_id="wf", title="l", prompt="p", assignee="dev"
+    )
+    _finish_task(
+        conn,
+        task_id,
+        outcome="completed",
+        summary="API call failed after 3 retries: HTTP 429: temporarily overloaded",
+    )
+    completion = bridge.read_completion(conn, task_id)
+    assert completion.outcome == "failure"
+    assert completion.kind == "transient"
+
+
+def test_read_completion_clean_completed_is_success_kind(conn: sqlite3.Connection) -> None:
+    task_id = bridge.create_node_task(
+        conn, run_id="r", node_id="v", workflow_id="wf", title="v", prompt="p", assignee="qa"
+    )
+    _finish_task(conn, task_id, outcome="completed", summary="all green")
+    completion = bridge.read_completion(conn, task_id)
+    assert completion.outcome == "success"
+    assert completion.kind == "success"
+
+
+def test_read_completion_real_failure_is_deterministic_kind(conn: sqlite3.Connection) -> None:
+    """A real worker failure (non-`completed` outcome) and a declared
+    `node_outcome: failure` are both deterministic - the transient policy must
+    never retry them."""
+    crashed = bridge.create_node_task(
+        conn, run_id="r", node_id="a", workflow_id="wf", title="a", prompt="p", assignee="dev"
+    )
+    _finish_task(conn, crashed, outcome="crashed")
+    assert bridge.read_completion(conn, crashed).kind == "deterministic"
+
+    declared = bridge.create_node_task(
+        conn, run_id="r", node_id="b", workflow_id="wf", title="b", prompt="p", assignee="dev"
+    )
+    _finish_task(conn, declared, outcome="completed", metadata='{"node_outcome": "failure"}')
+    declared_completion = bridge.read_completion(conn, declared)
+    assert declared_completion.outcome == "failure"
+    assert declared_completion.kind == "deterministic"
+
+
 def test_read_completion_unknown_task(conn: sqlite3.Connection) -> None:
     assert bridge.read_completion(conn, "t_missing").found is False
 

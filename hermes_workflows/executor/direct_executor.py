@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from .base import Completion
+from .outcome import RetryPolicy
 from .store import CompletionStore
 
 # The detached worker, run by absolute file path (never `-m`) so the fresh child
@@ -94,10 +95,15 @@ class DirectExecutor:
         store_dir,
         hermes_bin: str = "hermes",
         timeout_seconds: float = 1800.0,
+        retry_policy: Optional[RetryPolicy] = None,
     ) -> None:
         self.hermes_bin = hermes_bin
         self.store = CompletionStore(store_dir)
         self.timeout_seconds = timeout_seconds
+        # Bounded transient-error retry the detached worker applies around its
+        # single agent invocation (429 / overloaded / 5xx / connection reset);
+        # a deterministic failure never retries. None -> the bounded default.
+        self.retry_policy = retry_policy or RetryPolicy()
 
     def schedule(
         self,
@@ -148,6 +154,11 @@ class DirectExecutor:
             "timeout": timeout,
             "completion_path": str(completion_path),
             "env": {"HERMES_PROFILE": profile},
+            "retry": {
+                "max_attempts": self.retry_policy.max_attempts,
+                "base_seconds": self.retry_policy.base_seconds,
+                "ceiling_seconds": self.retry_policy.ceiling_seconds,
+            },
         }
         # The started marker lands before the worker spawns, so any other process
         # polling this handle sees in-flight work and does not double-start it.

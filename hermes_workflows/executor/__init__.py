@@ -4,7 +4,7 @@ from .base import Completion, NodeExecutor, select_executor
 from .composite import CompositeExecutor
 from .direct_executor import DirectExecutor, ProfileNotSpecified, build_agent_argv
 from .kanban_executor import KanbanExecutor
-from .outcome import Verdict, classify, parse_node_outcome
+from .outcome import RetryPolicy, Verdict, backoff_delay, classify, parse_node_outcome
 from .script_executor import ScriptExecutor
 
 __all__ = [
@@ -20,4 +20,6 @@ __all__ = [
     "classify",
     "parse_node_outcome",
     "Verdict",
+    "RetryPolicy",
+    "backoff_delay",
 ]

@@ -12,7 +12,12 @@ from __future__ import annotations
 
 import pytest
 
-from hermes_workflows.executor.outcome import classify, parse_node_outcome
+from hermes_workflows.executor.outcome import (
+    RetryPolicy,
+    backoff_delay,
+    classify,
+    parse_node_outcome,
+)
 
 
 # --- the clean path ---------------------------------------------------------
@@ -100,3 +105,32 @@ def test_parse_node_outcome_ignores_absent_or_invalid() -> None:
     assert parse_node_outcome("") is None
     assert parse_node_outcome(None) is None
     assert parse_node_outcome('{"node_outcome": "maybe"}') is None
+
+
+# --- the bounded backoff policy (shared by both executor retry loops) --------
+
+
+def test_retry_policy_defaults_are_bounded() -> None:
+    """The default policy caps attempts and the backoff ceiling so a transient
+    retry can never amplify a provider outage into an unbounded loop."""
+    policy = RetryPolicy()
+    assert policy.max_attempts == 3
+    assert policy.base_seconds > 0
+    assert policy.ceiling_seconds >= policy.base_seconds
+
+
+def test_backoff_delay_grows_exponentially_then_caps() -> None:
+    """The wait before retry N grows base * 2**(N-1) and is clamped at the
+    ceiling - the bound that keeps a retry storm from worsening an outage."""
+    assert backoff_delay(1, base=2.0, ceiling=30.0) == 2.0
+    assert backoff_delay(2, base=2.0, ceiling=30.0) == 4.0
+    assert backoff_delay(3, base=2.0, ceiling=30.0) == 8.0
+    # Far-out attempts saturate at the ceiling rather than exploding.
+    assert backoff_delay(10, base=2.0, ceiling=30.0) == 30.0
+
+
+def test_backoff_delay_is_zero_below_first_retry_and_with_zero_base() -> None:
+    """A non-positive attempt has no wait, and a zero base disables the sleep
+    entirely (the seam tests use to retry without real wall-clock delay)."""
+    assert backoff_delay(0, base=2.0, ceiling=30.0) == 0.0
+    assert backoff_delay(1, base=0.0, ceiling=30.0) == 0.0

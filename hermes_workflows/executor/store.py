@@ -29,6 +29,7 @@ class CompletionStore:
             outcome=data.get("outcome"),
             output=data.get("output"),
             started=bool(data.get("started")),
+            transient_retries=int(data.get("transient_retries") or 0),
         )
 
     def write(self, handle: str, completion: Completion) -> None:
@@ -42,6 +43,7 @@ class CompletionStore:
                     "outcome": completion.outcome,
                     "output": completion.output,
                     "started": completion.started,
+                    "transient_retries": completion.transient_retries,
                 }
             )
         )

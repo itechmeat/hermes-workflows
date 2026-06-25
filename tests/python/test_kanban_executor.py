@@ -11,7 +11,7 @@ import pytest
 
 kb = pytest.importorskip("hermes_cli.kanban_db")
 
-from hermes_workflows.executor import Completion
+from hermes_workflows.executor import Completion, RetryPolicy
 from hermes_workflows.executor.kanban_executor import KanbanExecutor
 
 PARAMS = {
@@ -22,6 +22,10 @@ PARAMS = {
     "max_retries": 2,
     "workspace": "scratch",
 }
+
+# The exhausted-retry sentinel the agent CLI prints on a transient provider
+# error while still exiting 0 - the 429 that killed the 2026-06-24 release run.
+_TRANSIENT_SENTINEL = "API call failed after 3 retries: HTTP 429: temporarily overloaded"
 
 
 @pytest.fixture()

@@ -33,6 +33,8 @@ from typing import Any, Callable, Iterable, Optional
 
 from hermes_cli import kanban_db as kb
 
+from ..executor.outcome import classify, parse_node_outcome
+
 _WORKFLOW_COLUMNS = ("workflow_template_id", "current_step_key")
 CREATED_BY = "hermes-workflows"
 
@@ -222,6 +224,11 @@ class NodeCompletion:
     # Native dispatcher's consecutive-failure counter for this card; climbs when
     # a worker repeatedly fails to spawn / exits non-zero. 0 when unset.
     consecutive_failures: int = 0
+    # The classifier's verdict kind for the latest run: "success" | "transient"
+    # | "deterministic". Lets the transient-retry policy ride out a 429/overloaded
+    # blip while failing fast on a real (deterministic) failure. "success" when
+    # unsettled or clean.
+    kind: str = "success"
 
 
 def read_completion(conn: sqlite3.Connection, task_id: str) -> NodeCompletion:
@@ -247,13 +254,29 @@ def read_completion(conn: sqlite3.Connection, task_id: str) -> NodeCompletion:
 
     outcome: Optional[str] = None
     output: Optional[str] = task["result"]
+    kind = "success"
     if run is not None:
+        summary = run["summary"] or ""
         output = run["summary"] or output
         override = _node_outcome_override(run["metadata"])
-        if override is not None:
-            outcome = override
+        if override == "success":
+            outcome, kind = "success", "success"
+        elif override == "failure":
+            # The worker knows it failed for real - deterministic, never retried.
+            outcome, kind = "failure", "deterministic"
+        elif run["outcome"] == "completed":
+            # `completed` is exit-0, which is necessary but not sufficient: the
+            # agent CLI exits cleanly even when its LLM call exhausted retries on
+            # a transient 429/overloaded/5xx blip (the sentinel is in the
+            # summary). Classify rather than trust `completed`, mirroring the
+            # direct path, so a transient failure is detectable - and retryable -
+            # instead of silently advancing the run on garbage.
+            token = parse_node_outcome(summary)
+            verdict = classify(0, summary, node_outcome_token=token)
+            outcome, kind = verdict["outcome"], verdict["kind"]
         elif run["outcome"] is not None:
-            outcome = "success" if run["outcome"] == "completed" else "failure"
+            # A non-`completed` native outcome is a real worker failure.
+            outcome, kind = "failure", "deterministic"
 
     if outcome is None and status == "done":
         outcome = "success"
@@ -265,6 +288,7 @@ def read_completion(conn: sqlite3.Connection, task_id: str) -> NodeCompletion:
         outcome=outcome,
         output=output,
         consecutive_failures=failures,
+        kind=kind,
     )
 
 

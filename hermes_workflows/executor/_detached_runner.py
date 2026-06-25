@@ -29,6 +29,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Optional
 
 # Launched by absolute path (`python <this file> <spec>`), so sys.path[0] is this
@@ -36,9 +37,14 @@ from typing import Optional
 # stdlib-only for exactly this reason, so the fresh child needs no package import.
 # The fallback covers the rare case the runner is imported as part of the package.
 try:
-    from outcome import classify, parse_node_outcome
+    from outcome import RetryPolicy, backoff_delay, classify, parse_node_outcome
 except ImportError:  # pragma: no cover - package-context import
-    from hermes_workflows.executor.outcome import classify, parse_node_outcome
+    from hermes_workflows.executor.outcome import (
+        RetryPolicy,
+        backoff_delay,
+        classify,
+        parse_node_outcome,
+    )
 
 # Mirror store.MAX_OUTPUT_CHARS: cap captured output so a runaway worker cannot
 # bloat the run store.
@@ -52,11 +58,17 @@ def _clip(text):
     return cleaned[:MAX_OUTPUT_CHARS] + "\n…[truncated]"
 
 
-def _write_completion(path, *, settled, outcome, output, started=True):
+def _write_completion(path, *, settled, outcome, output, started=True, transient_retries=0):
     """Atomic write matching CompletionStore.write so a concurrent reader never
     sees a half-written file."""
     payload = json.dumps(
-        {"settled": settled, "outcome": outcome, "output": output, "started": started}
+        {
+            "settled": settled,
+            "outcome": outcome,
+            "output": output,
+            "started": started,
+            "transient_retries": transient_retries,
+        }
     )
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
@@ -82,10 +94,13 @@ def _kill_process_group(proc) -> None:
         pass
 
 
-def _invoke(argv, timeout, env_extra):
-    """Run the agent argv, capturing stdout/stderr to temp files (NOT pipes - a
-    detached grandchild inheriting the agent's stdio would otherwise wedge a pipe
-    read past the timeout). Returns a completion dict."""
+def _attempt(argv, timeout, env_extra):
+    """Run the agent argv ONCE, capturing stdout/stderr to temp files (NOT pipes
+    - a detached grandchild inheriting the agent's stdio would otherwise wedge a
+    pipe read past the timeout). Returns ``(completion_dict, kind)`` where ``kind``
+    is the classifier's ``success`` | ``transient`` | ``deterministic`` so the
+    retry loop can ride out a transient blip without re-parsing. A launch failure
+    or a timeout is deterministic - neither is a provider blip a retry would fix."""
     env = {**os.environ, **(env_extra or {})}
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
         try:
@@ -99,17 +114,23 @@ def _invoke(argv, timeout, env_extra):
             )
         except FileNotFoundError as exc:
             runner = argv[0] if argv else ""
-            return dict(
-                settled=True,
-                outcome="failure",
-                output=f"agent runner {runner!r} not found: {exc}",
+            return (
+                dict(
+                    settled=True,
+                    outcome="failure",
+                    output=f"agent runner {runner!r} not found: {exc}",
+                ),
+                "deterministic",
             )
         try:
             proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             _kill_process_group(proc)
-            return dict(
-                settled=True, outcome="failure", output=f"agent timed out after {timeout:g}s"
+            return (
+                dict(
+                    settled=True, outcome="failure", output=f"agent timed out after {timeout:g}s"
+                ),
+                "deterministic",
             )
         stdout = _read_text(out)
         stderr = _read_text(err)
@@ -121,13 +142,51 @@ def _invoke(argv, timeout, env_extra):
         token = parse_node_outcome(stdout)
         verdict = classify(proc.returncode, stdout, node_outcome_token=token)
         if verdict["outcome"] == "success":
-            return dict(settled=True, outcome="success", output=_clip(stdout))
+            return dict(settled=True, outcome="success", output=_clip(stdout)), "success"
         # Keep the matched sentinel line (when one tripped) so the node output is
         # the cause, not the swallowed success message.
         detail = verdict["detail"] or stdout.strip()
-        return dict(settled=True, outcome="failure", output=_clip(detail))
+        return dict(settled=True, outcome="failure", output=_clip(detail)), verdict["kind"]
     detail = stderr.strip() or stdout.strip()
-    return dict(settled=True, outcome="failure", output=_clip(detail))
+    return dict(settled=True, outcome="failure", output=_clip(detail)), "deterministic"
+
+
+def _retry_policy(spec_retry) -> RetryPolicy:
+    """The transient-retry policy for this run, from the spec (or the defaults).
+    A malformed/absent block falls back to the bounded default - a retry config
+    error must never widen the cap or strand the node."""
+    if not isinstance(spec_retry, dict):
+        return RetryPolicy()
+    return RetryPolicy(
+        max_attempts=int(spec_retry.get("max_attempts", RetryPolicy.max_attempts)),
+        base_seconds=float(spec_retry.get("base_seconds", RetryPolicy.base_seconds)),
+        ceiling_seconds=float(spec_retry.get("ceiling_seconds", RetryPolicy.ceiling_seconds)),
+    )
+
+
+def _invoke(argv, timeout, env_extra, *, retry=None, sleep=time.sleep):
+    """Run the agent with bounded transient-error retry. A 429 / overloaded /
+    5xx / connection-reset blip (``kind == "transient"``) is retried with
+    exponential backoff up to the policy cap; a deterministic failure (real work
+    failed, a declared ``node_outcome: failure``, a launch error, or a timeout)
+    fails fast with no retry. The settled completion carries the count of
+    transient retries ridden out, so the dashboard shows the wait, not a silent
+    stall. ``sleep`` is injectable so the seam tests need no wall-clock wait."""
+    policy = _retry_policy(retry)
+    transient_retries = 0
+    result: dict = {}
+    for attempt in range(1, policy.max_attempts + 1):
+        result, kind = _attempt(argv, timeout, env_extra)
+        if kind != "transient" or attempt >= policy.max_attempts:
+            # Success, a deterministic failure, or the last allowed attempt: settle.
+            break
+        # A transient blip with attempts to spare: back off and try again.
+        transient_retries += 1
+        delay = backoff_delay(attempt, base=policy.base_seconds, ceiling=policy.ceiling_seconds)
+        if delay > 0:
+            sleep(delay)
+    result["transient_retries"] = transient_retries
+    return result
 
 
 def main(argv) -> int:
@@ -144,7 +203,9 @@ def main(argv) -> int:
         completion_path = spec.get("completion_path") or completion_path
         if not completion_path:
             raise ValueError("spec is missing completion_path")
-        result = _invoke(spec["argv"], spec.get("timeout"), spec.get("env"))
+        result = _invoke(
+            spec["argv"], spec.get("timeout"), spec.get("env"), retry=spec.get("retry")
+        )
     except Exception as exc:  # noqa: BLE001 - must settle, never strand the node
         result = dict(settled=True, outcome="failure", output=f"agent invocation crashed: {exc}")
     if completion_path is not None:

@@ -21,6 +21,7 @@ No I/O, no side effects - unit-tested in isolation.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Optional, TypedDict
 
 # Transient provider-error sentinels. Matched against individual stdout lines so a
@@ -50,6 +51,32 @@ class Verdict(TypedDict):
     outcome: str  # "success" | "failure"
     kind: str  # "success" | "transient" | "deterministic"
     detail: Optional[str]  # the matched sentinel line, when one tripped
+
+
+@dataclass(frozen=True)
+class RetryPolicy:
+    """The bounded transient-retry contract shared by both executor paths.
+
+    ``max_attempts`` is the hard cap on total tries (so 3 means at most two
+    retries after the first attempt); ``base_seconds`` / ``ceiling_seconds``
+    bound the exponential backoff. The cap is what keeps a transient retry from
+    amplifying a provider outage into an unbounded retry storm - a deterministic
+    failure is never retried at all (the caller keys retry on the classifier's
+    ``kind``). ``base_seconds == 0`` disables the wall-clock wait (the seam tests
+    use to exercise the loop without sleeping)."""
+
+    max_attempts: int = 3
+    base_seconds: float = 2.0
+    ceiling_seconds: float = 30.0
+
+
+def backoff_delay(attempt: int, *, base: float, ceiling: float) -> float:
+    """The wait (seconds) before transient retry ``attempt`` (1-indexed): an
+    exponential ``base * 2**(attempt - 1)`` clamped at ``ceiling``. A
+    non-positive attempt or a zero base yields no wait."""
+    if attempt < 1 or base <= 0:
+        return 0.0
+    return min(base * (2 ** (attempt - 1)), ceiling)
 
 
 def parse_node_outcome(text: Optional[str]) -> Optional[str]:

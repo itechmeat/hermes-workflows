@@ -14,12 +14,16 @@ from pathlib import Path
 
 import pytest
 
-from hermes_workflows.executor import Completion
+from hermes_workflows.executor import Completion, RetryPolicy
 from hermes_workflows.executor.direct_executor import (
     DirectExecutor,
     ProfileNotSpecified,
     build_agent_argv,
 )
+
+# A retry policy with no wall-clock backoff, so the retry-loop tests exercise the
+# bounded loop without sleeping. The cap is the default (3 attempts).
+_FAST_RETRY = RetryPolicy(base_seconds=0.0)
 
 
 def _fake_hermes(path: Path, body: str) -> Path:
@@ -235,6 +239,79 @@ def test_lock_scope_429_cascade_regression(tmp_path, store_dir) -> None:
     )
     completion = _wait_settled(ex, handle)
     assert completion.outcome == "failure", "a 429-on-exit-0 lock-scope must fail closed, not cascade"
+
+
+# --- bounded transient retry with backoff (direct path) ---------------------
+
+
+def test_transient_429_then_clean_settles_success_with_one_retry(tmp_path, store_dir) -> None:
+    """A momentary provider blip must not kill the node: a 429 on attempt 1
+    followed by a clean result on attempt 2 settles success with no operator
+    intervention, and telemetry records exactly one transient retry."""
+    counter = tmp_path / "count"
+    body = (
+        f'N=$(cat {counter} 2>/dev/null || echo 0); N=$((N+1)); echo "$N" > {counter}\n'
+        f'if [ "$N" -lt 2 ]; then echo "API call failed after 3 retries: HTTP 429"; '
+        f'else echo "done: $PROMPT"; fi\nexit 0'
+    )
+    hermes = _fake_hermes(tmp_path / "hermes", body)
+    ex = DirectExecutor(
+        hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10, retry_policy=_FAST_RETRY
+    )
+    handle = ex.schedule(
+        run_id="run-1", node_id="lock-scope", workflow_id="wf",
+        params={"assignee": "researcher", "prompt": "go"},
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "success"
+    assert completion.output == "done: go"
+    assert completion.transient_retries == 1
+    assert counter.read_text().strip() == "2", "the node ran twice: one retry after the 429"
+
+
+def test_deterministic_failure_is_not_retried(tmp_path, store_dir) -> None:
+    """A declared `node_outcome: failure` is deterministic - the node knows it
+    failed for real, so the transient policy must NOT retry it. It fails fast,
+    running exactly once."""
+    counter = tmp_path / "count"
+    body = (
+        f'echo "x" >> {counter}\n'
+        'echo "ran every check; CI drifted"; echo \'{"node_outcome": "failure"}\'; exit 0'
+    )
+    hermes = _fake_hermes(tmp_path / "hermes", body)
+    ex = DirectExecutor(
+        hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10, retry_policy=_FAST_RETRY
+    )
+    handle = ex.schedule(
+        run_id="run-1", node_id="qa", workflow_id="wf", params={"assignee": "researcher"}
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "failure"
+    assert completion.transient_retries == 0
+    assert counter.read_text().count("x") == 1, "a deterministic failure must not retry"
+
+
+def test_transient_failure_is_bounded_by_the_attempt_cap(tmp_path, store_dir) -> None:
+    """A provider that stays down must not loop forever: after the cap of
+    transient failures the node settles failure loudly (the matched sentinel
+    kept in the output), with no more invocations than the cap allows."""
+    counter = tmp_path / "count"
+    body = (
+        f'echo "x" >> {counter}\n'
+        'echo "API call failed after 3 retries: HTTP 429"; exit 0'
+    )
+    hermes = _fake_hermes(tmp_path / "hermes", body)
+    ex = DirectExecutor(
+        hermes_bin=str(hermes), store_dir=store_dir, timeout_seconds=10, retry_policy=_FAST_RETRY
+    )
+    handle = ex.schedule(
+        run_id="run-1", node_id="lock-scope", workflow_id="wf", params={"assignee": "researcher"}
+    )
+    completion = _wait_settled(ex, handle)
+    assert completion.outcome == "failure"
+    assert "429" in (completion.output or "")
+    assert counter.read_text().count("x") == 3, "exactly the cap of attempts, no retry storm"
+    assert completion.transient_retries == 2, "two retries before giving up after three attempts"
 
 
 def test_missing_profile_raises_clear_error(tmp_path, store_dir) -> None:

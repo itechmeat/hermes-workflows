@@ -27,6 +27,11 @@ class Completion:
     # Lets an adopt node bound its wait on a card it can never make progress on
     # instead of polling forever. 0 on backends with no such counter.
     consecutive_failures: int = 0
+    # How many times this node's work was retried under the transient-error
+    # policy (429 / overloaded / 5xx / connection reset) before this completion.
+    # Surfaced so the engine can fold it into node telemetry - the dashboard
+    # shows the ridden-out blip instead of a silent stall. 0 when none occurred.
+    transient_retries: int = 0
 
 
 @runtime_checkable
