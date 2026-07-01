@@ -36,6 +36,7 @@ _TRANSIENT_PATTERNS = (
     re.compile(r"HTTP\s*50[234]", re.IGNORECASE),
     re.compile(r"temporarily overloaded", re.IGNORECASE),
     re.compile(r"\boverloaded_error\b", re.IGNORECASE),
+    re.compile(r"usage limit", re.IGNORECASE),
     re.compile(r"connection reset", re.IGNORECASE),
 )
 

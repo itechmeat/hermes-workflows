@@ -4,6 +4,27 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.7 - 2026-07-01
+
+Completes the transient-error node retry from 0.7.6 on the Kanban
+(project-scope) path, where every real release run executes. A momentary
+provider 429 on a single `agent_task` node no longer aborts the whole run.
+
+- Kanban `agent_task` nodes now retry an engine-level transient failure with
+  exponential backoff instead of aborting. The agent CLI exits cleanly even when
+  its own HTTP retries exhaust on a 429 / overloaded / 5xx blip, so the native
+  dispatcher records the card done and its `max_retries` never fires; the engine
+  now re-classifies that completion and, on a transient verdict, re-schedules a
+  fresh card (up to the node's `max_retries`) before settling failure.
+  Deterministic failures still fail fast, and a single blip with
+  `max_retries >= 1` no longer routes a run straight to abort.
+- The transient classifier's verdict is carried through the Kanban completion to
+  the engine (it was computed and then discarded), and `usage limit` joins the
+  transient provider-error sentinels.
+- Node retry state (`transient_retries`, `retry_after`) persists across advance
+  ticks via two forward-migrated `workflow_node_runs` columns, so the attempt
+  count and backoff window survive the per-tick run reload.
+
 ## 0.7.6 - 2026-06-25
 
 A sweep of known reliability bugs in the run engine and its cron tick, fixed

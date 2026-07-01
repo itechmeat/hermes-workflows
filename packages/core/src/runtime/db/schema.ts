@@ -62,6 +62,14 @@ CREATE TABLE IF NOT EXISTS workflow_node_runs (
   -- preference to scraping prose). Added after the initial schema, so
   -- connection.ts ALTERs pre-existing databases.
   task_ids_json   TEXT,
+  -- Engine-level transient-error retry state for an agent_task node: how many
+  -- times the node has been re-scheduled on a transient provider blip, and the
+  -- epoch-seconds deadline after which the next attempt may be anchored (the
+  -- exponential-backoff window). Persisted so both accumulate across ticks (the
+  -- node state is reloaded each tick). Added after the initial schema, so
+  -- connection.ts ALTERs pre-existing databases.
+  transient_retries TEXT,
+  retry_after       TEXT,
   outcome         TEXT,
   review_decision TEXT,
   -- Optional operator free-text payload attached when resolving a human_review

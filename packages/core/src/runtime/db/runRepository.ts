@@ -112,6 +112,8 @@ interface NodeRow {
   adopt_seq_json: string | null;
   adopt_blocked_since: string | null;
   task_ids_json: string | null;
+  transient_retries: string | null;
+  retry_after: string | null;
   outcome: string | null;
   review_decision: string | null;
   review_note: string | null;
@@ -248,8 +250,8 @@ export class RunRepository {
     this.db
       .query(
         `INSERT INTO workflow_node_runs
-           (id, run_id, node_id, node_type, status, hermes_task_id, driven_task_ids, reviewed_task_ids, wait_started_at, adopt_seq_json, adopt_blocked_since, task_ids_json, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
-         VALUES ($id, $run, $node, $type, $status, $task, $driven, $reviewed, $waitStarted, $adoptSeq, $adoptBlocked, $taskIds, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
+           (id, run_id, node_id, node_type, status, hermes_task_id, driven_task_ids, reviewed_task_ids, wait_started_at, adopt_seq_json, adopt_blocked_since, task_ids_json, transient_retries, retry_after, outcome, review_decision, review_note, seq, output_json, error, telemetry_json)
+         VALUES ($id, $run, $node, $type, $status, $task, $driven, $reviewed, $waitStarted, $adoptSeq, $adoptBlocked, $taskIds, $transientRetries, $retryAfter, $outcome, $review, $reviewNote, $seq, $output, $error, $telemetry)
          ON CONFLICT(id) DO UPDATE SET
            node_type = excluded.node_type,
            status = excluded.status,
@@ -260,6 +262,8 @@ export class RunRepository {
            adopt_seq_json = excluded.adopt_seq_json,
            adopt_blocked_since = excluded.adopt_blocked_since,
            task_ids_json = excluded.task_ids_json,
+           transient_retries = excluded.transient_retries,
+           retry_after = excluded.retry_after,
            outcome = excluded.outcome,
            review_decision = excluded.review_decision,
            review_note = excluded.review_note,
@@ -288,6 +292,9 @@ export class RunRepository {
         $adoptBlocked:
           node.adopt_blocked_since === undefined ? null : String(node.adopt_blocked_since),
         $taskIds: node.task_ids && node.task_ids.length > 0 ? JSON.stringify(node.task_ids) : null,
+        $transientRetries:
+          node.transient_retries === undefined ? null : String(node.transient_retries),
+        $retryAfter: node.retry_after === undefined ? null : String(node.retry_after),
         $outcome: node.outcome ?? null,
         $review: node.review_decision ?? null,
         $reviewNote: node.review_note ?? null,
@@ -330,6 +337,8 @@ export class RunRepository {
       if (n.task_ids_json !== null) {
         node.task_ids = JSON.parse(n.task_ids_json) as string[];
       }
+      if (n.transient_retries !== null) node.transient_retries = Number(n.transient_retries);
+      if (n.retry_after !== null) node.retry_after = Number(n.retry_after);
       if (n.outcome !== null) node.outcome = n.outcome as NodeRunState["outcome"];
       if (n.review_decision !== null)
         node.review_decision = n.review_decision as NodeRunState["review_decision"];

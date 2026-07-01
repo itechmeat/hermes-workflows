@@ -44,6 +44,8 @@ function migrate(db: Database): void {
     "adopt_seq_json",
     "adopt_blocked_since",
     "task_ids_json",
+    "transient_retries",
+    "retry_after",
   ]);
 }
 

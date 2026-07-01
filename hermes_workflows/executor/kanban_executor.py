@@ -72,4 +72,10 @@ class KanbanExecutor:
             output=completion.output,
             status=completion.status,
             consecutive_failures=completion.consecutive_failures,
+            # Carry the classifier's verdict so the engine can distinguish a
+            # transient blip (re-schedule with backoff) from a deterministic
+            # failure (fail fast). `read_completion` re-classifies the exit-0
+            # `completed` case, so a 429 the worker surfaced on a clean exit
+            # arrives here as kind="transient".
+            kind=completion.kind,
         )

@@ -48,6 +48,7 @@ def test_nonzero_exit_without_sentinel_is_deterministic_failure() -> None:
         "gateway error HTTP 502",
         "HTTP 504 gateway timeout",
         "API call failed after 5 retries",
+        "provider rejected: usage limit reached, retry later",
     ],
 )
 def test_transient_sentinel_on_exit_zero_is_failure(line: str) -> None:

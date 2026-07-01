@@ -24,6 +24,7 @@ from typing import Any, Callable, Optional, Sequence
 from . import cli_bridge, notifications, resume as resume_mod, telemetry, wait
 from .bridge import worktree
 from .executor import CompositeExecutor, NodeExecutor
+from .executor.outcome import RetryPolicy, backoff_delay
 from .resolve import UnresolvedInput, resolve_input_mapping, resolve_params, resolve_ref
 
 # Statuses that still need future advances — the tick's liveness condition,
@@ -109,6 +110,7 @@ class Engine:
         default_mode: str = "durable",
         telemetry_dir: Optional[Path] = None,
         trace: Optional[Any] = None,
+        retry_policy: Optional[RetryPolicy] = None,
     ) -> None:
         self.core_cli = list(core_cli)
         self.db_path = db_path
@@ -145,6 +147,14 @@ class Engine:
         # settling the node failure (see _ADOPT_BLOCKED_TIMEOUT_SECONDS). An
         # instance attribute so a caller (and tests) can tune it.
         self.adopt_blocked_timeout_seconds = _ADOPT_BLOCKED_TIMEOUT_SECONDS
+        # Engine-level transient-error retry for Kanban `agent_task` nodes: a
+        # 429/overloaded/5xx blip the worker surfaced on a clean exit (so the
+        # native dispatcher recorded the card `done` and its own `max_retries`
+        # never fired) re-schedules a fresh card with exponential backoff before
+        # the node settles failure. The per-node attempt cap comes from the
+        # node's `max_retries`; this policy supplies the backoff timing (and its
+        # own cap as a fallback). base_seconds=0 disables the wall-clock wait.
+        self.retry_policy = retry_policy or RetryPolicy()
 
     # --- core CLI helpers -------------------------------------------------
 
@@ -542,6 +552,23 @@ class Engine:
         for node_id, node in run["nodes"].items():
             if node.get("status") not in ("scheduled", "running"):
                 continue
+            # A node awaiting a transient-error retry carries no live handle: its
+            # previous card settled a transient failure (a 429/overload blip) and
+            # a fresh attempt is pending behind an exponential-backoff window.
+            # Re-schedule it once that window elapses; keep waiting until then.
+            if node.get("retry_after") is not None:
+                if int(time.time()) < int(node["retry_after"]):
+                    continue
+                node.pop("retry_after", None)
+                self._schedule_node(
+                    executor,
+                    run,
+                    run_id,
+                    node_id,
+                    task_params.get(node_id),
+                    plan.get("subscribe_cards", True),
+                )
+                continue
             # An adopt node drives a LIST of existing cards; every other node has
             # one backing handle. The node settles only when ALL of its cards are
             # terminal, and fails if any of them did.
@@ -651,6 +678,14 @@ class Engine:
                         executor, run, handle, task_params.get(node_id) or {},
                         plan.get("subscribe_cards", True),
                     )
+                elif self._schedule_transient_retry(node, completions, task_params.get(node_id)):
+                    # A single-card node failed on a transient provider blip and
+                    # has retries left: it is now marked for a backed-off
+                    # re-schedule (retry_after + a fresh handle next tick) instead
+                    # of settling failure. The card that just settled stays `done`
+                    # on the board as a completed-but-transient attempt; drop its
+                    # telemetry sidecar like any other settled card.
+                    settled_cards.extend(handles)
                 else:
                     seq += 1
                     node["status"] = "completed"
@@ -1352,11 +1387,59 @@ class Engine:
             node_id=node_id,
             workflow_id=run["workflow_id"],
             params=params,
-            iteration=node.get("seq", 0),
+            # A transient-error retry re-schedules the SAME node before it settles
+            # (so `seq` has not advanced): offset the iteration by the retry count
+            # so each attempt gets a fresh, idempotency-distinct card rather than
+            # re-attaching to the settled one.
+            iteration=node.get("seq", 0) + node.get("transient_retries", 0),
         )
         node["hermes_task_id"] = handle
         node["status"] = "scheduled"
         self._subscribe_card(executor, run, handle, params, subscribe_cards)
+
+    def _schedule_transient_retry(
+        self,
+        node: dict,
+        completions: list,
+        params: Optional[dict],
+    ) -> bool:
+        """Decide whether a just-settled failing node should be retried on a
+        transient provider error instead of settling failure.
+
+        Applies only to a single-card node (an adopt node driving several cards
+        has its own stuck/blocked handling) whose completion the classifier
+        tagged ``transient`` and that has attempts left. The per-node cap is the
+        node's ``max_retries`` (retries, so +1 total attempts); when unset it
+        falls back to the engine retry policy's ``max_attempts``. On a decision to
+        retry, records the incremented retry count and the backoff deadline and
+        drops the settled handle so the tick's re-schedule branch anchors a fresh
+        card once the window elapses. Returns ``False`` (settle failure) for a
+        deterministic failure, a multi-card node, or an exhausted cap."""
+        if len(completions) != 1:
+            return False
+        completion = completions[0]
+        if completion.outcome != "failure" or getattr(completion, "kind", "success") != "transient":
+            return False
+        max_retries = params.get("max_retries") if params else None
+        max_attempts = (
+            max_retries + 1 if isinstance(max_retries, int) else self.retry_policy.max_attempts
+        )
+        done = int(node.get("transient_retries", 0))
+        if done + 1 >= max_attempts:
+            return False
+        attempt = done + 1
+        node["transient_retries"] = attempt
+        delay = backoff_delay(
+            attempt,
+            base=self.retry_policy.base_seconds,
+            ceiling=self.retry_policy.ceiling_seconds,
+        )
+        node["retry_after"] = int(time.time()) + int(round(delay))
+        # Drop the settled (transient-failed) handle so the node presents no live
+        # card; the re-schedule branch anchors a fresh one once retry_after passes.
+        node.pop("hermes_task_id", None)
+        node.pop("driven_task_ids", None)
+        return True
 
 
 def _board_conn(executor: NodeExecutor):

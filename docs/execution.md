@@ -99,7 +99,26 @@ every active run in one pass and keeps the singleton tick cron alive only while
 runs remain active, tearing it down once everything drains — so tick jobs never
 accumulate.
 
-## Script nodes (security gate)
+## Transient-error retry
+
+A momentary provider fault (HTTP 429, "temporarily overloaded", a 5xx, a usage
+limit, a connection reset) on a single `agent_task` must not abort a whole run.
+Two things make this subtle on the Kanban path: the agent CLI exhausts its own
+HTTP retries and then exits **0**, printing `API call failed after N retries:
+HTTP 429 ...` as its final message — so the native dispatcher records the card
+`done` and its own `max_retries` never fires — and the failure is only visible
+once the completion is re-classified from that output, not from the exit code.
+
+So the engine retries at the graph level. When a single-card node settles a
+`transient` failure (the classifier's verdict, distinct from a `deterministic`
+one) and has attempts left, the tick re-schedules it on a fresh card after an
+exponential-backoff window instead of routing the failure onward. The per-node
+attempt cap is the node's `max_retries` (retries, so `+1` total attempts); the
+retry count and the backoff deadline persist on the node so both accumulate
+across ticks. A deterministic failure — a real worker error, or an agent that
+declared `node_outcome: failure` — is never retried and fails fast. Adopt nodes
+(driving several cards) keep their existing stuck/blocked handling and are not
+covered by this single-card retry.
 
 A `script` node runs an operator-authored shell command, so its mitigations
 (TZ §25.2) are enforced, not advisory:

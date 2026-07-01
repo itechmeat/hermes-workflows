@@ -117,6 +117,31 @@ describe("RunRepository — runs", () => {
     expect(repo.loadRun("run-no-taskids")?.nodes["a"]?.task_ids).toBeUndefined();
   });
 
+  test("round-trips a node's transient-retry state across ticks", () => {
+    const run = createRunState(workflow, "run-retry");
+    run.status = "running";
+    // A node mid-backoff: retried once, awaiting the next attempt. Both fields
+    // must survive the reload the tick performs each pass.
+    run.nodes["a"] = {
+      node_id: "a",
+      status: "scheduled",
+      transient_retries: 1,
+      retry_after: 1700000042,
+    };
+    repo.saveRun(run);
+    const loaded = repo.loadRun("run-retry")?.nodes["a"];
+    expect(loaded?.transient_retries).toBe(1);
+    expect(loaded?.retry_after).toBe(1700000042);
+
+    // Absent on a node that never hit a transient error.
+    const bare = createRunState(workflow, "run-no-retry");
+    bare.nodes["a"] = { node_id: "a", status: "completed", outcome: "success", seq: 1 };
+    repo.saveRun(bare);
+    const bareLoaded = repo.loadRun("run-no-retry")?.nodes["a"];
+    expect(bareLoaded?.transient_retries).toBeUndefined();
+    expect(bareLoaded?.retry_after).toBeUndefined();
+  });
+
   test("round-trips a run origin and notification markers", () => {
     const run = createRunState(workflow, "run-origin", undefined, "telegram:1:2");
     run.status = "running";

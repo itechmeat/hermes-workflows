@@ -32,6 +32,13 @@ class Completion:
     # Surfaced so the engine can fold it into node telemetry - the dashboard
     # shows the ridden-out blip instead of a silent stall. 0 when none occurred.
     transient_retries: int = 0
+    # The classifier's verdict for a settled completion: "success" | "transient"
+    # | "deterministic". The engine keys its node-level retry on this: a
+    # "transient" failure (a 429/overloaded blip the worker surfaced on a clean
+    # exit) is re-scheduled with backoff before settling, where a "deterministic"
+    # failure fails fast. Defaults "success" so a backend that cannot classify
+    # (Direct - it retries internally, Script) never triggers an engine retry.
+    kind: str = "success"
 
 
 @runtime_checkable

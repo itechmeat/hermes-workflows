@@ -134,6 +134,19 @@ export interface NodeRunState {
    * node state is reloaded each tick); cleared when the card recovers.
    */
   adopt_blocked_since?: number;
+  /**
+   * How many times an `agent_task` node has been re-scheduled on a transient
+   * provider error (429 / overloaded / 5xx). The bridge keys the per-node retry
+   * cap (the node's `max_retries`) on this; persisted so it accumulates across
+   * ticks. Absent until the first transient blip.
+   */
+  transient_retries?: number;
+  /**
+   * Epoch seconds after which a node awaiting a transient-error retry may anchor
+   * its next attempt - the exponential-backoff deadline. Persisted so the wait
+   * survives reloads; cleared once the re-schedule fires.
+   */
+  retry_after?: number;
   error?: string;
   /**
    * Monotonic completion order within the run, assigned by the bridge each time
