@@ -557,7 +557,7 @@ class Engine:
             # a fresh attempt is pending behind an exponential-backoff window.
             # Re-schedule it once that window elapses; keep waiting until then.
             if node.get("retry_after") is not None:
-                if int(time.time()) < int(node["retry_after"]):
+                if time.time() < node["retry_after"]:
                     continue
                 node.pop("retry_after", None)
                 self._schedule_node(
@@ -1434,7 +1434,10 @@ class Engine:
             base=self.retry_policy.base_seconds,
             ceiling=self.retry_policy.ceiling_seconds,
         )
-        node["retry_after"] = int(time.time()) + int(round(delay))
+        # Store the exact float deadline: rounding the delay (e.g. int(round()))
+        # could fire the retry before the configured backoff elapsed. base 0 ->
+        # delay 0 -> deadline == now, so the next tick re-schedules immediately.
+        node["retry_after"] = time.time() + delay
         # Drop the settled (transient-failed) handle so the node presents no live
         # card; the re-schedule branch anchors a fresh one once retry_after passes.
         node.pop("hermes_task_id", None)

@@ -15,6 +15,7 @@ Regression for the aborted 2026 release runs: ``inventory`` died on a single
 from __future__ import annotations
 
 import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -150,6 +151,38 @@ def test_transient_exhausts_retries_then_settles_failure(engine: Engine, tmp_pat
     # Routed to the failure branch.
     run = engine.advance(spec, "r2")
     assert _node(run, "bad")["status"] == "completed"
+
+
+def test_backoff_deadline_is_not_rounded_down(tmp_path: Path) -> None:
+    """A non-integer backoff must not let the retry fire early. With a real
+    (non-zero) policy the node holds in backoff - it carries a `retry_after`
+    deadline at least `delay` in the future and does NOT re-schedule on the very
+    next tick, so a fractional/short delay is never truncated to an earlier one."""
+    board = kb.connect(db_path=tmp_path / "kanban.db")
+    try:
+        eng = Engine(
+            core_cli=["bun", "run", str(CLI)],
+            db_path=str(tmp_path / "runs.db"),
+            kanban=KanbanExecutor(board),
+            retry_policy=RetryPolicy(base_seconds=30.0, ceiling_seconds=30.0),
+        )
+        spec = _spec_file(tmp_path)
+        run = eng.run(spec, "rb")
+        card0 = _node(run, "work")["hermes_task_id"]
+        before = time.time()
+        _settle(board, card0, summary=_TRANSIENT_SUMMARY, outcome="completed")
+        run = eng.advance(spec, "rb")
+        work = _node(run, "work")
+        assert work.get("transient_retries") == 1
+        assert work.get("retry_after") is not None
+        # Deadline honours the full delay (>= 30s out), not a rounded-down value.
+        assert work["retry_after"] >= before + 30.0
+        assert "hermes_task_id" not in work  # handle dropped, awaiting backoff
+        # An immediate next tick must NOT re-schedule - still inside the window.
+        run = eng.advance(spec, "rb")
+        assert "hermes_task_id" not in _node(run, "work")
+    finally:
+        board.close()
 
 
 def test_deterministic_failure_is_not_retried(engine: Engine, tmp_path: Path) -> None:
