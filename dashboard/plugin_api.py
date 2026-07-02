@@ -1,4 +1,4 @@
-"""Dashboard plugin backend. Mounted at /api/plugins/workflows/ by the Hermes
+"""Dashboard plugin backend. Mounted at /api/plugins/hermes-workflows/ by the Hermes
 dashboard runtime. Lists workflows and active runs, reports O2B availability,
 and exposes the single human-in-the-loop write: resolving a human_review node.
 Graph editing remains human-only via CLI (the visual editor is a later phase)."""

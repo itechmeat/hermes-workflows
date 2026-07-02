@@ -20,7 +20,7 @@ describe("BackendUnavailable", () => {
     expect(screen.getByText(/survives reboots and `hermes plugins update`/i)).toBeInTheDocument();
     // These tokens appear in both the agent prompt and the human steps.
     expect(screen.getAllByText(/hermes-workflows-dashboard-api/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/\/api\/plugins\/workflows\/\*/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\/api\/plugins\/hermes-workflows\/\*/).length).toBeGreaterThan(0);
 
     // Option 2: the human steps name the stable path and the sidecar port.
     expect(screen.getByText(/do it by hand/i)).toBeInTheDocument();
@@ -39,7 +39,7 @@ describe("BackendUnavailable", () => {
 
     expect(writeText).toHaveBeenCalledTimes(1);
     const copied = writeText.mock.calls[0]![0] as string;
-    expect(copied).toContain("/api/plugins/workflows/*");
+    expect(copied).toContain("/api/plugins/hermes-workflows/*");
     expect(copied).toContain("hermes-workflows-dashboard-api");
     expect(copied).toContain("hermes plugins update");
     expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();

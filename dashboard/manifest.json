@@ -1,5 +1,5 @@
 {
-  "name": "workflows",
+  "name": "hermes-workflows",
   "label": "Workflows",
   "description": "Visual workflow orchestration over Hermes Kanban, Cron, and Profiles.",
   "icon": "Activity",

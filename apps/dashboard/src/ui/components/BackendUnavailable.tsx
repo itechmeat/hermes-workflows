@@ -5,7 +5,7 @@ import { Button } from "./Button";
 // Shown when a dashboard page cannot reach the Workflows backend. The backend
 // is a standalone sidecar: recent Hermes does not auto-mount a non-bundled
 // plugin's Python routes (GHSA-5qr3-c538-wm9j), so the operator must run the
-// sidecar as a persistent service AND route `/api/plugins/workflows/*` to it.
+// sidecar as a persistent service AND route `/api/plugins/hermes-workflows/*` to it.
 // The panel offers two fixes: a ready-to-paste agent prompt that does it all,
 // and a human step-by-step. Both set it up ONCE, persistently, and against the
 // stable plugin path so a `hermes plugins update` never breaks it.
@@ -23,11 +23,11 @@ const DOCS_URL =
 // Self-contained, OS-agnostic, idempotent. The agent resolves the stable plugin
 // path itself and builds a persistent service from it, so reboots and plugin
 // updates do not break the setup.
-const AGENT_PROMPT = `Set up the Hermes Workflows dashboard backend so its tab works permanently. Context: the plugin's API is a separate sidecar that Hermes does NOT auto-mount for a non-bundled plugin (security advisory GHSA-5qr3-c538-wm9j), so it must run as a persistent service and the dashboard must reverse-proxy the path /api/plugins/workflows/* to it. Make every step idempotent so re-running changes nothing, and so it survives reboots and \`hermes plugins update\`.
+const AGENT_PROMPT = `Set up the Hermes Workflows dashboard backend so its tab works permanently. Context: the plugin's API is a separate sidecar that Hermes does NOT auto-mount for a non-bundled plugin (security advisory GHSA-5qr3-c538-wm9j), so it must run as a persistent service and the dashboard must reverse-proxy the path /api/plugins/hermes-workflows/* to it. Make every step idempotent so re-running changes nothing, and so it survives reboots and \`hermes plugins update\`.
 
 1. Resolve the installed plugin directory (the stable path, e.g. ~/.hermes/plugins/hermes-workflows). Always reference THIS path, never a version-specific one, so plugin updates do not break the service.
 2. Install a persistent user service that runs <plugin-dir>/bin/hermes-workflows-dashboard-api, enabled at login with restart-on-failure: a systemd --user service on Linux, or a launchd LaunchAgent on macOS. The sidecar binds 127.0.0.1:9123 by default; honour a custom host/port if one is set via the plugins.workflows.dashboard_api_host / dashboard_api_port config keys or the HERMES_WORKFLOWS_DASHBOARD_API_HOST / HERMES_WORKFLOWS_DASHBOARD_API_PORT env vars, and use that same address in step 3.
-3. Make the dashboard reach it on the same origin: in the reverse proxy that fronts the Hermes dashboard, route /api/plugins/workflows/* to the sidecar's address (default 127.0.0.1:9123, or the custom one from step 2) BEFORE the catch-all that serves the dashboard. If the Hermes dashboard is opened directly with no proxy in front, install a small local reverse proxy (Caddy) that serves the dashboard and this prefix on one origin, as a persistent service too.
+3. Make the dashboard reach it on the same origin: in the reverse proxy that fronts the Hermes dashboard, route /api/plugins/hermes-workflows/* to the sidecar's address (default 127.0.0.1:9123, or the custom one from step 2) BEFORE the catch-all that serves the dashboard. If the Hermes dashboard is opened directly with no proxy in front, install a small local reverse proxy (Caddy) that serves the dashboard and this prefix on one origin, as a persistent service too.
 4. Verify: the sidecar's GET /healthz returns ok and reloading the Workflows tab lists workflows. Full systemd / launchd / Caddy / nginx snippets are in <plugin-dir>/docs/dashboard.md. Report what you did and the final health check.`;
 
 export function BackendUnavailable({
@@ -91,7 +91,7 @@ export function BackendUnavailable({
         </li>
         <li>
           In the reverse proxy in front of the Hermes dashboard, route{" "}
-          <code>/api/plugins/workflows/*</code> to the sidecar's address (default{" "}
+          <code>/api/plugins/hermes-workflows/*</code> to the sidecar's address (default{" "}
           <code>127.0.0.1:9123</code>, or your custom one) ahead of the catch-all that serves the
           dashboard, so the tab's same-origin calls reach it. With no proxy in front, stand up a
           small local one (Caddy) serving both on one origin.

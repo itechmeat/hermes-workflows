@@ -1,5 +1,5 @@
 // Typed client for the workflows dashboard routes (mounted at
-// /api/plugins/workflows/). Pure wiring over an injected `fetchJSON`: it builds
+// /api/plugins/hermes-workflows/). Pure wiring over an injected `fetchJSON`: it builds
 // URLs and JSON bodies and unwraps list envelopes, so it is fully unit-testable
 // without a network. The host's `fetchJSON` spreads `init` into `fetch` and does
 // not serialize bodies, so writes set Content-Type and stringify here.
@@ -67,7 +67,7 @@ export interface WorkflowsApi {
   listSkills(): Promise<string[]>;
 }
 
-const BASE = "/api/plugins/workflows";
+const BASE = "/api/plugins/hermes-workflows";
 
 export function createApiClient(fetchJSON: FetchJSON): WorkflowsApi {
   const workflow = (id: string): string => `${BASE}/workflows/${encodeURIComponent(id)}`;

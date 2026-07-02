@@ -4,6 +4,19 @@ All notable changes to Hermes Workflows are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.8 - 2026-07-02
+
+Restores the Workflows tab in the Hermes dashboard. It disappeared after a
+Hermes update tightened how a non-bundled plugin's dashboard backend and static
+assets are gated on `plugins.enabled`.
+
+- The dashboard plugin now identifies as `hermes-workflows` instead of
+  `workflows`, matching the package directory and the `plugins.enabled` entry.
+  Hermes gates the plugin API mount and asset serving on the dashboard manifest
+  name; when that name did not match the enabled-list entry, both were silently
+  skipped and the tab vanished. The frontend API base moves to
+  `/api/plugins/hermes-workflows/` to match the new mount prefix.
+
 ## 0.7.7 - 2026-07-01
 
 Completes the transient-error node retry from 0.7.6 on the Kanban

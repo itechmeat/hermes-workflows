@@ -27,7 +27,7 @@ function harness() {
   };
 }
 
-const BASE = "/api/plugins/workflows";
+const BASE = "/api/plugins/hermes-workflows";
 
 describe("workflows API client", () => {
   it("lists workflows and unwraps the envelope", async () => {
