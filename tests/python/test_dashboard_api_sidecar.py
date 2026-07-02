@@ -1,7 +1,7 @@
 """Standalone dashboard-API sidecar — restores the Workflows dashboard backend
 after upstream Hermes stopped auto-importing non-bundled plugin APIs
 (GHSA-5qr3-c538-wm9j). The sidecar reuses the EXISTING ``dashboard/plugin_api.py``
-router verbatim, mounted under ``/api/plugins/workflows``, plus a ``/healthz``
+router verbatim, mounted under ``/api/plugins/hermes-workflows``, plus a ``/healthz``
 liveness route. Skipped where FastAPI is unavailable (it ships with the Hermes
 dashboard runtime)."""
 
@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_API = ROOT / "dashboard" / "plugin_api.py"
-PREFIX = "/api/plugins/workflows"
+PREFIX = "/api/plugins/hermes-workflows"
 
 
 def _imported_router_routes() -> list:

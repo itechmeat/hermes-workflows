@@ -7,7 +7,7 @@ refused and the Workflows tab loads but cannot fetch data.
 
 This module serves that same backend out-of-process. It mounts the EXISTING
 ``dashboard/plugin_api.py`` router verbatim — no routes are re-declared here —
-under the ``/api/plugins/workflows`` prefix the frontend already calls, plus a
+under the ``/api/plugins/hermes-workflows`` prefix the frontend already calls, plus a
 ``/healthz`` liveness route. The operator's reverse proxy routes that path
 prefix to this sidecar in front of the gateway dashboard; the sidecar binds
 loopback only, inheriting the dashboard's own trust model (loopback + a
@@ -25,7 +25,7 @@ from fastapi import FastAPI
 
 from hermes_workflows import config
 
-API_PREFIX = "/api/plugins/workflows"
+API_PREFIX = "/api/plugins/hermes-workflows"
 
 
 def _load_plugin_api_router():

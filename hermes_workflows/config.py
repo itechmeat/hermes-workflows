@@ -293,7 +293,7 @@ SETTINGS_SCHEMA: dict = {
                 # (`hermes-workflows-dashboard-api`) reusing the plugin_api
                 # router, because upstream Hermes no longer auto-imports a
                 # non-bundled plugin's Python backend (GHSA-5qr3-c538-wm9j).
-                # The operator's reverse proxy routes `/api/plugins/workflows/*`
+                # The operator's reverse proxy routes `/api/plugins/hermes-workflows/*`
                 # to host:port; loopback default keeps it off the network.
                 # Enforced: the sidecar binds exactly these.
                 {
