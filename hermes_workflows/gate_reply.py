@@ -106,7 +106,19 @@ def resolve_gate_reply(
     try:
         # Resolve inside the guard: a spec-lookup failure must surface as a gate
         # error reply (and still skip), not fall through to the gateway agent.
-        spec_path = tools._resolve_spec_path(run["workflow_id"], roots, core_cli)
+        # A native run can pin a definition outside the discovery roots.
+        # Validate it before decide_review records the decision, not afterwards
+        # when advancement attempts to load the definition.
+        pinned_path = run.get("workflow_path")
+        if pinned_path:
+            from pathlib import Path
+            from . import cli_bridge
+            if not Path(pinned_path).is_file():
+                raise ValueError("Pinned workflow definition is missing")
+            cli_bridge.invoke([*core_cli, "compile-preview", pinned_path])
+        spec_path = pinned_path or tools._resolve_spec_path(
+            run["workflow_id"], roots, core_cli
+        )
         engine.decide_review(spec_path, run_id, node_id, decision, note=note)
     except Exception as exc:  # noqa: BLE001 - report the failure to the operator
         # Still skip (the message was a gate reply, not chatter for the agent),
